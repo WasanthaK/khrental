@@ -1,0 +1,65 @@
+{
+  "status": "acceptance_incomplete",
+  "scenario": "restoration-renewal",
+  "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+  "pullRequests": [
+    663,
+    664
+  ],
+  "attempts": [
+    {
+      "runId": 43705778853,
+      "jobId": 132786684421,
+      "sourceSha": "3b84513556dd63b0d42d83f5ec2a0c2d4767ef27",
+      "conclusion": "failure",
+      "failure": {
+        "stage": "retained_cessation_history",
+        "code": "ERR_ASSERTION",
+        "sqlNumber": null,
+        "sqlLine": null,
+        "operation": "314c559e-9a76-431f-8901-6bf7471766be",
+        "scenario": "restoration-renewal",
+        "checks": [
+          "isolated_private_fixture",
+          "genuine_paid_capacity_reconciled",
+          "cessation_preserves_current_paid_invoice_and_schedules_one",
+          "cessation_retry_preserves_schedule_and_audit",
+          "restoration_preserves_current_invoice_and_schedules_two",
+          "restoration_retry_preserves_schedule_and_audit",
+          "renewal_boundary_applies_two_restored_dwellings",
+          "automatic_renewal_paid_exactly_two_dwellings_without_extra_invoice",
+          "renewal_reconciles_paid_capacity_and_clears_pending_quantity",
+          "renewal_refresh_retry_preserves_stock_and_invoice"
+        ],
+        "scope": "genuine sandbox restoration-renewal + deployed service/SQL reconciliation",
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "testClockId": "clock_1Uc0zvQ4sARuLNQazx9em4pF",
+        "customerId": "cus_VdHZfpE1QvcIWR",
+        "subscriptionId": "sub_1Uc0zwQ4sARuLNQaojXr5VCI",
+        "initialInvoice": "in_1Uc0zwQ4sARuLNQa2anhyadO",
+        "credentialLoginAccepted": false,
+        "actualRenewalAccepted": false,
+        "scheduleId": "sub_sched_1Uc104Q4sARuLNQaLKuDqnG8",
+        "renewalInvoice": "in_1Uc10PQ4sARuLNQaFdSrlBgY"
+      },
+      "cleanup": {
+        "verified": true,
+        "at": "2026-11-15T10:50:12Z"
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthy": true,
+      "healthVerifiedAt": "2026-11-15T10:50:15Z",
+      "artifact": {
+        "id": 14157889523,
+        "digest": "sha256:418e92ea2a59ebcb5d1e2d10c75c4636d5dbcb48e79ca27ec7d1ff56c68f58c0"
+      },
+      "neverReplayOperation": true
+    }
+  ],
+  "limits": [
+    "Service/SQL only, not HTTP/UI or credential login",
+    "Fresh isolated sandbox clock, not natural grace expiry",
+    "R5 partial; live charging and full enforcement OFF"
+  ]
+}
