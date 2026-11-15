@@ -89,5 +89,19 @@
     "fullEnforcementEnabled": false,
     "protectedClocksAdvanced": false,
     "evia": "owner-paused"
+  },
+  "lockCorrection": {
+    "pullRequest": 660,
+    "head": "0030a27a67afe0a01a61bc04d582f16bd4997325",
+    "mergeCommit": "e0f7e821b8e511898836f71df86fde2fa8399463",
+    "ciRuns": [
+      43702037295,
+      43702037326,
+      43702037329
+    ],
+    "sqlRegression": "Both UUID spellings hold the same exclusive tenant lock; unrelated tenant and pricing namespaces remain distinct.",
+    "deploymentRun": 43702359791,
+    "deploymentStatus": "in_progress",
+    "rootCauseLimit": "UUID lock casing defect confirmed independently; exact deadlock graph was not captured."
   }
 }
