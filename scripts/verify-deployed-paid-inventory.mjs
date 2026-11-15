@@ -22,6 +22,7 @@ const zeroStockCancellation=scenario==='zero-stock-cancellation';
 const cessationRenewal=scenario==='cessation-renewal'||restorationRenewal||splitRenewal||zeroStockCancellation;
 let fixtureClock=null;
 let cessationMaintenanceId=null;
+let cessationInvoiceId=null,cessationPaymentId=null;
 const hostedCheckout=scenario==='http-hosted-checkout';
 let checkoutSessionId=null,checkoutCommandId=null;
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
@@ -108,6 +109,9 @@ const cleanupFixture=async()=>{
     }
     if(created){
       if(cessationMaintenanceId){await store.locked(tenantId,q=>q("UPDATE dbo.maintenance_requests SET status='cancelled' WHERE tenant_id=@tenantId AND id=@id AND status='pending'",{tenantId,id:cessationMaintenanceId}));}
+      // Status-filtered: a failed run must not leave a synthetic open obligation behind.
+      if(cessationPaymentId){await store.locked(tenantId,q=>q("UPDATE dbo.payments SET status='rejected',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='pending'",{tenantId,id:cessationPaymentId}));}
+      if(cessationInvoiceId){await store.locked(tenantId,q=>q("UPDATE dbo.invoices SET status='cancelled',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='issued'",{tenantId,id:cessationInvoiceId}));}
       for(let attempt=0;attempt<3;attempt++){
       try{await store.locked(tenantId,async q=>{
         for(const id of httpActors){
@@ -132,6 +136,10 @@ const cleanupFixture=async()=>{
       assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=0',{tenantId})).length,0);
       for(const id of httpActors){assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE id=@id AND status='inactive'",{id})).length,1);}
       if(foreignTenant){assert.equal((await store.read("SELECT id FROM dbo.tenants WHERE id=@foreignTenant AND status='inactive'",{foreignTenant})).length,1);}
+      if(cessationInvoiceId){
+        assert.equal((await store.read("SELECT id FROM dbo.invoices WHERE tenant_id=@tenantId AND status<>'cancelled'",{tenantId})).length,0);
+        assert.equal((await store.read("SELECT id FROM dbo.payments WHERE tenant_id=@tenantId AND status<>'rejected'",{tenantId})).length,0);
+      }
     }
     if(baseline){assert.deepEqual(await protectedState(),baseline);}
     cleanup=providerClean;
@@ -427,6 +435,94 @@ const verifyCessationObligation=async()=>{
   proof.maintenanceConflictAccepted=true;proof.blockedCessationRequests=3;proof.obligationRetained=true;
 };
 
+// Outstanding invoice and pending payment review introduced after a clean review.
+// Synthetic records only: no renter, agreement, due date, proof or customer contact.
+const verifyCessationFinancialObligation=async()=>{
+  proof.scope='genuine sandbox paid cessation financial obligations + deployed service/SQL';
+  proof.credentialLoginAccepted=false;proof.financialConflictAccepted=false;
+  stage='financial_clean_preview';
+  const preview=()=>service.cessationPreview({tenantId,actorId,propertyId});
+  const clean=await preview();
+  assert.equal(clean.eligible,true);assert.deepEqual(clean.blockers,[]);
+  const stale={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:clean.inventoryHash,reason:'Reject cessation while a financial obligation remains after review.'};
+  check('cessation_preview_clean_before_financial_obligation');
+  const snapshot=async()=>{
+    const state={};
+    for(const table of ['properties','property_units','invoices','payments','management_inventory_controls','management_billing_commands']){
+      state[table]=await store.read('SELECT * FROM dbo.'+table+' WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+    }
+    state.recovery=await store.read('SELECT r.* FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c ON c.id=r.command_id WHERE c.tenant_id=@tenantId ORDER BY r.command_id',{tenantId});
+    state.steps=await store.read('SELECT s.* FROM dbo.management_billing_steps s JOIN dbo.management_billing_commands c ON c.id=s.command_id WHERE c.tenant_id=@tenantId ORDER BY s.command_id,s.name',{tenantId});
+    state.audit=await audit();state.stock=await store.inventory(tenantId);
+    return hash(state);
+  };
+  const remote=async()=>{const sub=await provider(),invoices=await read('/v1/invoices',{customer:customer.id,subscription:subscription.id,limit:100});return hash({sub,invoices:{has_more:invoices.has_more,data:invoices.data.map(i=>({id:i.id,status:i.status,total:i.total,paid:i.amount_paid,remaining:i.amount_remaining}))}});};
+  const blockedBy=async expected=>{
+    const result=await preview();assert.equal(result.eligible,false);assert.equal(result.inventoryHash,clean.inventoryHash);
+    assert.deepEqual(result.blockers.map(b=>({code:b.code,count:b.count})),expected);
+  };
+  let refusals=0;
+  // Every refused command must leave local records and provider billing byte-identical.
+  const refused=async commands=>{
+    const before=await snapshot(),providerBefore=await remote();
+    for(const command of commands){await assert.rejects(service.ceaseStock(command),{code:'BILLING_CESSATION_BLOCKED'});refusals++;}
+    assert.equal(await snapshot(),before);assert.equal(await remote(),providerBefore);
+  };
+  const fresh=()=>({...stale,id:randomUUID()});
+  cessationInvoiceId=randomUUID();
+  stage='financial_invoice_insert';
+  await store.locked(tenantId,q=>q("INSERT INTO dbo.invoices(id,tenant_id,propertyid,totalamount,status,notes) VALUES(@id,@tenantId,@propertyId,100,'issued','Synthetic cessation obligation; not a customer invoice')",{id:cessationInvoiceId,tenantId,propertyId}));
+  await blockedBy([{code:'FINANCIAL_OPEN',count:1}]);
+  check('outstanding_invoice_blocks_preview_without_changing_inventory_hash');
+  stage='financial_invoice_refusals';
+  await refused([stale,stale,fresh()]);
+  check('outstanding_invoice_stale_retry_and_new_command_rejected_without_effect');
+  cessationPaymentId=randomUUID();
+  stage='financial_payment_insert';
+  await store.locked(tenantId,q=>q("INSERT INTO dbo.payments(id,tenant_id,invoiceid,propertyid,amount,status,notes) VALUES(@id,@tenantId,@invoiceId,@propertyId,100,'pending','Synthetic cessation obligation; not a customer payment')",{id:cessationPaymentId,tenantId,invoiceId:cessationInvoiceId,propertyId}));
+  // An unverified payment does not reduce the outstanding balance: both obligations are named.
+  await blockedBy([{code:'FINANCIAL_OPEN',count:1},{code:'PAYMENT_OPEN',count:1}]);
+  stage='financial_both_refusal';
+  await refused([fresh()]);
+  check('pending_payment_review_reported_with_outstanding_invoice_and_rejected');
+  stage='financial_invoice_resolve';
+  await store.locked(tenantId,q=>q("UPDATE dbo.invoices SET status='cancelled',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='issued'",{tenantId,id:cessationInvoiceId}));
+  await blockedBy([{code:'PAYMENT_OPEN',count:1}]);
+  stage='financial_payment_only_refusal';
+  await refused([fresh()]);
+  check('pending_payment_review_alone_still_blocks_after_invoice_cancelled');
+  stage='financial_payment_resolve';
+  await store.locked(tenantId,q=>q("UPDATE dbo.payments SET status='rejected',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='pending'",{tenantId,id:cessationPaymentId}));
+  const resolved=await preview();
+  assert.equal(resolved.eligible,true);assert.deepEqual(resolved.blockers,[]);
+  assert.equal(resolved.inventoryHash,clean.inventoryHash);
+  check('resolved_financial_obligations_allow_fresh_review');
+  const args={...stale,id:randomUUID(),inventoryHash:resolved.inventoryHash,reason:'Confirm cessation after resolving the isolated synthetic financial obligations.'};
+  stage='financial_resolved_cessation';
+  const result=await service.ceaseStock(args);assert.equal(result.managementEnded,true);assert.equal(await count(),1);
+  const schedule=await scheduled(1);assert.equal((await store.account(tenantId)).pending_quantity,1);
+  const invoice=await read('/v1/invoices/'+proof.initialInvoice);
+  assert.equal(invoice.status,'paid');assert.equal(invoice.total,1000);assert.equal(invoice.amount_paid,1000);
+  check('resolved_obligation_cessation_schedules_one_without_current_invoice_change');
+  stage='financial_retained_history';
+  const saved=await snapshot();assert.deepEqual(await service.ceaseStock(args),result);
+  assert.equal(await snapshot(),saved);assert.equal(await scheduled(1),schedule);
+  const invoices=await store.read('SELECT id,propertyid,status,totalamount FROM dbo.invoices WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(invoices.length,1);assert.equal(String(invoices[0].id).toLowerCase(),cessationInvoiceId);
+  assert.equal(String(invoices[0].propertyid).toLowerCase(),propertyId);assert.equal(invoices[0].status,'cancelled');assert.equal(Number(invoices[0].totalamount),100);
+  const payments=await store.read('SELECT id,invoiceid,status,amount FROM dbo.payments WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(payments.length,1);assert.equal(String(payments[0].id).toLowerCase(),cessationPaymentId);
+  assert.equal(String(payments[0].invoiceid).toLowerCase(),cessationInvoiceId);assert.equal(payments[0].status,'rejected');assert.equal(Number(payments[0].amount),100);
+  const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);assert.equal(controls[0].restored_at,null);
+  assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND status='inactive'",{tenantId})).length,2);
+  assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
+  check('resolved_financial_records_and_cessation_history_retained_with_exact_retry');
+  assert.equal(refusals,5);
+  proof.financialConflictAccepted=true;proof.blockedCessationRequests=refusals;proof.obligationRetained=true;
+  proof.financialBlockers='FINANCIAL_OPEN,PAYMENT_OPEN';
+};
+
 const prepareRenewalCleanup=async()=>{
   stage='existing_renewal_cleanup_ownership';
   const tenants=await store.read('SELECT slug,[plan] FROM dbo.tenants WHERE id=@tenantId',{tenantId});
@@ -579,7 +675,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -634,7 +730,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
