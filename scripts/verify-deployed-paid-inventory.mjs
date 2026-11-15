@@ -12,7 +12,8 @@ import {createStripeClient,objectId} from '/app/src/api/managementBilling/stripe
 import {BILLING_ACCOUNT,BILLING_PRICE,hash} from '/app/src/api/managementBilling/contract.js';
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
-const tenantId=process.env.PAID_INVENTORY_OPERATION,actorId=randomUUID(),propertyId=randomUUID(),second=randomUUID();
+const tenantId=process.env.PAID_INVENTORY_OPERATION,propertyId=randomUUID(),second=randomUUID();
+let actorId=randomUUID();
 const scenario=process.env.PAID_INVENTORY_SCENARIO||'transitions';
 const httpTransitions=scenario==='http-transitions';
 const cessationRenewal=scenario==='cessation-renewal';
@@ -89,12 +90,12 @@ const cleanupFixture=async()=>{
       const current=await provider();assert.equal(current.livemode,false);assert.equal(objectId(current.customer),customer.id);
       if(hostedCheckout){assert.equal(String(customer.metadata.quixo_tenant).toLowerCase(),tenantId);}
       else{assert.equal(current.metadata.acceptance_fixture,tenantId);}
-      await stripe.request('DELETE','/v1/subscriptions/'+subscription.id,{invoice_now:false,prorate:false},`paid-stock:${tenantId}:cleanup-subscription`);
+      if(current.status!=='canceled'){await stripe.request('DELETE','/v1/subscriptions/'+subscription.id,{invoice_now:false,prorate:false},`paid-stock:${tenantId}:cleanup-subscription`);}
       assert.equal((await provider()).status,'canceled');
       if(await store.account(tenantId)){await service.refresh(tenantId);assert.equal((await store.account(tenantId)).subscription_status,'canceled');}
     }else if(providerAttempted){throw Object.assign(Error('Inspect ambiguous provider creation before cleanup'),{code:'PROVIDER_CREATION_UNCONFIRMED'});}
     providerClean=true;
-  }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
+  }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,...proof}));process.exitCode=1;}
   try{
     for(const token of httpTokens){
       await revokeAccessToken(token);
@@ -102,7 +103,8 @@ const cleanupFixture=async()=>{
       assert.equal((await store.read('SELECT id FROM dbo.auth_sessions WHERE token_hash=@digest AND revoked_at IS NULL',{digest})).length,0);
     }
     if(created){
-      await store.locked(tenantId,async q=>{
+      for(let attempt=0;attempt<3;attempt++){
+      try{await store.locked(tenantId,async q=>{
         for(const id of httpActors){
           await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@id",{tenantId,id});
           await q("UPDATE dbo.app_users SET status='inactive' WHERE id=@id AND tenant_id=@tenantId",{tenantId,id});
@@ -113,7 +115,10 @@ const cleanupFixture=async()=>{
         await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId});
         await q("UPDATE dbo.app_users SET status='inactive' WHERE id=@actorId AND tenant_id=@tenantId",{tenantId,actorId});
         await q("UPDATE dbo.tenants SET status='inactive' WHERE id=@tenantId",{tenantId});
-      });
+      });break;}catch(error){
+        if(error.number!==1205||attempt===2){throw error;}
+        console.log('PAID_CLEANUP_SQL_DEADLOCK_RETRY='+String(attempt+1));await delay(1000*(attempt+1));
+      }}
       assert.equal((await store.read("SELECT id FROM dbo.tenants WHERE id=@tenantId AND status='inactive'",{tenantId})).length,1);
       assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE id=@actorId AND status='inactive'",{actorId})).length,1);
       assert.equal((await store.read("SELECT id FROM dbo.tenant_memberships WHERE tenant_id=@tenantId AND status='active'",{tenantId})).length,0);
@@ -124,7 +129,7 @@ const cleanupFixture=async()=>{
     if(baseline){assert.deepEqual(await protectedState(),baseline);}
     cleanup=providerClean;
     console.log('PAID_INVENTORY_CLEANUP='+JSON.stringify({verified:cleanup,fixtureInactive:created,subscriptionCanceled:providerClean&&Boolean(subscription),recordsRetained:true}));
-  }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
+  }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,...proof}));process.exitCode=1;}
   if(passed&&cleanup){console.log('PAID_INVENTORY_PASS='+JSON.stringify({...proof,passed:true,fixtureInactive:true,subscriptionCanceled:true,protectedBillingUnchanged:true}));}
   await closeMssqlPool();
 };
@@ -189,18 +194,43 @@ const verifyCessationRenewal=async()=>{
   assert.equal(account.quantity,1);assert.equal(account.pending_quantity,null);assert.equal(await count(),1);
   assert.ok(new Date(account.paid_through).getTime()>=invoice.lines.data[0].period.end*1000);
   check('renewal_reconciles_paid_capacity_and_clears_pending_quantity');
-  const stockBefore=hash(await store.inventory(tenantId)),invoiceBefore=hash(invoice);
+  stage='renewal_refresh_retry';
+  const financial=value=>({id:value.id,customer:objectId(value.customer),subscription:objectId(value.parent?.subscription_details?.subscription||value.subscription),
+    livemode:value.livemode,status:value.status,currency:value.currency,total:value.total,paid:value.amount_paid,remaining:value.amount_remaining,reason:value.billing_reason,
+    lines:value.lines.data.map(line=>({id:line.id,quantity:line.quantity,amount:line.amount,period:line.period,price:objectId(line.pricing?.price_details?.price||line.price)}))});
+  const stockBefore=hash(await store.inventory(tenantId)),invoiceBefore=financial(invoice);
   await service.refresh(tenantId);
-  assert.equal(hash(await store.inventory(tenantId)),stockBefore);
-  assert.equal(hash(await read('/v1/invoices/'+proof.renewalInvoice)),invoiceBefore);
+  stage='renewal_retry_stock';assert.equal(hash(await store.inventory(tenantId)),stockBefore);
+  stage='renewal_retry_invoice';assert.deepEqual(financial(await read('/v1/invoices/'+proof.renewalInvoice)),invoiceBefore);
+  const retriedInvoices=await read('/v1/invoices',{customer:customer.id,subscription:subscription.id,limit:100});
+  assert.equal(retriedInvoices.has_more,false);assert.deepEqual(retriedInvoices.data.map(i=>i.id).sort(),[proof.initialInvoice,proof.renewalInvoice].sort());
   assert.equal((await store.account(tenantId)).quantity,1);
   check('renewal_refresh_retry_preserves_stock_and_invoice');
+  stage='retained_cessation_history';
   const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
   assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);assert.equal(controls[0].restored_at,null);
   assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND status='inactive'",{tenantId})).length,2);
   assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
   check('ceased_history_and_private_records_retained_after_renewal');
   proof.actualRenewalAccepted=true;proof.renewalQuantity=1;proof.renewalAmountMinor=500;proof.clockAdvancedTo=boundary+3600;
+};
+
+
+const prepareRenewalCleanup=async()=>{
+  stage='existing_renewal_cleanup_ownership';
+  const tenants=await store.read('SELECT slug,[plan] FROM dbo.tenants WHERE id=@tenantId',{tenantId});
+  assert.equal(tenants.length,1);assert.equal(tenants[0].slug,'r5-paid-stock-'+tenantId);assert.equal(tenants[0].plan,'development-testing');
+  const actors=await store.read('SELECT id,auth_id,email FROM dbo.app_users WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(actors.length,1);assert.equal(actors[0].email,'r5-paid-stock-'+tenantId+'@example.invalid');assert.ok(!actors[0].auth_id);
+  const account=await store.account(tenantId);assert.equal(account.stripe_account_id,BILLING_ACCOUNT);
+  customer=await read('/v1/customers/'+account.stripe_customer_id);
+  assert.equal(customer.livemode,false);assert.equal(customer.metadata.acceptance_fixture,tenantId);assert.ok(customer.test_clock);
+  subscription=await read('/v1/subscriptions/'+account.stripe_subscription_id);
+  assert.equal(subscription.livemode,false);assert.equal(subscription.status,'canceled');
+  assert.equal(subscription.metadata.acceptance_fixture,tenantId);assert.equal(objectId(subscription.customer),customer.id);
+  assert.equal(objectId(subscription.test_clock),objectId(customer.test_clock));
+  actorId=String(actors[0].id).toLowerCase();created=true;
+  console.log('PAID_RENEWAL_CLEANUP_OWNERSHIP='+JSON.stringify({operation:tenantId,verified:true,subscriptionAlreadyCanceled:true}));
 };
 
 const cleanupUnpaidHostedCheckout=async()=>{
@@ -338,7 +368,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -350,7 +380,7 @@ try{
     assert.ok((await store.read('SELECT OBJECT_ID(@name) AS id',{name:'dbo.'+table}))[0]?.id,'Required schema: '+table);
   }
   baseline=await protectedState();
-  if(scenario==='cleanup-hosted-checkout'){await cleanupUnpaidHostedCheckout();}else{
+  if(scenario==='cleanup-cessation-renewal'){await prepareRenewalCleanup();}else if(scenario==='cleanup-hosted-checkout'){await cleanupUnpaidHostedCheckout();}else{
   stage='private_fixture';
   await store.locked(tenantId,async q=>{
     assert.equal((await q('SELECT id FROM dbo.tenants WHERE id=@tenantId',{tenantId})).length,0,'Never replay an existing fixture');
