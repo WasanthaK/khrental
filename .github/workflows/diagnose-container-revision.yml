@@ -54,13 +54,15 @@ jobs:
           az extension add --name containerapp --upgrade --yes >/dev/null
           az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$RUNNER_TEMP/current-app.json"
           az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$BASELINE_REVISION" -o json > "$RUNNER_TEMP/baseline-revision.json"
+          current_revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/current-app.json")
+          az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$current_revision" -o json > "$RUNNER_TEMP/current-revision.json"
           python3 - <<'PY'
           import os,json,hashlib
           from pathlib import Path
           root=Path(os.environ['RUNNER_TEMP'])
           before=json.loads((root/'baseline-revision.json').read_text())['properties']['template']
           app=json.loads((root/'current-app.json').read_text())
-          after=app['properties']['template']
+          after=json.loads((root/'current-revision.json').read_text())['properties']['template']
           def normalize(value):
               if isinstance(value,dict): return {k:normalize(v) for k,v in value.items()}
               if isinstance(value,list):
@@ -78,6 +80,7 @@ jobs:
               return [] if a==b else [path]
           paths=differences(before,after)
           result={'baselineRevision':os.environ['BASELINE_REVISION'],'latest':app['properties']['latestRevisionName'],'ready':app['properties']['latestReadyRevisionName'],'templateEqual':not paths,'differentPaths':paths}
+          result['equalExceptGeneratedRevisionSuffix']=not [p for p in paths if p!='template.revisionSuffix']
           print('REVISION_TEMPLATE_COMPARISON='+json.dumps(result))
           print('CURRENT_TRAFFIC='+json.dumps(app['properties']['configuration']['ingress'].get('traffic')))
           PY
