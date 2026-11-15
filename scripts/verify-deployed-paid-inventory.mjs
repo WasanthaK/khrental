@@ -226,7 +226,12 @@ const verifyCessationRenewal=async()=>{
   stage='retained_cessation_history';
   const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
   assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);if(restorationRenewal){assert.ok(controls[0].restored_at);}else{assert.equal(controls[0].restored_at,null);}
-  assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND status='inactive'",{tenantId})).length,2);
+  stage='retained_property_states';
+  const retained=await store.read('SELECT id,status FROM dbo.properties WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(retained.length,2);
+  assert.equal(retained.find(p=>String(p.id).toLowerCase()===propertyId)?.status,restorationRenewal?'available':'inactive');
+  assert.equal(retained.find(p=>String(p.id).toLowerCase()===second)?.status,'inactive');
+  stage='retained_listing_privacy';
   assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
   check(restorationRenewal?'restored_history_and_private_records_retained_after_renewal':'ceased_history_and_private_records_retained_after_renewal');
   proof.actualRenewalAccepted=true;proof.renewalQuantity=quantity;proof.renewalAmountMinor=amount;proof.clockAdvancedTo=boundary+3600;
