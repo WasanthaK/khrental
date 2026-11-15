@@ -1,5 +1,5 @@
 {
-  "status": "acceptance_incomplete",
+  "status": "bounded_acceptance_passed",
   "scenario": "restoration-renewal",
   "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
   "pullRequests": [
@@ -55,11 +55,103 @@
         "digest": "sha256:418e92ea2a59ebcb5d1e2d10c75c4636d5dbcb48e79ca27ec7d1ff56c68f58c0"
       },
       "neverReplayOperation": true
+    },
+    {
+      "runId": 43706276982,
+      "jobId": 132788132006,
+      "sourceSha": "2d25bfa9b442969d52259186f16339729ce039f0",
+      "conclusion": "success",
+      "proof": {
+        "operation": "071cf74f-5966-4b05-ad10-12fb1dbecc95",
+        "scenario": "restoration-renewal",
+        "checks": [
+          "isolated_private_fixture",
+          "genuine_paid_capacity_reconciled",
+          "cessation_preserves_current_paid_invoice_and_schedules_one",
+          "cessation_retry_preserves_schedule_and_audit",
+          "restoration_preserves_current_invoice_and_schedules_two",
+          "restoration_retry_preserves_schedule_and_audit",
+          "renewal_boundary_applies_two_restored_dwellings",
+          "automatic_renewal_paid_exactly_two_dwellings_without_extra_invoice",
+          "renewal_reconciles_paid_capacity_and_clears_pending_quantity",
+          "renewal_refresh_retry_preserves_stock_and_invoice",
+          "restored_history_and_private_records_retained_after_renewal",
+          "protected_accounts_subscriptions_and_clocks_unchanged"
+        ],
+        "scope": "genuine sandbox restoration-renewal + deployed service/SQL reconciliation",
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "testClockId": "clock_1Uc15cQ4sARuLNQak7Et4xCb",
+        "customerId": "cus_VdHe0RxNeQ5Dnp",
+        "subscriptionId": "sub_1Uc15eQ4sARuLNQaKy8bHoj0",
+        "initialInvoice": "in_1Uc15eQ4sARuLNQaZSnpeloO",
+        "credentialLoginAccepted": false,
+        "actualRenewalAccepted": true,
+        "scheduleId": "sub_sched_1Uc15mQ4sARuLNQa6F8DTpZP",
+        "renewalInvoice": "in_1Uc167Q4sARuLNQaAuFdHJvg",
+        "renewalQuantity": 2,
+        "renewalAmountMinor": 1000,
+        "clockAdvancedTo": 1797335716,
+        "passed": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "protectedBillingUnchanged": true
+      },
+      "cleanup": {
+        "verified": true,
+        "at": "2026-11-15T10:56:07Z"
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthy": true,
+      "healthVerifiedAt": "2026-11-15T10:56:11Z",
+      "readyRevision": "khrental-app--0000523",
+      "artifact": {
+        "id": 14158214726,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 2136,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14158214726",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14158214726/zip",
+        "expired": false,
+        "created_at": "2026-11-15T10:56:11Z",
+        "expires_at": "2026-12-15T10:56:11Z",
+        "updated_at": "2026-11-15T10:56:11Z",
+        "digest": "sha256:adc701a19dd5826b75ea815fd9c9276a7400c3b5c62ee7177873d648cd73524b",
+        "workflow_run": {
+          "id": 43706276982,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "2d25bfa9b442969d52259186f16339729ce039f0"
+        }
+      },
+      "neverReplayOperation": true
     }
   ],
   "limits": [
     "Service/SQL only, not HTTP/UI or credential login",
     "Fresh isolated sandbox clock, not natural grace expiry",
     "R5 partial; live charging and full enforcement OFF"
-  ]
+  ],
+  "latestAcceptedRun": 43706276982,
+  "ci": [
+    {
+      "pr": 663,
+      "head": "b127bf72f80b93e2fa337f928cffbac82c34215d",
+      "runs": [
+        43705619462,
+        43705619512
+      ],
+      "conclusion": "success"
+    },
+    {
+      "pr": 664,
+      "head": "830d5da2d62705edbf078fd8fa503d51ae879345",
+      "runs": [
+        43706106351,
+        43706106242
+      ],
+      "conclusion": "success"
+    }
+  ],
+  "harnessCorrection": "Restoration intentionally sets the restored property available; PR 664 checks exact retained property states and keeps public opt-out verification. The earlier run remains failed."
 }
