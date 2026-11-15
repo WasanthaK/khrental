@@ -15,6 +15,8 @@ import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 const tenantId=process.env.PAID_INVENTORY_OPERATION,actorId=randomUUID(),propertyId=randomUUID(),second=randomUUID();
 const scenario=process.env.PAID_INVENTORY_SCENARIO||'transitions';
 const httpTransitions=scenario==='http-transitions';
+const cessationRenewal=scenario==='cessation-renewal';
+let fixtureClock=null;
 const hostedCheckout=scenario==='http-hosted-checkout';
 let checkoutSessionId=null,checkoutCommandId=null;
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
@@ -125,6 +127,80 @@ const cleanupFixture=async()=>{
   }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
   if(passed&&cleanup){console.log('PAID_INVENTORY_PASS='+JSON.stringify({...proof,passed:true,fixtureInactive:true,subscriptionCanceled:true,protectedBillingUnchanged:true}));}
   await closeMssqlPool();
+};
+
+
+const verifyCessationRenewal=async()=>{
+  proof.scope='genuine sandbox cessation renewal + deployed service/SQL reconciliation';
+  proof.credentialLoginAccepted=false;proof.actualRenewalAccepted=false;
+  stage='renewal_cessation_preview';
+  const preview=await service.cessationPreview({tenantId,actorId,propertyId});assert.equal(preview.eligible,true);
+  const args={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:preview.inventoryHash,reason:'Verify one ceased dwelling is excluded from the actual next sandbox renewal.'};
+  stage='renewal_cessation_apply';
+  const result=await service.ceaseStock(args);assert.equal(await count(),1);
+  const schedule=await scheduled(1),beforeAudit=await audit();
+  assert.equal((await read('/v1/invoices/'+proof.initialInvoice)).amount_paid,1000);
+  check('cessation_preserves_current_paid_invoice_and_schedules_one');
+  assert.deepEqual(await service.ceaseStock(args),result);
+  assert.equal(await scheduled(1),schedule);assert.equal(await audit(),beforeAudit);
+  check('cessation_retry_preserves_schedule_and_audit');
+  const boundary=(await provider()).items.data[0].current_period_end;
+  const advance=async(target,key)=>{
+    const ownedCustomer=await read('/v1/customers/'+customer.id),ownedSub=await provider();
+    assert.equal(ownedCustomer.livemode,false);assert.equal(ownedCustomer.metadata.acceptance_fixture,tenantId);
+    assert.equal(objectId(ownedCustomer.test_clock),fixtureClock.id);assert.equal(objectId(ownedSub.test_clock),fixtureClock.id);
+    assert.equal(ownedSub.metadata.acceptance_fixture,tenantId);assert.equal(objectId(ownedSub.customer),customer.id);
+    const current=await read('/v1/test_helpers/test_clocks/'+fixtureClock.id);
+    assert.equal(current.name,'r5-cessation-renewal-'+tenantId);assert.equal(current.status,'ready');assert.ok(target>current.frozen_time);
+    await write('/v1/test_helpers/test_clocks/'+fixtureClock.id+'/advance',{frozen_time:target},key);
+    for(let attempt=0;attempt<90;attempt++){
+      const clock=await read('/v1/test_helpers/test_clocks/'+fixtureClock.id);
+      if(clock.status==='ready'){assert.equal(clock.frozen_time,target);return;}
+      assert.equal(clock.status,'advancing');await delay(2000);
+    }
+    throw Object.assign(Error('Fixture clock did not become ready'),{code:'FIXTURE_CLOCK_TIMEOUT'});
+  };
+  stage='renewal_boundary';await advance(boundary,'renewal-boundary');
+  let renewed=await provider();
+  assert.equal(renewed.items.data[0].quantity,1);assert.notEqual(objectId(renewed.latest_invoice),proof.initialInvoice);
+  proof.renewalInvoice=objectId(renewed.latest_invoice);
+  const draft=await read('/v1/invoices/'+proof.renewalInvoice);
+  assert.equal(draft.billing_reason,'subscription_cycle');assert.equal(draft.total,500);assert.equal(draft.currency,'usd');
+  assert.equal(objectId(draft.customer),customer.id);assert.equal(draft.livemode,false);
+  check('renewal_boundary_applies_one_dwelling_quantity');
+  stage='renewal_automatic_payment';await advance(boundary+3600,'renewal-payment');
+  let invoice;
+  for(let attempt=0;attempt<60;attempt++){
+    invoice=await read('/v1/invoices/'+proof.renewalInvoice);
+    if(invoice.status==='paid'){break;}await delay(2000);
+  }
+  assert.equal(invoice.status,'paid');assert.equal(invoice.amount_paid,500);assert.equal(invoice.amount_remaining,0);
+  assert.equal(invoice.lines.has_more,false);assert.equal(invoice.lines.data.length,1);
+  assert.equal(invoice.lines.data[0].quantity,1);assert.equal(invoice.lines.data[0].amount,500);
+  assert.equal(invoice.lines.data[0].period.start,boundary);
+  assert.equal(objectId(invoice.parent?.subscription_details?.subscription||invoice.subscription),subscription.id);
+  const invoices=await read('/v1/invoices',{customer:customer.id,subscription:subscription.id,limit:100});
+  assert.equal(invoices.has_more,false);assert.equal(invoices.data.length,2);
+  assert.deepEqual(invoices.data.map(i=>i.id).sort(),[proof.initialInvoice,proof.renewalInvoice].sort());
+  check('automatic_renewal_paid_exactly_one_dwelling_without_extra_invoice');
+  stage='renewal_application_projection';
+  const refreshed=await service.refresh(tenantId),account=await store.account(tenantId);
+  assert.equal(refreshed.entitlement.state,'active');assert.equal(refreshed.billedQuantity,1);
+  assert.equal(account.quantity,1);assert.equal(account.pending_quantity,null);assert.equal(await count(),1);
+  assert.ok(new Date(account.paid_through).getTime()>=invoice.lines.data[0].period.end*1000);
+  check('renewal_reconciles_paid_capacity_and_clears_pending_quantity');
+  const stockBefore=hash(await store.inventory(tenantId)),invoiceBefore=hash(invoice);
+  await service.refresh(tenantId);
+  assert.equal(hash(await store.inventory(tenantId)),stockBefore);
+  assert.equal(hash(await read('/v1/invoices/'+proof.renewalInvoice)),invoiceBefore);
+  assert.equal((await store.account(tenantId)).quantity,1);
+  check('renewal_refresh_retry_preserves_stock_and_invoice');
+  const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);assert.equal(controls[0].restored_at,null);
+  assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND status='inactive'",{tenantId})).length,2);
+  assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
+  check('ceased_history_and_private_records_retained_after_renewal');
+  proof.actualRenewalAccepted=true;proof.renewalQuantity=1;proof.renewalAmountMinor=500;proof.clockAdvancedTo=boundary+3600;
 };
 
 const cleanupUnpaidHostedCheckout=async()=>{
@@ -262,7 +338,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -294,14 +370,19 @@ try{
   const stockPreview=await store.locked(tenantId,q=>store.cessationPreviewLocked(q,{tenantId,actorId,propertyId}));
   assert.equal(stockPreview.eligible,true);
   stage='genuine_paid_subscription';providerAttempted=true;
-  customer=await write('/v1/customers',{description:'R5 private paid stock '+tenantId,payment_method:'pm_card_visa',
+  if(cessationRenewal){
+    fixtureClock=await write('/v1/test_helpers/test_clocks',{frozen_time:Math.floor(Date.now()/1000),name:'r5-cessation-renewal-'+tenantId},'clock');
+    assert.equal(fixtureClock.status,'ready');proof.testClockId=fixtureClock.id;progress();
+  }
+  customer=await write('/v1/customers',{description:'R5 private paid stock '+tenantId,...(cessationRenewal?{test_clock:fixtureClock.id}:{}),payment_method:'pm_card_visa',
     invoice_settings:{default_payment_method:'pm_card_visa'},metadata:{acceptance_fixture:tenantId}},'customer');
   proof.customerId=customer.id;progress();assert.equal(customer.livemode,false);assert.ok(!customer.email);
   subscription=await write('/v1/subscriptions',{customer:customer.id,items:[{price:BILLING_PRICE,quantity:2}],
     default_payment_method:objectId(customer.invoice_settings.default_payment_method),payment_behavior:'error_if_incomplete',
     metadata:{acceptance_fixture:tenantId}},'subscription');
   proof.subscriptionId=subscription.id;progress();assert.equal(subscription.livemode,false);assert.equal(subscription.status,'active');
-  assert.equal(objectId(subscription.customer),customer.id);assert.ok(!subscription.test_clock);
+  assert.equal(objectId(subscription.customer),customer.id);
+  if(cessationRenewal){assert.equal(objectId(subscription.test_clock),fixtureClock.id);}else{assert.ok(!subscription.test_clock);}
   const invoice=await read('/v1/invoices/'+objectId(subscription.latest_invoice));
   assert.equal(invoice.livemode,false);assert.equal(objectId(invoice.customer),customer.id);assert.equal(invoice.status,'paid');
   assert.equal(invoice.amount_paid,1000);assert.equal(invoice.currency,'usd');assert.equal(invoice.billing_reason,'subscription_create');
@@ -312,7 +393,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='http-permissions'){
+  if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
