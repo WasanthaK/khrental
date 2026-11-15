@@ -23,6 +23,7 @@ const cessationRenewal=scenario==='cessation-renewal'||restorationRenewal||split
 let fixtureClock=null;
 let cessationMaintenanceId=null;
 let cessationInvoiceId=null,cessationPaymentId=null;
+let cessationSettlementId=null,cessationDepositId=null;
 const hostedCheckout=scenario==='http-hosted-checkout';
 let checkoutSessionId=null,checkoutCommandId=null;
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
@@ -112,6 +113,8 @@ const cleanupFixture=async()=>{
       // Status-filtered: a failed run must not leave a synthetic open obligation behind.
       if(cessationPaymentId){await store.locked(tenantId,q=>q("UPDATE dbo.payments SET status='rejected',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='pending'",{tenantId,id:cessationPaymentId}));}
       if(cessationInvoiceId){await store.locked(tenantId,q=>q("UPDATE dbo.invoices SET status='cancelled',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='issued'",{tenantId,id:cessationInvoiceId}));}
+      if(cessationDepositId){await store.locked(tenantId,q=>q("UPDATE dbo.tenancy_deposit_transactions SET status='voided',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='received'",{tenantId,id:cessationDepositId}));}
+      if(cessationSettlementId){await store.locked(tenantId,q=>q("UPDATE dbo.tenancy_settlements SET status='voided',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='draft'",{tenantId,id:cessationSettlementId}));}
       for(let attempt=0;attempt<3;attempt++){
       try{await store.locked(tenantId,async q=>{
         for(const id of httpActors){
@@ -136,6 +139,10 @@ const cleanupFixture=async()=>{
       assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=0',{tenantId})).length,0);
       for(const id of httpActors){assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE id=@id AND status='inactive'",{id})).length,1);}
       if(foreignTenant){assert.equal((await store.read("SELECT id FROM dbo.tenants WHERE id=@foreignTenant AND status='inactive'",{foreignTenant})).length,1);}
+      if(cessationSettlementId){
+        assert.equal((await store.read("SELECT id FROM dbo.tenancy_settlements WHERE tenant_id=@tenantId AND status<>'voided'",{tenantId})).length,0);
+        assert.equal((await store.read("SELECT id FROM dbo.tenancy_deposit_transactions WHERE tenant_id=@tenantId AND status<>'voided'",{tenantId})).length,0);
+      }
       if(cessationInvoiceId){
         assert.equal((await store.read("SELECT id FROM dbo.invoices WHERE tenant_id=@tenantId AND status<>'cancelled'",{tenantId})).length,0);
         assert.equal((await store.read("SELECT id FROM dbo.payments WHERE tenant_id=@tenantId AND status<>'rejected'",{tenantId})).length,0);
@@ -523,6 +530,100 @@ const verifyCessationFinancialObligation=async()=>{
   proof.financialBlockers='FINANCIAL_OPEN,PAYMENT_OPEN';
 };
 
+// Draft settlement and held deposit introduced after a clean review. Both hang
+// from one synthetic closed agreement: no renter contract, signature or contact.
+const verifyCessationSettlementDeposit=async()=>{
+  proof.scope='genuine sandbox paid cessation settlement and deposit obligations + deployed service/SQL';
+  proof.credentialLoginAccepted=false;proof.settlementDepositConflictAccepted=false;
+  const agreementId=randomUUID();
+  stage='settlement_closed_agreement';
+  await store.locked(tenantId,q=>q("INSERT INTO dbo.agreements(id,tenant_id,propertyid,status,title,notes) VALUES(@id,@tenantId,@propertyId,'closed','Synthetic closed tenancy','Synthetic cessation fixture; not a customer agreement')",{id:agreementId,tenantId,propertyId}));
+  stage='settlement_clean_preview';
+  const preview=()=>service.cessationPreview({tenantId,actorId,propertyId});
+  const clean=await preview();
+  assert.equal(clean.eligible,true);assert.deepEqual(clean.blockers,[]);
+  const stale={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:clean.inventoryHash,reason:'Reject cessation while a settlement or deposit obligation remains after review.'};
+  check('cessation_preview_clean_with_closed_synthetic_tenancy');
+  const snapshot=async()=>{
+    const state={};
+    for(const table of ['properties','property_units','agreements','tenancy_settlements','tenancy_deposit_transactions','management_inventory_controls','management_billing_commands']){
+      state[table]=await store.read('SELECT * FROM dbo.'+table+' WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+    }
+    state.recovery=await store.read('SELECT r.* FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c ON c.id=r.command_id WHERE c.tenant_id=@tenantId ORDER BY r.command_id',{tenantId});
+    state.steps=await store.read('SELECT s.* FROM dbo.management_billing_steps s JOIN dbo.management_billing_commands c ON c.id=s.command_id WHERE c.tenant_id=@tenantId ORDER BY s.command_id,s.name',{tenantId});
+    state.audit=await audit();state.stock=await store.inventory(tenantId);
+    return hash(state);
+  };
+  const remote=async()=>{const sub=await provider(),invoices=await read('/v1/invoices',{customer:customer.id,subscription:subscription.id,limit:100});return hash({sub,invoices:{has_more:invoices.has_more,data:invoices.data.map(i=>({id:i.id,status:i.status,total:i.total,paid:i.amount_paid,remaining:i.amount_remaining}))}});};
+  const blockedBy=async expected=>{
+    const result=await preview();assert.equal(result.eligible,false);assert.equal(result.inventoryHash,clean.inventoryHash);
+    assert.deepEqual(result.blockers.map(b=>({code:b.code,count:b.count})),expected);
+  };
+  let refusals=0;
+  // Every refused command must leave local records and provider billing byte-identical.
+  const refused=async commands=>{
+    const before=await snapshot(),providerBefore=await remote();
+    for(const command of commands){await assert.rejects(service.ceaseStock(command),{code:'BILLING_CESSATION_BLOCKED'});refusals++;}
+    assert.equal(await snapshot(),before);assert.equal(await remote(),providerBefore);
+  };
+  const fresh=()=>({...stale,id:randomUUID()});
+  cessationSettlementId=randomUUID();
+  stage='settlement_insert';
+  await store.locked(tenantId,q=>q("INSERT INTO dbo.tenancy_settlements(id,tenant_id,agreement_id,status,notes) VALUES(@id,@tenantId,@agreementId,'draft','Synthetic cessation obligation; not a customer settlement')",{id:cessationSettlementId,tenantId,agreementId}));
+  await blockedBy([{code:'SETTLEMENT_OPEN',count:1}]);
+  check('draft_settlement_blocks_preview_without_changing_inventory_hash');
+  stage='settlement_refusals';
+  await refused([stale,stale,fresh()]);
+  check('draft_settlement_stale_retry_and_new_command_rejected_without_effect');
+  cessationDepositId=randomUUID();
+  stage='deposit_insert';
+  await store.locked(tenantId,q=>q("INSERT INTO dbo.tenancy_deposit_transactions(id,tenant_id,agreement_id,renteeid,propertyid,transaction_type,amount,status,notes) VALUES(@id,@tenantId,@agreementId,@actorId,@propertyId,'security_deposit',100,'received','Synthetic cessation obligation; not a customer deposit')",{id:cessationDepositId,tenantId,agreementId,actorId,propertyId}));
+  await blockedBy([{code:'SETTLEMENT_OPEN',count:1},{code:'DEPOSIT_OPEN',count:1}]);
+  stage='settlement_deposit_refusal';
+  await refused([fresh()]);
+  check('held_deposit_reported_with_draft_settlement_and_rejected');
+  stage='settlement_resolve';
+  await store.locked(tenantId,q=>q("UPDATE dbo.tenancy_settlements SET status='voided',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='draft'",{tenantId,id:cessationSettlementId}));
+  // A voided settlement is not a settled one: the held deposit must still block.
+  await blockedBy([{code:'DEPOSIT_OPEN',count:1}]);
+  stage='deposit_only_refusal';
+  await refused([fresh()]);
+  check('held_deposit_alone_still_blocks_after_settlement_voided');
+  stage='deposit_resolve';
+  await store.locked(tenantId,q=>q("UPDATE dbo.tenancy_deposit_transactions SET status='voided',updatedat=SYSUTCDATETIME() WHERE tenant_id=@tenantId AND id=@id AND status='received'",{tenantId,id:cessationDepositId}));
+  const resolved=await preview();
+  assert.equal(resolved.eligible,true);assert.deepEqual(resolved.blockers,[]);
+  assert.equal(resolved.inventoryHash,clean.inventoryHash);
+  check('resolved_settlement_and_deposit_allow_fresh_review');
+  const args={...stale,id:randomUUID(),inventoryHash:resolved.inventoryHash,reason:'Confirm cessation after resolving the isolated synthetic settlement and deposit.'};
+  stage='settlement_resolved_cessation';
+  const result=await service.ceaseStock(args);assert.equal(result.managementEnded,true);assert.equal(await count(),1);
+  const schedule=await scheduled(1);assert.equal((await store.account(tenantId)).pending_quantity,1);
+  const invoice=await read('/v1/invoices/'+proof.initialInvoice);
+  assert.equal(invoice.status,'paid');assert.equal(invoice.total,1000);assert.equal(invoice.amount_paid,1000);
+  check('resolved_obligation_cessation_schedules_one_without_current_invoice_change');
+  stage='settlement_retained_history';
+  const saved=await snapshot();assert.deepEqual(await service.ceaseStock(args),result);
+  assert.equal(await snapshot(),saved);assert.equal(await scheduled(1),schedule);
+  const agreements=await store.read('SELECT id,propertyid,status FROM dbo.agreements WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(agreements.length,1);assert.equal(String(agreements[0].id).toLowerCase(),agreementId);
+  assert.equal(String(agreements[0].propertyid).toLowerCase(),propertyId);assert.equal(agreements[0].status,'closed');
+  const settlements=await store.read('SELECT id,agreement_id,status FROM dbo.tenancy_settlements WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(settlements.length,1);assert.equal(String(settlements[0].id).toLowerCase(),cessationSettlementId);
+  assert.equal(String(settlements[0].agreement_id).toLowerCase(),agreementId);assert.equal(settlements[0].status,'voided');
+  const deposits=await store.read('SELECT id,agreement_id,status,amount FROM dbo.tenancy_deposit_transactions WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(deposits.length,1);assert.equal(String(deposits[0].id).toLowerCase(),cessationDepositId);
+  assert.equal(String(deposits[0].agreement_id).toLowerCase(),agreementId);assert.equal(deposits[0].status,'voided');assert.equal(Number(deposits[0].amount),100);
+  const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);assert.equal(controls[0].restored_at,null);
+  assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND status='inactive'",{tenantId})).length,2);
+  assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
+  check('resolved_settlement_deposit_and_cessation_history_retained_with_exact_retry');
+  assert.equal(refusals,5);
+  proof.settlementDepositConflictAccepted=true;proof.blockedCessationRequests=refusals;proof.obligationRetained=true;
+  proof.obligationBlockers='SETTLEMENT_OPEN,DEPOSIT_OPEN';
+};
+
 const prepareRenewalCleanup=async()=>{
   stage='existing_renewal_cleanup_ownership';
   const tenants=await store.read('SELECT slug,[plan] FROM dbo.tenants WHERE id=@tenantId',{tenantId});
@@ -675,7 +776,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -730,7 +831,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
