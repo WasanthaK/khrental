@@ -1,0 +1,42 @@
+{
+  "status": "pending fresh acceptance",
+  "scenario": "http-permissions",
+  "pullRequests": [
+    649,
+    650
+  ],
+  "attempts": [
+    {
+      "runId": 43666699600,
+      "jobId": 132667795974,
+      "failedAtUtc": "2026-11-15T02:14:36Z",
+      "failedAtAsiaColombo": "2026-11-15T07:44:36+05:30",
+      "stage": "http_foreign_fixture",
+      "code": "EREQUEST",
+      "sqlNumber": 547,
+      "sqlLine": 1,
+      "operation": "13b9f250-5d37-4f96-877a-bf559ec3ce73",
+      "scenario": "http-permissions",
+      "checks": [
+        "isolated_private_fixture",
+        "genuine_paid_capacity_reconciled",
+        "administrator_paid_http_status_and_preview"
+      ],
+      "scope": "genuine paid sandbox fixture + deployed public HTTP permission and command isolation",
+      "httpAccepted": false,
+      "uiAccepted": false,
+      "credentialLoginAccepted": false,
+      "httpStockMutationAccepted": false,
+      "mustNotReplay": true,
+      "cleanupVerified": true,
+      "sessionsRevoked": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "recordsRetained": true,
+      "unchangedRevisionAndPublicHealth": true,
+      "artifactId": 14141374871,
+      "artifactSha256": "b5b1c8d33207b30f5b5911330b8f1b72457b9c13726414c17557f5a41526657d",
+      "diagnosis": "Foreign command fixture omitted required management_billing_accounts parent. SQL 547 during fixture setup; transaction rolled back. PR #650 creates pending account with no provider binding."
+    }
+  ]
+}
