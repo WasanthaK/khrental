@@ -76,7 +76,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
           while IFS= read -r changed; do
             case "$changed" in
-              docs/*|*.md|tests/*|scripts/test-rental-offers-sql.mjs|scripts/test-rental-offers-browser.mjs|scripts/verify-deployed-stock-expiry.mjs|.github/workflows/verify-deployed-stock-expiry.yml|scripts/verify-deployed-retained-history.mjs|.github/workflows/verify-deployed-retained-history.yml|scripts/verify-deployed-reservation-http.mjs|.github/workflows/verify-deployed-reservation-http.yml|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml) ;;
+              docs/*|*.md|tests/*|scripts/test-rental-offers-sql.mjs|scripts/test-rental-offers-browser.mjs|scripts/verify-deployed-stock-expiry.mjs|.github/workflows/verify-deployed-stock-expiry.yml|scripts/verify-deployed-retained-history.mjs|.github/workflows/verify-deployed-retained-history.yml|scripts/verify-deployed-reservation-http.mjs|.github/workflows/verify-deployed-reservation-http.yml|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|.github/workflows/diagnose-container-revision.yml) ;;
               *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
             esac
           done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
@@ -167,7 +167,7 @@ jobs:
           test "${image##*:}" = "$EXPECTED_BUILD"
           curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/health >/dev/null
           jq -r '"HTTP_SCOPE_RESTORED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-restored.json" | tee -a enforcement-config.txt
-      - name: Verify restored configuration and public health
+      - name: Verify restored configuration
         if: always()
         shell: bash
         run: |
@@ -178,14 +178,45 @@ jobs:
             cp "$RUNNER_TEMP/enforcement-before.json" "$RUNNER_TEMP/app-before.json"
             jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-after.json" >/dev/null
             for side in before after; do
-              jq '{template:.properties.template,configuration:.properties.configuration} | .template.containers |= map(.env |= sort_by(.name))' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
+              jq -S 'if .properties.configuration.activeRevisionsMode=="Single" and
+                (.properties.configuration.ingress.traffic|length)==1 and
+                .properties.configuration.ingress.traffic[0].weight==100 and
+                (.properties.configuration.ingress.traffic[0].revisionName==.properties.latestReadyRevisionName or (.properties.configuration.ingress.traffic[0].latestRevision==true and .properties.configuration.ingress.traffic[0].revisionName==null)) and
+                ((.properties.configuration.ingress.traffic[0]|keys)-["latestRevision","revisionName","weight"]|length)==0
+              then .properties.configuration.ingress.traffic=[{latestRevision:true,weight:100}]
+              else error("Unexpected traffic configuration") end |
+              {template:.properties.template,configuration:.properties.configuration} | .template.containers |= map(.env |= sort_by(.name))' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
             done
           else
             for side in before after; do
-              jq '{template:.properties.template,configuration:.properties.configuration,ready:.properties.latestReadyRevisionName}' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
+              jq -S '{template:.properties.template,configuration:.properties.configuration,ready:.properties.latestReadyRevisionName}' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
             done
           fi
-          diff -u "$RUNNER_TEMP/config-before.json" "$RUNNER_TEMP/config-after.json" >/dev/null
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          before=json.loads((root/'config-before.json').read_text())
+          after=json.loads((root/'config-after.json').read_text())
+          def differences(a,b,path='config'):
+              if type(a)!=type(b): return [path]
+              if isinstance(a,dict):
+                  return [p for k in sorted(set(a)|set(b)) for p in ([path+'.'+k] if k not in a or k not in b else differences(a[k],b[k],path+'.'+k))]
+              if isinstance(a,list):
+                  if len(a)!=len(b): return [path+'.length']
+                  return [p for i,(x,y) in enumerate(zip(a,b)) for p in differences(x,y,path+'['+str(i)+']')]
+              return [] if a==b else [path]
+          paths=differences(before,after)
+          result={'equal':not paths,'differentPaths':paths}
+          Path('restored-config-comparison.json').write_text(json.dumps(result)+'\n')
+          print('RESTORED_CONFIG_COMPARISON='+json.dumps(result))
+          raise SystemExit(bool(paths))
+          PY
+      - name: Verify public build and SQL health independently
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
           curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -196,6 +227,7 @@ jobs:
             paid-inventory.txt
             paid-inventory-summary.json
             enforcement-config.txt
+            restored-config-comparison.json
           retention-days: 30
 
 
