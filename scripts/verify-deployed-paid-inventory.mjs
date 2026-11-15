@@ -72,20 +72,20 @@ const cleanupFixture=async()=>{
   try{
     if(hostedCheckout&&checkoutSessionId){
       let session=await read('/v1/checkout/sessions/'+checkoutSessionId);
-      assert.equal(session.livemode,false);assert.equal(session.metadata.quixo_tenant,tenantId);
+      assert.equal(session.livemode,false);assert.equal(String(session.metadata.quixo_tenant).toLowerCase(),tenantId);
       // Closing an unfinished session first prevents payment racing fixture cleanup.
       if(session.status==='open'){
         await write('/v1/checkout/sessions/'+session.id+'/expire',{},'expire-checkout');
         session=await read('/v1/checkout/sessions/'+session.id);assert.equal(session.status,'expired');
       }
       customer=await read('/v1/customers/'+objectId(session.customer));
-      assert.equal(customer.metadata.quixo_tenant,tenantId);
+      assert.equal(String(customer.metadata.quixo_tenant).toLowerCase(),tenantId);
       if(objectId(session.subscription)){subscription=await read('/v1/subscriptions/'+objectId(session.subscription));}
       else{assert.equal(session.status,'expired');providerAttempted=false;}
     }
     if(subscription){
       const current=await provider();assert.equal(current.livemode,false);assert.equal(objectId(current.customer),customer.id);
-      if(hostedCheckout){assert.equal(customer.metadata.quixo_tenant,tenantId);}
+      if(hostedCheckout){assert.equal(String(customer.metadata.quixo_tenant).toLowerCase(),tenantId);}
       else{assert.equal(current.metadata.acceptance_fixture,tenantId);}
       await stripe.request('DELETE','/v1/subscriptions/'+subscription.id,{invoice_now:false,prorate:false},`paid-stock:${tenantId}:cleanup-subscription`);
       assert.equal((await provider()).status,'canceled');
@@ -127,6 +127,31 @@ const cleanupFixture=async()=>{
   await closeMssqlPool();
 };
 
+const cleanupUnpaidHostedCheckout=async()=>{
+  stage='cleanup_inactive_unpaid_hosted_fixture';
+  const tenants=await store.read('SELECT slug,status FROM dbo.tenants WHERE id=@tenantId',{tenantId});
+  assert.equal(tenants.length,1);assert.equal(tenants[0].slug,'r5-paid-stock-'+tenantId);assert.equal(tenants[0].status,'inactive');
+  assert.equal((await store.read("SELECT id FROM dbo.tenant_memberships WHERE tenant_id=@tenantId AND status='active'",{tenantId})).length,0);
+  assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE tenant_id=@tenantId AND status='active'",{tenantId})).length,0);
+  assert.equal((await store.read('SELECT s.id FROM dbo.auth_sessions s JOIN dbo.auth_users a ON a.id=s.auth_user_id JOIN dbo.app_users u ON u.id=a.app_user_id WHERE u.tenant_id=@tenantId AND s.revoked_at IS NULL AND s.expires_at>SYSUTCDATETIME()',{tenantId})).length,0);
+  const account=await store.account(tenantId);assert.equal(account.stripe_account_id,BILLING_ACCOUNT);assert.ok(!account.stripe_subscription_id);
+  const commands=await store.read("SELECT id,result_json FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND kind='checkout' AND status='completed'",{tenantId});
+  assert.equal(commands.length,1);const saved=JSON.parse(commands[0].result_json);
+  let session=await read('/v1/checkout/sessions/'+saved.sessionId);
+  assert.equal(session.livemode,false);assert.equal(session.mode,'subscription');assert.ok(!session.subscription);
+  assert.equal(String(session.metadata.quixo_tenant).toLowerCase(),tenantId);
+  assert.equal(String(session.metadata.quixo_operation).toLowerCase(),String(commands[0].id).toLowerCase());
+  assert.equal(objectId(session.customer),account.stripe_customer_id);
+  const owner=await read('/v1/customers/'+account.stripe_customer_id);
+  assert.equal(owner.livemode,false);assert.equal(String(owner.metadata.quixo_tenant).toLowerCase(),tenantId);
+  if(session.status==='open'){await write('/v1/checkout/sessions/'+session.id+'/expire',{},'expire-checkout');}
+  session=await read('/v1/checkout/sessions/'+session.id);assert.equal(session.status,'expired');assert.ok(!session.subscription);
+  const subscriptions=await read('/v1/subscriptions',{customer:owner.id,status:'all',limit:100});
+  assert.equal(subscriptions.has_more,false);assert.equal(subscriptions.data.length,0);
+  assert.deepEqual(await protectedState(),baseline);
+  console.log('PAID_HOSTED_CLEANUP_PASS='+JSON.stringify({operation:tenantId,verified:true,sessionExpired:true,noSubscription:true,fixtureInactive:true,protectedBillingUnchanged:true,recordsRetained:true}));
+};
+
 const verifyHostedCheckout=async()=>{
   proof.scope='deployed HTTP staged stock + genuine hosted sandbox Checkout completion + SQL/provider reconciliation';
   proof.credentialLoginAccepted=false;proof.hostedCheckoutCompleted=false;
@@ -161,9 +186,9 @@ const verifyHostedCheckout=async()=>{
   assert.equal(new URL(result.url).hostname,'checkout.stripe.com');
   let session=await read('/v1/checkout/sessions/'+checkoutSessionId);
   assert.equal(session.livemode,false);assert.equal(session.status,'open');assert.equal(session.mode,'subscription');
-  assert.equal(session.metadata.quixo_tenant,tenantId);assert.equal(session.metadata.quixo_operation,checkoutCommandId);
+  assert.equal(String(session.metadata.quixo_tenant).toLowerCase(),tenantId);assert.equal(String(session.metadata.quixo_operation).toLowerCase(),checkoutCommandId);
   assert.equal(session.metadata.inventory_hash,status.inventoryHash);assert.equal(session.amount_total,1500);
-  customer=await read('/v1/customers/'+objectId(session.customer));assert.equal(customer.metadata.quixo_tenant,tenantId);
+  customer=await read('/v1/customers/'+objectId(session.customer));assert.equal(String(customer.metadata.quixo_tenant).toLowerCase(),tenantId);
   assert.equal((await stock()).length,0);assert.ok((await staged()).every(r=>r.status==='pending'));
   check('open_hosted_checkout_does_not_promote_stock');
   stage='hosted_checkout_retry';
@@ -228,7 +253,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -240,6 +265,7 @@ try{
     assert.ok((await store.read('SELECT OBJECT_ID(@name) AS id',{name:'dbo.'+table}))[0]?.id,'Required schema: '+table);
   }
   baseline=await protectedState();
+  if(scenario==='cleanup-hosted-checkout'){await cleanupUnpaidHostedCheckout();}else{
   stage='private_fixture';
   await store.locked(tenantId,async q=>{
     assert.equal((await q('SELECT id FROM dbo.tenants WHERE id=@tenantId',{tenantId})).length,0,'Never replay an existing fixture');
@@ -554,5 +580,6 @@ try{
   }
   assert.deepEqual(await protectedState(),baseline);check('protected_accounts_subscriptions_and_clocks_unchanged');
   passed=true;
+  }
 }catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
 finally{await cleanupFixture();}

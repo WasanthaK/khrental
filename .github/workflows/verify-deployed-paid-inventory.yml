@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       operation_id:
-        description: Fresh isolated synthetic fixture UUID
+        description: Isolated synthetic fixture UUID (fresh except cleanup)
         required: true
         type: string
       scenario:
@@ -21,6 +21,7 @@ on:
         default: http-hosted-checkout
         options:
           - http-hosted-checkout
+          - cleanup-hosted-checkout
           - http-transitions
           - http-promotion
           - http-permissions
@@ -71,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
-          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions || "$SCENARIO" == http-hosted-checkout ]]
+          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions || "$SCENARIO" == http-hosted-checkout || "$SCENARIO" == cleanup-hosted-checkout ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -131,8 +132,13 @@ jobs:
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$revision" --command "$command"
           script -q -e -c "$invocation" /dev/null | tee paid-inventory.txt
           if grep -Eq 'PAID_INVENTORY_FAILED=|PAID_INVENTORY_CLEANUP_FAILED' paid-inventory.txt; then exit 1; fi
-          grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
-          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion" or $scenario=="http-transitions" or $scenario=="http-hosted-checkout")) and (.uiAccepted==false) and (if $scenario=="http-hosted-checkout" then .hostedCheckoutCompleted==true else true end) and (.checks|length)==(if $scenario=="http-transitions" then 17 elif $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
+          if [ "$SCENARIO" = cleanup-hosted-checkout ]; then
+            grep -Eo 'PAID_HOSTED_CLEANUP_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_HOSTED_CLEANUP_PASS=//' > paid-inventory-summary.json
+            jq -e '.verified and .sessionExpired and .noSubscription and .fixtureInactive and .protectedBillingUnchanged and .recordsRetained' paid-inventory-summary.json
+          else
+            grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
+            jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion" or $scenario=="http-transitions" or $scenario=="http-hosted-checkout")) and (.uiAccepted==false) and (if $scenario=="http-hosted-checkout" then .hostedCheckoutCompleted==true else true end) and (.checks|length)==(if $scenario=="http-transitions" then 17 elif $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
+          fi
       - name: Restore exact original feature and enforcement configuration
         if: always() && env.RESTORE_ENFORCEMENT == 'true'
         shell: bash
@@ -231,6 +237,3 @@ jobs:
             enforcement-config.txt
             restored-config-comparison.json
           retention-days: 30
-
-
-
