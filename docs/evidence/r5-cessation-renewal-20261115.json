@@ -43,6 +43,42 @@
           "head_sha": "3bfe522d5653273d9c5e75b1c15ffbcb7f6f433c"
         }
       }
+    },
+    {
+      "runId": 43701695236,
+      "jobId": 132774026315,
+      "operationId": "edb19979-ca03-4d29-8be8-7aa28965a97e",
+      "replayAllowed": false,
+      "status": "failed",
+      "stage": "renewal_cessation_preview",
+      "sqlNumber": 1205,
+      "passedGroups": 2,
+      "clockAdvanced": false,
+      "cessationApplied": false,
+      "cleanupVerified": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "configurationEqual": true,
+      "buildAndSqlHealthPassed": true,
+      "artifact": {
+        "id": 14156601903,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 1034,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14156601903",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14156601903/zip",
+        "expired": false,
+        "created_at": "2026-11-15T09:58:15Z",
+        "expires_at": "2026-12-15T09:58:14Z",
+        "updated_at": "2026-11-15T09:58:15Z",
+        "digest": "sha256:bc64fc423674e3062deeb8fddf38f6b8ae9917eac380db13418b36ffdea57ac0",
+        "workflow_run": {
+          "id": 43701695236,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "bfd709da50b9c7330fd0446604bc46b9ebd0831d"
+        }
+      }
     }
   ],
   "boundaries": {
