@@ -1,5 +1,5 @@
 {
-  "status": "pending fresh acceptance",
+  "status": "accepted within public HTTP permission and command-isolation scope",
   "scenario": "http-permissions",
   "pullRequests": [
     649,
@@ -37,6 +37,52 @@
       "artifactId": 14141374871,
       "artifactSha256": "b5b1c8d33207b30f5b5911330b8f1b72457b9c13726414c17557f5a41526657d",
       "diagnosis": "Foreign command fixture omitted required management_billing_accounts parent. SQL 547 during fixture setup; transaction rolled back. PR #650 creates pending account with no provider binding."
+    },
+    {
+      "runId": 43667166539,
+      "jobId": 132669075644,
+      "passedAtUtc": "2026-11-15T02:19:50Z",
+      "passedAtAsiaColombo": "2026-11-15T07:49:50+05:30",
+      "operation": "ed97c7c8-5fc2-4b24-98e4-14c313ba10d2",
+      "scenario": "http-permissions",
+      "checks": [
+        "isolated_private_fixture",
+        "genuine_paid_capacity_reconciled",
+        "administrator_paid_http_status_and_preview",
+        "nonadmin_billing_route_matrix_denied_without_effect",
+        "forged_identity_headers_do_not_authenticate",
+        "foreign_workspace_route_matrix_denied_without_effect",
+        "foreign_command_and_preview_ids_rejected_without_effect",
+        "stale_administrator_membership_denied_without_effect",
+        "revoked_session_route_matrix_denied_without_effect",
+        "protected_accounts_subscriptions_and_clocks_unchanged"
+      ],
+      "scope": "genuine paid sandbox fixture + deployed public HTTP permission and command isolation",
+      "httpAccepted": true,
+      "uiAccepted": false,
+      "credentialLoginAccepted": false,
+      "httpStockMutationAccepted": false,
+      "permissionRoutes": 16,
+      "passed": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "protectedBillingUnchanged": true,
+      "mustNotReplay": true,
+      "denialRequests": 80,
+      "foreignCommandRequests": 2,
+      "administratorPositiveControls": 2,
+      "cleanupVerified": true,
+      "sessionsRevoked": true,
+      "recordsRetained": true,
+      "unchangedRevisionAndPublicHealth": true,
+      "artifactId": 14142736591,
+      "artifactSha256": "500b826dea98df85098fe17bbb0872907347188452addf6c46de995a5a50243c"
     }
+  ],
+  "remaining": [
+    "Successful paid stock HTTP mutations and stock-resource negative matrix",
+    "Hosted Checkout staged-stock promotion",
+    "Credential login and rendered desktop/mobile/keyboard acceptance",
+    "Remaining provider-operation recovery and enforcement routes/jobs/bypasses"
   ]
 }
