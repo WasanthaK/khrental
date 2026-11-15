@@ -8,6 +8,10 @@ on:
         required: true
         type: boolean
         default: false
+      baseline_revision:
+        description: Optional prior revision for read-only template comparison
+        required: false
+        type: string
       expected_build:
         description: Optional exact serving build to verify without deployment
         required: false
@@ -38,6 +42,45 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Compare retained revision templates without revealing values
+        if: inputs.baseline_revision != ''
+        shell: bash
+        env:
+          BASELINE_REVISION: ${{ inputs.baseline_revision }}
+        run: |
+          set -euo pipefail
+          [[ "$BASELINE_REVISION" =~ ^khrental-app--[a-zA-Z0-9-]+$ ]]
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json > "$RUNNER_TEMP/current-app.json"
+          az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$BASELINE_REVISION" -o json > "$RUNNER_TEMP/baseline-revision.json"
+          python3 - <<'PY'
+          import os,json,hashlib
+          from pathlib import Path
+          root=Path(os.environ['RUNNER_TEMP'])
+          before=json.loads((root/'baseline-revision.json').read_text())['properties']['template']
+          app=json.loads((root/'current-app.json').read_text())
+          after=app['properties']['template']
+          def normalize(value):
+              if isinstance(value,dict): return {k:normalize(v) for k,v in value.items()}
+              if isinstance(value,list):
+                  rows=[normalize(v) for v in value]
+                  return sorted(rows,key=lambda v:v['name']) if rows and all(isinstance(v,dict) and 'name' in v for v in rows) else rows
+              return value
+          before,after=normalize(before),normalize(after)
+          def differences(a,b,path='template'):
+              if type(a)!=type(b): return [path]
+              if isinstance(a,dict):
+                  return [p for k in sorted(set(a)|set(b)) for p in ([path+'.'+k] if k not in a or k not in b else differences(a[k],b[k],path+'.'+k))]
+              if isinstance(a,list):
+                  if len(a)!=len(b): return [path+'.length']
+                  return [p for i,(x,y) in enumerate(zip(a,b)) for p in differences(x,y,path+'['+str(i)+']')]
+              return [] if a==b else [path]
+          paths=differences(before,after)
+          result={'baselineRevision':os.environ['BASELINE_REVISION'],'latest':app['properties']['latestRevisionName'],'ready':app['properties']['latestReadyRevisionName'],'templateEqual':not paths,'differentPaths':paths}
+          print('REVISION_TEMPLATE_COMPARISON='+json.dumps(result))
+          print('CURRENT_TRAFFIC='+json.dumps(app['properties']['configuration']['ingress'].get('traffic')))
+          PY
 
       - name: Inspect latest revision
         shell: bash
