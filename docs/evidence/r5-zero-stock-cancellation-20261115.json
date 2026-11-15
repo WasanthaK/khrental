@@ -1,0 +1,85 @@
+{
+  "status": "bounded_acceptance_passed",
+  "scenario": "zero-stock-cancellation",
+  "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+  "pullRequests": [
+    666
+  ],
+  "latestAcceptedRun": 43712985596,
+  "attempts": [
+    {
+      "runId": 43712985596,
+      "jobId": 132808411849,
+      "sourceSha": "144412249cac99c96a5de4fb2865b135d24a8a30",
+      "conclusion": "success",
+      "proof": {
+        "operation": "b1d18f31-6fd5-41bb-b1ee-467b4c8abb65",
+        "scenario": "zero-stock-cancellation",
+        "checks": [
+          "isolated_private_fixture",
+          "genuine_paid_capacity_reconciled",
+          "first_cessation_preserves_paid_invoice_and_schedules_one",
+          "first_cessation_retry_preserves_schedule_and_audit",
+          "final_cessation_releases_schedule_and_cancels_at_paid_boundary",
+          "final_cessation_retry_preserves_cancellation_stock_and_history",
+          "zero_stock_subscription_cancels_at_paid_boundary",
+          "zero_stock_has_no_renewal_invoice_and_reconciles_read_only",
+          "zero_stock_retains_private_history_and_terminal_retries",
+          "protected_accounts_subscriptions_and_clocks_unchanged"
+        ],
+        "scope": "genuine sandbox final-dwelling cancellation + deployed service/SQL reconciliation",
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "testClockId": "clock_1Uc2MhQ4sARuLNQaMqTtEtba",
+        "customerId": "cus_VdIy8G228LYw6Y",
+        "subscriptionId": "sub_1Uc2MiQ4sARuLNQal6oUa1hs",
+        "initialInvoice": "in_1Uc2MiQ4sARuLNQau40G5AbE",
+        "credentialLoginAccepted": false,
+        "zeroStockCancellationAccepted": true,
+        "scheduleId": "sub_sched_1Uc2MrQ4sARuLNQawEibIFtL",
+        "renewalInvoiceCreated": false,
+        "inventoryQuantity": 0,
+        "subscriptionCanceledAtBoundary": true,
+        "clockAdvancedTo": 1797340619,
+        "passed": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "protectedBillingUnchanged": true
+      },
+      "cleanup": {
+        "verified": true,
+        "at": "2026-11-15T12:17:44Z"
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthy": true,
+      "healthVerifiedAt": "2026-11-15T12:17:47Z",
+      "readyRevision": "khrental-app--0000523",
+      "artifact": {
+        "id": 14160852849,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 2056,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14160852849",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14160852849/zip",
+        "expired": false,
+        "created_at": "2026-11-15T12:17:48Z",
+        "expires_at": "2026-12-15T12:17:47Z",
+        "updated_at": "2026-11-15T12:17:48Z",
+        "digest": "sha256:3c7ff3548108fc702295362d7f1ef4f4cad8fc2c6e7763e1e3f3f999a233f2b3",
+        "workflow_run": {
+          "id": 43712985596,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "144412249cac99c96a5de4fb2865b135d24a8a30"
+        }
+      },
+      "neverReplayOperation": true
+    }
+  ],
+  "limits": [
+    "Paid active final-dwelling cessation service/SQL case only; not HTTP/UI or credential login",
+    "Fresh sandbox test clock, not natural grace expiry or interrupted-operation recovery",
+    "Other entitlement states and obligation combinations remain open",
+    "R5 partial; live charging/full enforcement OFF; Evia paused"
+  ]
+}

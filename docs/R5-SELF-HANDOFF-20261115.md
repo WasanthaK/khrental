@@ -1,14 +1,15 @@
 # R5 self-handoff — 15 November 2026
 
-Latest verified acceptance: 15 November 2026, 17:33:04 Asia/Colombo (12:03:04 UTC).
+Latest verified acceptance: 15 November 2026, 17:47:47 Asia/Colombo (12:17:47 UTC).
 This handoff supports continuation; the canonical status remains in [Execution Plan](EXECUTION-PLAN.md), [Delivery](R4-R5-DELIVERY.md), and [Acceptance Ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md).
 
 ## Current decision
 R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain OFF. Evia is paused by owner; BN is a separate later release. Continue controlled sandbox acceptance without repeating accepted fixtures.
 
-Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43711743955. Reverify the runtime baseline before a new deployed test.
+Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in run 43702359791 and reverified by acceptance run 43712985596. Reverify the runtime baseline before a new deployed test.
 
 ## Accepted evidence and limits
+- Final-dwelling zero-stock cancellation: [run 43712985596](https://github.com/WasanthaK/khrental/actions/runs/43712985596), ten groups passed; exact paid-boundary cancellation, no renewal invoice, read-only historical access, retries/privacy/protected accounts and cleanup/configuration/build/SQL health verified. [Evidence](evidence/r5-zero-stock-cancellation-20261115.json). Never replay its fixture or clock.
 - Actual split renewal: [run 43711743955](https://github.com/WasanthaK/khrental/actions/runs/43711743955), ten groups passed; USD 20 for four dwellings, exact units/history, retries, privacy, protected accounts, cleanup/configuration/build/SQL health verified. [Evidence](evidence/r5-split-renewal-20261115.json). Never replay the accepted operation or clock.
 - Actual restoration renewal: [run 43706276982](https://github.com/WasanthaK/khrental/actions/runs/43706276982), twelve groups passed. The 2→1→2 fixture renewed at USD 10 for two dwellings; reconciliation, retries, retained states/history, privacy, protected accounts, cleanup, configuration and build/SQL health passed. [Both attempts and cleanup evidence](evidence/r5-restoration-renewal-20261115.json). First run 43705778853 remains failed; PR #664 corrected its retained-state assertion. Do not replay either fixture. Service/SQL scope only.
 - Actual cessation renewal: [run 43704182377](https://github.com/WasanthaK/khrental/actions/runs/43704182377), ten groups passed. A fresh sandbox clock advanced only this fixture: 2→1 cessation preserved the original USD 10 invoice, then the next invoice automatically paid USD 5 for one dwelling; pending quantity cleared, retries/history passed, cleanup/configuration/build/SQL health passed. [All attempts and cleanup evidence](evidence/r5-cessation-renewal-20261115.json). This is service/SQL acceptance, not HTTP/UI or natural grace-expiry acceptance.
@@ -31,15 +32,19 @@ The earlier dispatch issue is resolved by the owner's submission. Operation `97d
 
 **Next executable slice:** genuine final-dwelling zero-stock cancellation and retained-history acceptance on a fresh isolated sandbox fixture. R5 remains partial; live charging/full enforcement OFF; Evia paused.
 
-## Final-dwelling cancellation — harness ready, execution pending — 15 November 2026
+## Final-dwelling zero-stock cancellation — bounded pass — 15 November 2026
 
-[PR #666](https://github.com/WasanthaK/khrental/pull/666) merged as `7b02b44e533399a200fffa0aa344a3fae59d0566` after successful CI runs 43712486629 and 43712486632. Local Node, workflow YAML, embedded Bash and positive/negative proof-gate checks passed. The new `zero-stock-cancellation` case ceases two paid dwellings, checks schedule release and period-end cancellation, advances only its fresh fixture clock, and requires no renewal invoice, read-only historical access, retained private records, exact retries and the existing protected-account/cleanup/configuration/health gates. No application code or serving flags changed.
+[Run 43712985596](https://github.com/WasanthaK/khrental/actions/runs/43712985596) passed all ten groups. The fixture ceased both paid dwellings, released the scheduled reduction, and canceled the subscription at the paid-period boundary. The original USD 10 invoice stayed paid and unchanged; no renewal invoice was created. Service/SQL reconciliation confirmed zero managed dwellings and read-only access with historical access retained. Exact retries, both retained cessation records, inactive private properties and protected accounts/subscriptions/clocks passed.
 
-Browser submission closed the form without producing a workflow run; the latest observed manual run remains split acceptance 43711743955. **Execution and acceptance remain pending.** The prepared fixture UUID is `b1d18f31-6fd5-41bb-b1ee-467b4c8abb65`, expected build `e0f7e821b8e511898836f71df86fde2fa8399463`, branch `main`, confirmation `VERIFY-PAID-INVENTORY`. Before submitting or retrying, check for a new run using that UUID; once used, never replay it. The next action is submit this prepared case and inspect immutable proof plus cleanup/configuration/build/SQL health before marking it accepted.
+Cleanup passed at **17:47:44 Asia/Colombo**; the subscription was canceled and fixture deactivated with records retained. Full configuration equality, unchanged serving build `e0f7e821b8e511898836f71df86fde2fa8399463`, Ready revision `khrental-app--0000523` and independent SQL health passed through **17:47:47 Asia/Colombo**. [Durable evidence](evidence/r5-zero-stock-cancellation-20261115.json) retains proof, source SHA and artifact digest. PR #666 supplied the harness; no application code or serving flags changed.
+
+The owner submitted the prepared workflow successfully. UUID `b1d18f31-6fd5-41bb-b1ee-467b4c8abb65` is now used and must never be replayed or its clock advanced again. This accepts the active paid final-dwelling service/SQL case; other entitlement states/obligations, interrupted-operation recovery, HTTP/UI, credential login and natural grace expiry remain separate.
+
+**Next executable slice:** remaining cessation obligation blockers and stale/conflict cases on fresh isolated fixtures, after reviewing the canonical matrix to avoid repeating accepted cases. R5 remains partial; live charging/full enforcement OFF; Evia paused.
 
 ## Next executable slice
-**Final-dwelling zero-stock cancellation and retained-history acceptance.**
-The harness is now merged in PR #666 with green CI. Submit the prepared `zero-stock-cancellation` form after checking no run already used UUID `b1d18f31-6fd5-41bb-b1ee-467b4c8abb65`, then verify cancellation timing, no renewal invoice, billing projection, retained private records and cleanup. Browser submission produced no run; manual submission is pending. Actual cessation, restoration and split renewals have passed; do not repeat accepted fixtures or advance their clocks.
+**Remaining cessation obligation blockers and stale/conflict cases.**
+Review the canonical matrix and existing negative evidence first, then prepare only unaccepted cases on fresh private fixtures. Actual cessation, restoration, split renewal and active paid final-dwelling cancellation passed; never repeat their fixtures or advance their clocks. Interrupted-operation recovery, other entitlement states and rendered UI remain separate.
 
 PR #660 normalized UUID billing lock names; real SQL regression and both SQL suites passed before deployment. Earlier deadlock graphs were not retained, so exact prior contention is unproven. PRs #661–662 corrected financial invoice comparison and cleanup. Compare stable invoice identity/financial fields, not the entire provider JSON. Never issue even redundant UPDATEs to already-inactive ceased properties: SQL 51074 intentionally rejects them. Cleanup-only run 43704049415 resolved the prior fixture; all prior attempts have verified cleanup. Never replay any creation UUID recorded in the evidence.
 
@@ -47,7 +52,7 @@ Hosted Checkout remains accepted within its recorded scope. Explicitly set synth
 
 ## Remaining queue and exit criteria
 1. Rendered create/import forms remain; hosted Checkout payment/promotion is accepted.
-2. Remaining stock/resource states, stale/conflict cases, obligations, transition combinations, genuine final-dwelling zero-stock acceptance.
+2. Remaining stock/resource states, stale/conflict cases, obligations and transition combinations; active paid final-dwelling zero-stock acceptance is complete within its service/SQL scope.
 3. Checkout/subscription operation recovery, isolation and broader authority/resource-state combinations. Preserve the recovery worker's exact existing tenant scope.
 4. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
 5. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
