@@ -21,6 +21,12 @@ on:
         type: choice
         default: verify
         options: [verify, inspect, cleanup]
+      scenario:
+        description: Fresh scenario to verify, or the original fixture scenario for inspect or cleanup
+        required: true
+        type: choice
+        default: expired-before-recovery
+        options: [open, expired-before-recovery]
       confirmation:
         description: VERIFY-CHECKOUT-RECOVERY, INSPECT-CHECKOUT-RECOVERY or CLEANUP-CHECKOUT-RECOVERY
         required: true
@@ -65,13 +71,16 @@ jobs:
           assert checked >= 5, 'Workflow shell blocks were not found'
           source = '\n'.join(lines) + '\n'
           gate = textwrap.dedent(source.split("          python3 - <<'CHECKOUT_RECOVERY_PROOF'\n", 1)[1].split('          CHECKOUT_RECOVERY_PROOF\n', 1)[0])
-          assignments = [node for node in ast.walk(ast.parse(gate)) if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'expected_checks' for target in node.targets)]
+          assignments = [node for node in ast.walk(ast.parse(gate)) if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'expected_checks_by_scenario' for target in node.targets)]
           assert len(assignments) == 1, 'Proof check allowlist was not found'
           expected = ast.literal_eval(assignments[0].value)
           harness = Path('scripts/verify-deployed-checkout-recovery.mjs').read_text()
-          actual = re.findall(r"\bcheck\('([^']+)'\)", harness)
-          assert actual == expected and len(expected) == 12 and len(set(expected)) == 12, 'Harness and workflow evidence contracts differ'
-          print(f'Validated {checked} shell blocks and twelve proof checks without executing deployed work')
+          actual = {name for call in re.findall(r'\bcheck\(([^;]+)\)', harness) for name in re.findall(r"'([a-z][a-z0-9_]+)'", call)}
+          assert set(expected) == {'open', 'expired-before-recovery'}
+          assert len(expected['open']) == len(set(expected['open'])) == 12
+          assert len(expected['expired-before-recovery']) == len(set(expected['expired-before-recovery'])) == 13
+          assert actual == {name for names in expected.values() for name in names}, 'Harness and workflow evidence contracts differ'
+          print(f'Validated {checked} shell blocks and exact open/expired proof check sets without executing deployed work')
           PY
   verify:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
@@ -85,6 +94,7 @@ jobs:
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       CHECKOUT_RECOVERY_OPERATION: ${{ inputs.operation_id }}
       CHECKOUT_RECOVERY_MODE: ${{ inputs.mode }}
+      CHECKOUT_RECOVERY_SCENARIO: ${{ inputs.scenario }}
       CHECKOUT_RECOVERY_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -100,6 +110,10 @@ jobs:
           case "$CHECKOUT_RECOVERY_MODE:$CHECKOUT_RECOVERY_CONFIRMATION" in
             verify:VERIFY-CHECKOUT-RECOVERY|inspect:INSPECT-CHECKOUT-RECOVERY|cleanup:CLEANUP-CHECKOUT-RECOVERY) ;;
             *) echo 'CHECKOUT_RECOVERY_BLOCKED=invalid_mode_confirmation' >&2; exit 1 ;;
+          esac
+          case "$CHECKOUT_RECOVERY_SCENARIO" in
+            open|expired-before-recovery) ;;
+            *) echo 'CHECKOUT_RECOVERY_BLOCKED=invalid_scenario' >&2; exit 1 ;;
           esac
           [[ "$CHECKOUT_RECOVERY_OPERATION" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ && "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
@@ -155,10 +169,10 @@ jobs:
           set -euo pipefail
           umask 077
           digest=$(sha256sum scripts/verify-deployed-checkout-recovery.mjs | cut -d ' ' -f 1)
-          remote="/tmp/checkout-recovery-$CHECKOUT_RECOVERY_OPERATION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$CHECKOUT_RECOVERY_MODE.mjs"
+          remote="/tmp/checkout-recovery-$CHECKOUT_RECOVERY_OPERATION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$CHECKOUT_RECOVERY_MODE-$CHECKOUT_RECOVERY_SCENARIO.mjs"
           # One bounded connection, pinned source bytes, exclusive temporary file.
           # Never retry an ambiguous execution; inspect its original operation UUID.
-          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-checkout-recovery.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='$remote';fs.writeFileSync(p,b,{flag:'wx'});process.env.CHECKOUT_RECOVERY_OPERATION='$CHECKOUT_RECOVERY_OPERATION';process.env.CHECKOUT_RECOVERY_MODE='$CHECKOUT_RECOVERY_MODE';process.env.CHECKOUT_RECOVERY_CONFIRMATION='$CHECKOUT_RECOVERY_CONFIRMATION';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-checkout-recovery.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='$remote';fs.writeFileSync(p,b,{flag:'wx'});process.env.CHECKOUT_RECOVERY_OPERATION='$CHECKOUT_RECOVERY_OPERATION';process.env.CHECKOUT_RECOVERY_MODE='$CHECKOUT_RECOVERY_MODE';process.env.CHECKOUT_RECOVERY_SCENARIO='$CHECKOUT_RECOVERY_SCENARIO';process.env.CHECKOUT_RECOVERY_CONFIRMATION='$CHECKOUT_RECOVERY_CONFIRMATION';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           test "${#command}" -lt 2000
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$SERVING_REVISION" --command "$command"
           remote_rc=0
@@ -178,6 +192,7 @@ jobs:
           root = Path(os.environ['RUNNER_TEMP'])
           operation = os.environ['CHECKOUT_RECOVERY_OPERATION']
           mode = os.environ['CHECKOUT_RECOVERY_MODE']
+          scenario = os.environ['CHECKOUT_RECOVERY_SCENARIO']
           raw_path = root / 'checkout-result.txt'
           raw = raw_path.read_text(errors='replace') if raw_path.exists() else ''
           raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
@@ -200,7 +215,8 @@ jobs:
                   value = json.loads(match.group(2))
                   assert safe(value)
                   assert value.get('operation') == operation
-                  assert value.get('mode', mode) == mode
+                  assert value.get('mode') == mode
+                  assert value.get('scenario') == scenario
               except (ValueError, AssertionError, TypeError):
                   errors.append('invalid_or_unsafe_marker')
                   continue
@@ -211,19 +227,35 @@ jobs:
               errors.append('harness_failed')
           selected = {'verify': 'PASS', 'inspect': 'INSPECT', 'cleanup': 'CLEANUP'}.get(mode)
           finals = [value for kind, value in records if kind == selected]
-          result = finals[0] if len(finals) == 1 else {'operation': operation, 'mode': mode}
-          if len(finals) != 1 or result.get('mode') != mode:
+          result = finals[0] if len(finals) == 1 else {'operation': operation, 'mode': mode, 'scenario': scenario}
+          if len(finals) != 1 or result.get('mode') != mode or result.get('scenario') != scenario:
               errors.append('missing_or_ambiguous_final_proof')
+          expected_checks_by_scenario = {
+              'open': ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'natural_sql_backoff_without_clock_edits', 'original_checkout_recovered_once', 'completed_exact_retry_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history'],
+              'expired-before-recovery': ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'original_session_expired_before_recovery', 'natural_sql_backoff_without_clock_edits', 'expired_checkout_recovered_to_terminal_result', 'expired_checkout_retry_refused_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history']
+          }
+          if scenario not in expected_checks_by_scenario:
+              errors.append('invalid_scenario')
           cleanup = [value for kind, value in records if kind == 'CLEANUP']
           if mode == 'verify':
-              required = ['passed', 'sandbox', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'exactRetryAccepted', 'stockUnchanged', 'pendingStockPreserved', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
-              denied = ['automaticWorkerAccepted', 'httpAccepted', 'uiAccepted', 'credentialLoginAccepted', 'liveChargingEnabled', 'servingConfigurationChanged']
+              required = ['passed', 'sandbox', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'originalRecoveryRetryStable', 'stockUnchanged', 'pendingStockPreserved', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
+              denied = ['automaticWorkerAccepted', 'httpAccepted', 'uiAccepted', 'credentialLoginAccepted', 'wholeProcessCrashAccepted', 'naturalCheckoutExpiryTimingAccepted', 'liveChargingEnabled', 'servingConfigurationChanged']
               counts = {'customerPosts': 1, 'checkoutPosts': 1, 'recoveryProviderWrites': 0, 'checkoutSessions': 1, 'subscriptionsCreated': 0, 'invoicesCreated': 0, 'paymentIntentsCreated': 0, 'chargesCreated': 0, 'actualProperties': 0, 'actualUnits': 0}
+              counts.update(prepExpiryPosts=1 if scenario == 'expired-before-recovery' else 0, cleanupPosts=0 if scenario == 'expired-before-recovery' else 1)
               if not all(result.get(key) is True for key in required) or not all(result.get(key) is False for key in denied) or not all(type(result.get(key)) is int and result[key] == count for key, count in counts.items()):
                   errors.append('acceptance_contract_unconfirmed')
+              if result.get('exactRetryAccepted') is not (scenario == 'open'):
+                  errors.append('checkout_retry_outcome_unconfirmed')
               if len(cleanup) != 1 or not all(cleanup[0].get(key) is True for key in ['verified', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']):
                   errors.append('cleanup_unconfirmed')
-              expected_checks = ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'natural_sql_backoff_without_clock_edits', 'original_checkout_recovered_once', 'completed_exact_retry_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history']
+              if len(cleanup) != 1 or cleanup[0].get('noSession') is not False or type(cleanup[0].get('cleanupPosts')) is not int or cleanup[0]['cleanupPosts'] != counts['cleanupPosts']:
+                  errors.append('cleanup_expiration_count_unconfirmed')
+              if scenario == 'expired-before-recovery':
+                  terminal = {'sessionId': result.get('sessionId'), 'requiresNewSession': True, 'message': 'Checkout expired. Open sandbox checkout again.'}
+                  terminal_result = result.get('terminalResult')
+                  if not re.fullmatch(r'cs_test_[A-Za-z0-9]+', result.get('sessionId') or '') or not isinstance(terminal_result, dict) or terminal_result.get('requiresNewSession') is not True or terminal_result != terminal or not all(result.get(key) is True for key in ['terminalRequiresNewSession', 'terminalGuidanceAccepted', 'checkoutRetryRejected']) or result.get('terminalHasHostedUrl') is not False or result.get('checkoutRetryCode') != 'BILLING_REVIEW_EXPIRED':
+                      errors.append('expired_terminal_result_unconfirmed')
+              expected_checks = expected_checks_by_scenario.get(scenario, [])
               checks = result.get('checks')
               observed = [value.get('name') for kind, value in records if kind == 'CHECK']
               if checks != expected_checks or observed != expected_checks:
@@ -236,7 +268,7 @@ jobs:
                   errors.append('cleanup_contract_unconfirmed')
           else:
               errors.append('invalid_mode')
-          summary = {'operation': operation, 'mode': mode, 'sourceSha': os.environ['GITHUB_SHA'], 'servingBuild': os.environ['EXPECTED_BUILD'], 'servingRevision': os.environ['SERVING_REVISION'], 'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'workflowProofValid': not errors, 'remoteExitCode': rc, 'errors': sorted(set(errors)), 'proof': result}
+          summary = {'operation': operation, 'mode': mode, 'scenario': scenario, 'sourceSha': os.environ['GITHUB_SHA'], 'servingBuild': os.environ['EXPECTED_BUILD'], 'servingRevision': os.environ['SERVING_REVISION'], 'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'workflowProofValid': not errors, 'remoteExitCode': rc, 'errors': sorted(set(errors)), 'proof': result}
           log = ''.join('CHECKOUT_RECOVERY_' + kind + '=' + json.dumps(value, separators=(',', ':')) + '\n' for kind, value in records)
           Path('checkout-recovery.txt').write_text(log)
           Path('checkout-recovery-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
@@ -290,7 +322,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: checkout-operation-recovery-${{ inputs.mode }}
+          name: checkout-operation-recovery-${{ inputs.scenario }}-${{ inputs.mode }}
           path: |
             checkout-recovery.txt
             checkout-recovery-summary.json
