@@ -1,0 +1,844 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-15",
+  "scenario": "checkout-creation-response-loss-expired-before-recovery",
+  "taskIds": [
+    "BL08.11"
+  ],
+  "result": "passed within bounded genuine sandbox provider and deployed service/SQL scope",
+  "operationId": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+  "operationStatus": "used; never replay verification",
+  "failedAcceptanceAttempts": [],
+  "run": {
+    "id": 43737055320,
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43737055320",
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "headBranch": "main",
+    "sourceSha": "1a5d47788a5875641331d5d9e005c3f4e921072f",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-15T16:43:18Z",
+    "verifyJobId": 132881937678,
+    "verifyJobUrl": "https://github.com/WasanthaK/khrental/actions/runs/43737055320/job/132881937678",
+    "updatedAt": "2026-11-15T16:45:06Z"
+  },
+  "harness": {
+    "pr": 678,
+    "prUrl": "https://github.com/WasanthaK/khrental/pull/678",
+    "sourceSha": "1a5d47788a5875641331d5d9e005c3f4e921072f",
+    "script": "scripts/verify-deployed-checkout-recovery.mjs",
+    "scriptGitBlobSha": "940f42d6cdb53488be2be9d8a720d153c12162cb",
+    "workflow": ".github/workflows/verify-deployed-checkout-recovery.yml",
+    "workflowGitBlobSha": "c6bd7245e5cdc1847b93428bbfd31a05ee8561d0",
+    "applicationCodeChanged": false,
+    "validation": {
+      "prHeadSha": "ea94223d0b912ecb8cad1d8c9f9547463ebb3def",
+      "prCiRun": 43736743627,
+      "prCiJob": 132880915342,
+      "workflowValidationRun": 43736743632,
+      "workflowValidationJob": 132880915577,
+      "postMergeCiRun": 43736930610,
+      "postMergeCiJob": 132881482555,
+      "testsPassed": 1405,
+      "testsFailed": 0,
+      "lintPassed": true,
+      "buildPassed": true,
+      "postMergeDeploy": "skipped",
+      "focusedExistingProviderRecoveryTestsPassed": 9,
+      "focusedProofParserCasesPassed": 41,
+      "independentSourceReview": "no blocking findings"
+    }
+  },
+  "serving": {
+    "buildSha": "e0f7e821b8e511898836f71df86fde2fa8399463",
+    "revision": "khrental-app--0000523",
+    "configurationChanged": false,
+    "replicas": {
+      "min": 1,
+      "max": 1
+    },
+    "workerScopeChanged": false,
+    "processLocalStagingReadiness": true,
+    "liveChargingEnabled": false,
+    "fullWriteEnforcementEnabled": false
+  },
+  "provenance": {
+    "source": "GitHub workflow job logs, run/jobs API, artifact metadata and independently downloaded artifact ZIP",
+    "scenarioMarkersLoggedAt": "2026-11-15T16:44:59.7507095Z",
+    "scenarioTiming": "The proof step prints collected scenario markers after execution. Marker log timestamps are not individual action timestamps.",
+    "artifactContentsIndependentlyDownloaded": true,
+    "artifactZipDigestIndependentlyRecomputed": true,
+    "artifactScenarioMarkersMatchedToJobLog": 28,
+    "retainedJobMarkersIncludingProofAndConfiguration": 30,
+    "artifactSummaryProofMatchedToJobLog": true,
+    "retainedEvidence": "Complete sanitized scenario markers and observed proof/configuration/health output are retained here. Raw SQL/provider snapshots, hosted URLs, credentials and full application configuration are excluded."
+  },
+  "acceptedChecks": [
+    "preflight_and_protected_baseline",
+    "private_pending_stock_without_credentials",
+    "genuine_customer_checkpoint_without_duplicate",
+    "single_checkout_effect_response_discarded",
+    "original_pending_journal_and_checkout_intent",
+    "unique_bound_checkout_exhaustive_readback",
+    "original_session_expired_before_recovery",
+    "natural_sql_backoff_without_clock_edits",
+    "expired_checkout_recovered_to_terminal_result",
+    "expired_checkout_retry_refused_without_provider_write",
+    "no_payment_subscription_invoice_or_stock_promotion",
+    "protected_accounts_clocks_and_worker_scope_unchanged",
+    "cleanup_retains_all_journal_and_stock_history"
+  ],
+  "pass": {
+    "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+    "mode": "verify",
+    "scenario": "expired-before-recovery",
+    "passed": true,
+    "sandbox": true,
+    "checks": [
+      "preflight_and_protected_baseline",
+      "private_pending_stock_without_credentials",
+      "genuine_customer_checkpoint_without_duplicate",
+      "single_checkout_effect_response_discarded",
+      "original_pending_journal_and_checkout_intent",
+      "unique_bound_checkout_exhaustive_readback",
+      "original_session_expired_before_recovery",
+      "natural_sql_backoff_without_clock_edits",
+      "expired_checkout_recovered_to_terminal_result",
+      "expired_checkout_retry_refused_without_provider_write",
+      "no_payment_subscription_invoice_or_stock_promotion",
+      "protected_accounts_clocks_and_worker_scope_unchanged",
+      "cleanup_retains_all_journal_and_stock_history"
+    ],
+    "scope": "genuine sandbox provider + deployed service/SQL",
+    "customerId": "cus_VdNHxWzRSCvppz",
+    "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+    "customerEventId": "evt_1Uc6XJQ4sARuLNQaWV5UqW0v",
+    "originalCustomerKey": "quixo:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:customer",
+    "originalCheckoutKey": "quixo:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:checkout",
+    "customerPosts": 1,
+    "checkoutPosts": 1,
+    "recoveryProviderWrites": 0,
+    "prepExpiryPosts": 1,
+    "cleanupPosts": 0,
+    "responseDiscarded": true,
+    "prepExpiryResponseRecovered": false,
+    "originalIdempotencyKeyPreserved": true,
+    "exactRetryAccepted": false,
+    "originalRecoveryRetryStable": true,
+    "terminalResult": {
+      "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+      "requiresNewSession": true,
+      "message": "Checkout expired. Open sandbox checkout again."
+    },
+    "terminalRequiresNewSession": true,
+    "terminalHasHostedUrl": false,
+    "terminalGuidanceAccepted": true,
+    "checkoutRetryRejected": true,
+    "checkoutRetryCode": "BILLING_REVIEW_EXPIRED",
+    "checkoutSessions": 1,
+    "subscriptionsCreated": 0,
+    "invoicesCreated": 0,
+    "paymentIntentsCreated": 0,
+    "chargesCreated": 0,
+    "stockUnchanged": true,
+    "pendingStockPreserved": true,
+    "actualProperties": 0,
+    "actualUnits": 0,
+    "fixtureInactive": true,
+    "sessionExpired": true,
+    "recordsRetained": true,
+    "protectedBillingUnchanged": true,
+    "workerScopeUnchanged": true,
+    "processLocalStagingReadiness": true,
+    "servingConfigurationChanged": false,
+    "automaticWorkerAccepted": false,
+    "httpAccepted": false,
+    "uiAccepted": false,
+    "credentialLoginAccepted": false,
+    "liveChargingEnabled": false,
+    "wholeProcessCrashAccepted": false,
+    "naturalCheckoutExpiryTimingAccepted": false
+  },
+  "cleanup": {
+    "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+    "mode": "verify",
+    "scenario": "expired-before-recovery",
+    "verified": true,
+    "fixtureInactive": true,
+    "sessionExpired": true,
+    "noSession": false,
+    "noSubscription": true,
+    "noInvoice": true,
+    "noPayment": true,
+    "recordsRetained": true,
+    "pendingStockRetained": 1,
+    "protectedBillingUnchanged": true,
+    "workerScopeUnchanged": true,
+    "prepExpiryPosts": 1,
+    "cleanupPosts": 0,
+    "prepExpiryResponseRecovered": false,
+    "expiryResponseRecovered": false
+  },
+  "workflowProof": {
+    "valid": true,
+    "errors": []
+  },
+  "configurationComparison": {
+    "equal": true,
+    "differentPaths": []
+  },
+  "observedAssertions": {
+    "interrupted": {
+      "commandStatus": "pending",
+      "recoveryState": "pending",
+      "attempts": 1,
+      "providerSteps": 2,
+      "completedProviderSteps": 1,
+      "lastError": "CHECKOUT_ACCEPTANCE_RESPONSE_LOST",
+      "leaseReleased": true,
+      "recoveredAudits": 0,
+      "accountUnchanged": true,
+      "stagedStockUnchanged": true
+    },
+    "expirationPreparation": {
+      "method": "supported provider expiration of the exact metadata-bound original session",
+      "expirationPosts": 1,
+      "sessionStatusBefore": "open",
+      "sessionStatusAfter": "expired",
+      "checkoutPaymentStatus": "unpaid",
+      "localFixtureSnapshotUnchanged": true,
+      "originalCustomerUnchanged": true,
+      "originalSessionBindingAndFinancialFieldsUnchanged": true,
+      "commandStillPending": true,
+      "checkoutStepStillIncomplete": true,
+      "cleanupPostsAtPreparation": 0,
+      "responseAmbiguityExercised": false
+    },
+    "recovered": {
+      "commandStatus": "completed",
+      "recoveryState": "succeeded",
+      "attempts": 2,
+      "providerSteps": 2,
+      "completedProviderSteps": 2,
+      "recoveredAudits": 1,
+      "originalSessionReused": true,
+      "originalKeysPreservedByteForByte": true,
+      "providerWrites": 0,
+      "terminalResult": {
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "requiresNewSession": true,
+        "message": "Checkout expired. Open sandbox checkout again."
+      },
+      "hostedUrlReturned": false,
+      "exactCheckoutRetryRejected": true,
+      "exactCheckoutRetryStatus": 409,
+      "exactCheckoutRetryCode": "BILLING_REVIEW_EXPIRED",
+      "originalRecoveryRetryStable": true,
+      "localAndProviderSnapshotsUnchangedAcrossBothRetries": true
+    },
+    "stock": {
+      "pendingStagedDwellings": 1,
+      "actualProperties": 0,
+      "actualUnits": 0,
+      "promoted": false,
+      "initialPaymentVerified": false
+    },
+    "billing": {
+      "currency": "usd",
+      "unitAmountMinor": 500,
+      "quantity": 1,
+      "checkoutPaymentStatus": "unpaid",
+      "subscriptions": 0,
+      "invoices": 0,
+      "paymentIntents": 0,
+      "charges": 0,
+      "customerScopedListsExhausted": true,
+      "subscriptionsListStatus": "all"
+    },
+    "cleanup": {
+      "exactSessionAlreadyExpired": true,
+      "expirationPosts": 0,
+      "subscriptionCancellationNeeded": false,
+      "fixtureTenantActorMembershipInactive": true,
+      "stagingCommandRecoveryStepsAuditRetained": true,
+      "customerRetained": true
+    },
+    "protected": {
+      "accountsSubscriptionsClocksUnchanged": true,
+      "workerTenantScopeUnchanged": true,
+      "noManualClockBackoffOrLeaseEdits": true
+    },
+    "basis": "These are assertions enforced by the immutable harness at the named successful checks, not separately exported raw SQL/provider snapshots."
+  },
+  "publicHealth": {
+    "buildVerified": true,
+    "sqlHealthy": true,
+    "verifiedAt": "2026-11-15T16:45:02Z",
+    "verifiedAtAsiaColombo": "2026-11-15 22:15:02 +05:30"
+  },
+  "artifact": {
+    "id": 14169844743,
+    "name": "checkout-operation-recovery-expired-before-recovery-verify",
+    "sizeInBytes": 3519,
+    "digest": "sha256:e5686f09a2d2ab716a24b89b0106e56557dab161e0315114b7a6aeef96fde714",
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43737055320/artifacts/14169844743",
+    "createdAt": "2026-11-15T16:45:03Z",
+    "expiresAt": "2026-12-15T16:45:03Z",
+    "publishedDigestMatchesUploadLog": true,
+    "zipIndependentlyDownloaded": true,
+    "zipDigestIndependentlyRecomputed": true,
+    "recomputedZipSha256": "e5686f09a2d2ab716a24b89b0106e56557dab161e0315114b7a6aeef96fde714",
+    "downloadMethod": "Dedicated GitHub artifact download connector",
+    "extractedFiles": [
+      {
+        "name": "checkout-config-comparison.json",
+        "bytes": 38,
+        "sha256": "f74b76d245e49decdc9f373fd141598c31c72fcba81087f851556a351265842e"
+      },
+      {
+        "name": "checkout-public-health.json",
+        "bytes": 90,
+        "sha256": "b1c34f784eaacc1359d218f77def48ab55adb9ade3e1fc60fad94616f79d2baf"
+      },
+      {
+        "name": "checkout-recovery-summary.json",
+        "bytes": 3275,
+        "sha256": "bd7f6764d3730ef293c55e1fa3afa9bb7953eb8eba475581292fb394afff2f07"
+      },
+      {
+        "name": "checkout-recovery.txt",
+        "bytes": 10260,
+        "sha256": "6ce27c5f3230acff184c59bf8e627268b563766683e6842316104bc95203996b"
+      }
+    ],
+    "scenarioMarkersAndSummaryMatchedToJobLog": true
+  },
+  "scope": {
+    "serviceSqlAccepted": true,
+    "genuineSandboxProviderAccepted": true,
+    "expiredBeforeRecoveryAccepted": true,
+    "explicitProviderExpirationPreparation": true,
+    "automaticWorkerAccepted": false,
+    "httpAccepted": false,
+    "uiAccepted": false,
+    "credentialLoginAccepted": false,
+    "wholeProcessCrashAccepted": false,
+    "completedBeforeRecoveryAccepted": false,
+    "subscriptionOperationRecoveryAccepted": false,
+    "naturalCheckoutExpiryTimingAccepted": false,
+    "ambiguousExpirationResponseRecoveryAccepted": false
+  },
+  "limitations": [
+    "The customer POST completed normally and was checkpointed with provider event evidence; the deliberately lost response was from Checkout creation.",
+    "The provider response was discarded by the harness inside a running process; no full process crash or automatic worker recovery was exercised.",
+    "The session was explicitly expired by the supported provider API before original-command recovery. This does not prove natural Checkout expiry timing.",
+    "The preparation expiration response was unambiguous; cleanup issued no expiration request. Ambiguous-expiration-response recovery was not exercised.",
+    "No payment or subscription was created. Completed/paid Checkout recovery, paid subscription binding/promotion and subscription cancellation/quantity/schedule recovery remain unaccepted by this run.",
+    "Only the fixture used process-local staging readiness. Serving flags, revision, image, scale, traffic and existing worker scope stayed unchanged.",
+    "Natural seven-day grace expiry and Evia package/matching audit remain outside R5 and unaccepted by owner decision. R5 remains partial; live charging/full enforcement OFF."
+  ],
+  "previousAcceptedCheckout": {
+    "runId": 43731599869,
+    "evidence": "r5-checkout-response-loss-20261115.json",
+    "scope": "open unpaid Checkout response-loss recovery",
+    "operationId": "9c65d9dd-a5a4-4362-a0b3-1204de4082d4",
+    "operationStatus": "used; never replay verification",
+    "repeatedByThisRun": false
+  },
+  "nextSlice": {
+    "taskId": "BL08.11",
+    "name": "Checkout completed before original-command recovery",
+    "freshFixtureRequired": true,
+    "requirements": [
+      "Discard a successful genuine Checkout creation response, then complete that same hosted sandbox session with genuine test payment; do not substitute a direct subscription or simulated paid flags.",
+      "Before recovery, verify the complete/paid provider session and exact metadata, customer and line binding; retain the original pending command, completed customer step, incomplete Checkout step and unpromoted stock.",
+      "Wait for normal SQL retry eligibility and recover the original command using provider GETs only, retaining the original session/key and completed-session guidance with requiresNewSession=true and no hosted URL.",
+      "Require attempt-two completion, two completed provider steps and one recovered audit; exact Checkout retry must reject BILLING_REVIEW_EXPIRED and repeated recovery must return the same durable terminal result.",
+      "Verify recovery completion separately from subsequent paid subscription refresh/reconciliation and one-time exact stock promotion. Reverify serving flags and webhook timing without suppressing webhooks or changing worker scope.",
+      "Extend paid-phase inspection and cleanup explicitly: never expire a completed session, cancel only its exact owned sandbox subscription without invoice or proration, preserve the original invoice and history, and deactivate the isolated fixture."
+    ],
+    "scope": "Prospective next case only; not implemented or run by this acceptance."
+  },
+  "sanitizedMarkers": [
+    {
+      "loggedAt": "2026-11-15T16:44:59.7446973Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "preflight",
+        "fixtureCreated": false,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7449441Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "preflight_and_protected_baseline"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7452034Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "create_fresh_fixture",
+        "fixtureCreated": false,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7455344Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "prepare_private_stock",
+        "fixtureCreated": true,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7457251Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "private_pending_stock_without_credentials"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7458824Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "create_checkout_with_controlled_response_loss",
+        "fixtureCreated": true,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7460860Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "customer_created_wait_for_normal_checkpoint",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": null,
+        "customerPosts": 1,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7463202Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "checkout_response_discarded",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7465015Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "genuine_customer_checkpoint_without_duplicate"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7466068Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "single_checkout_effect_response_discarded"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7467094Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "original_pending_journal_and_checkout_intent"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7468908Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "provider_readback",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7470636Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "unique_bound_checkout_exhaustive_readback"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7472477Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "expire_original_session_before_recovery",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7474541Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "original_session_expired_before_recovery"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7476422Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "wait_for_natural_sql_retry_due",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7478031Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "natural_sql_backoff_without_clock_edits"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7481328Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "bounded_service_recovery",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7483442Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "expired_checkout_recovered_to_terminal_result"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7485521Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "completed_exact_retry",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7487157Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "expired_checkout_retry_refused_without_provider_write"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7488227Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "no_payment_subscription_invoice_or_stock_promotion"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7489296Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "protected_accounts_clocks_and_worker_scope_unchanged"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7491102Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "cleanup_inspect_original_effect",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7493515Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "stage": "deactivate_owned_fixture_preserving_history",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7496487Z",
+      "kind": "CLEANUP",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "verified": true,
+        "fixtureInactive": true,
+        "sessionExpired": true,
+        "noSession": false,
+        "noSubscription": true,
+        "noInvoice": true,
+        "noPayment": true,
+        "recordsRetained": true,
+        "pendingStockRetained": 1,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0,
+        "prepExpiryResponseRecovered": false,
+        "expiryResponseRecovered": false
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7498334Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "name": "cleanup_retains_all_journal_and_stock_history"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7507095Z",
+      "kind": "PASS",
+      "value": {
+        "operation": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+        "mode": "verify",
+        "scenario": "expired-before-recovery",
+        "passed": true,
+        "sandbox": true,
+        "checks": [
+          "preflight_and_protected_baseline",
+          "private_pending_stock_without_credentials",
+          "genuine_customer_checkpoint_without_duplicate",
+          "single_checkout_effect_response_discarded",
+          "original_pending_journal_and_checkout_intent",
+          "unique_bound_checkout_exhaustive_readback",
+          "original_session_expired_before_recovery",
+          "natural_sql_backoff_without_clock_edits",
+          "expired_checkout_recovered_to_terminal_result",
+          "expired_checkout_retry_refused_without_provider_write",
+          "no_payment_subscription_invoice_or_stock_promotion",
+          "protected_accounts_clocks_and_worker_scope_unchanged",
+          "cleanup_retains_all_journal_and_stock_history"
+        ],
+        "scope": "genuine sandbox provider + deployed service/SQL",
+        "customerId": "cus_VdNHxWzRSCvppz",
+        "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+        "customerEventId": "evt_1Uc6XJQ4sARuLNQaWV5UqW0v",
+        "originalCustomerKey": "quixo:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:customer",
+        "originalCheckoutKey": "quixo:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:1DCFE972-0ED6-4AC0-AB21-EDC95C8013CF:checkout",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "prepExpiryPosts": 1,
+        "cleanupPosts": 0,
+        "responseDiscarded": true,
+        "prepExpiryResponseRecovered": false,
+        "originalIdempotencyKeyPreserved": true,
+        "exactRetryAccepted": false,
+        "originalRecoveryRetryStable": true,
+        "terminalResult": {
+          "sessionId": "cs_test_a0E3DQv09YLalMJA8SQKsn7577s7Zsg80nLC3TNl3V9czniN5mfj6ubkC2",
+          "requiresNewSession": true,
+          "message": "Checkout expired. Open sandbox checkout again."
+        },
+        "terminalRequiresNewSession": true,
+        "terminalHasHostedUrl": false,
+        "terminalGuidanceAccepted": true,
+        "checkoutRetryRejected": true,
+        "checkoutRetryCode": "BILLING_REVIEW_EXPIRED",
+        "checkoutSessions": 1,
+        "subscriptionsCreated": 0,
+        "invoicesCreated": 0,
+        "paymentIntentsCreated": 0,
+        "chargesCreated": 0,
+        "stockUnchanged": true,
+        "pendingStockPreserved": true,
+        "actualProperties": 0,
+        "actualUnits": 0,
+        "fixtureInactive": true,
+        "sessionExpired": true,
+        "recordsRetained": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "processLocalStagingReadiness": true,
+        "servingConfigurationChanged": false,
+        "automaticWorkerAccepted": false,
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "liveChargingEnabled": false,
+        "wholeProcessCrashAccepted": false,
+        "naturalCheckoutExpiryTimingAccepted": false
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:44:59.7513958Z",
+      "kind": "PROOF",
+      "value": {
+        "valid": true,
+        "errors": []
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T16:45:01.4536806Z",
+      "kind": "CONFIG_COMPARISON",
+      "value": {
+        "equal": true,
+        "differentPaths": []
+      }
+    }
+  ]
+}
