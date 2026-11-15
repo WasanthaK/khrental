@@ -79,6 +79,57 @@
           "head_sha": "bfd709da50b9c7330fd0446604bc46b9ebd0831d"
         }
       }
+    },
+    {
+      "runId": 43703020235,
+      "jobId": 132778047449,
+      "sourceCommit": "0d56f48265e1caa26f05c3df7f9eb6bcf13adec8",
+      "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+      "operationId": "dbb8855b-4856-4824-850c-92d025462586",
+      "replayAllowed": false,
+      "status": "failed",
+      "stage": "renewal_application_projection",
+      "code": "ERR_ASSERTION",
+      "passedGroups": 7,
+      "clockAdvanced": true,
+      "actualRenewal": {
+        "quantity": 1,
+        "amountPaidMinor": 500,
+        "currency": "usd",
+        "status": "paid",
+        "invoiceCount": 2,
+        "accountQuantity": 1,
+        "pendingQuantity": null
+      },
+      "failureLimit": "Repeat-read assertion not individually identified; full provider JSON comparison replaced with explicit financial/identity fields in PR661.",
+      "cleanup": {
+        "sqlVerified": false,
+        "errorCode": "EREQUEST",
+        "sqlNumber": "not retained",
+        "subscriptionCanceled": true,
+        "providerCancellationIndependentlyVerified": true
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthPassed": true,
+      "artifact": {
+        "id": 14156887834,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 1209,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14156887834",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14156887834/zip",
+        "expired": false,
+        "created_at": "2026-11-15T10:14:46Z",
+        "expires_at": "2026-12-15T10:14:45Z",
+        "updated_at": "2026-11-15T10:14:46Z",
+        "digest": "sha256:7c2b9140acc6ed1e2054f67dede651a098d24ea54f04102148fd98eb657f138f",
+        "workflow_run": {
+          "id": 43703020235,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "0d56f48265e1caa26f05c3df7f9eb6bcf13adec8"
+        }
+      }
     }
   ],
   "boundaries": {
@@ -101,7 +152,10 @@
     ],
     "sqlRegression": "Both UUID spellings hold the same exclusive tenant lock; unrelated tenant and pricing namespaces remain distinct.",
     "deploymentRun": 43702359791,
-    "deploymentStatus": "in_progress",
-    "rootCauseLimit": "UUID lock casing defect confirmed independently; exact deadlock graph was not captured."
+    "deploymentStatus": "success",
+    "rootCauseLimit": "UUID lock casing defect confirmed independently; exact deadlock graph was not captured.",
+    "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+    "readyRevisionSuffix": "0000523",
+    "verifiedAt": "2026-11-15T10:12:40Z"
   }
 }
