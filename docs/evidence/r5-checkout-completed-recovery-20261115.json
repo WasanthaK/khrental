@@ -1,0 +1,1342 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-15",
+  "scenario": "checkout-creation-response-loss-completed-before-recovery",
+  "taskIds": [
+    "BL08.11"
+  ],
+  "result": "passed within bounded genuine sandbox provider and deployed service/SQL scope",
+  "operationId": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+  "operationStatus": "used; never replay verification",
+  "failedAcceptanceAttempts": [],
+  "run": {
+    "id": 43739259423,
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43739259423",
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "headBranch": "main",
+    "sourceSha": "d908ae8eff21eda105296ff864dfea9bd53f2f51",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-15T17:06:52Z",
+    "verifyJobId": 132888708121,
+    "verifyJobUrl": "https://github.com/WasanthaK/khrental/actions/runs/43739259423/job/132888708121",
+    "updatedAt": "2026-11-15T17:13:09Z"
+  },
+  "harness": {
+    "pr": 680,
+    "prUrl": "https://github.com/WasanthaK/khrental/pull/680",
+    "sourceSha": "d908ae8eff21eda105296ff864dfea9bd53f2f51",
+    "script": "scripts/verify-deployed-checkout-recovery.mjs",
+    "scriptGitBlobSha": "a1de4179ac3379cbb6d9f75b06cb44fa28a5ff56",
+    "scriptSha256": "a000410f2e3f087ddeed2de67dc240886319d4ce45a615dbe0ab120592bf258c",
+    "workflow": ".github/workflows/verify-deployed-checkout-recovery.yml",
+    "workflowGitBlobSha": "ce6c75e93cd2cd87490abc75a1d478de5b386b5f",
+    "workflowSha256": "44da5b5c585adf37b99c36f9c5ab600353af988819fd326d45408850445a3495",
+    "applicationCodeChanged": false,
+    "validation": {
+      "prHeadSha": "f45656e137469eb2d885ee13b82bd0e0cbcaebc0",
+      "prCiRun": 43738889539,
+      "prCiJob": 132887466783,
+      "workflowValidationRun": 43738889499,
+      "workflowValidationJob": 132887466685,
+      "postMergeCiRun": 43739146892,
+      "postMergeCiJob": 132888238901,
+      "testsPassed": 1405,
+      "testsFailed": 0,
+      "lintPassed": true,
+      "buildPassed": true,
+      "postMergeDeploy": "skipped",
+      "focusedExistingProviderRecoveryTestsPassed": 9,
+      "focusedWorkflowCasesPassed": 153,
+      "focusedWorkflowCases": {
+        "finalProof": 127,
+        "liveSanitizer": 23,
+        "actualPtyPipeline": 3
+      },
+      "independentExtractedHarnessCasesPassed": 34,
+      "independentSourceReview": "no blocking findings"
+    }
+  },
+  "serving": {
+    "buildSha": "e0f7e821b8e511898836f71df86fde2fa8399463",
+    "revision": "khrental-app--0000523",
+    "configurationChanged": false,
+    "replicas": {
+      "min": 1,
+      "max": 1
+    },
+    "workerScopeChanged": false,
+    "processLocalStagingReadiness": true,
+    "liveChargingEnabled": false,
+    "fullWriteEnforcementEnabled": false
+  },
+  "provenance": {
+    "source": "GitHub workflow job logs, run/jobs API, independently downloaded artifact ZIP, hosted sandbox Checkout observation and selected independent Stripe GET readbacks",
+    "liveReadyLoggedAt": "2026-11-15T17:08:14.8539747Z",
+    "scenarioMarkersLoggedAt": "2026-11-15T17:13:00.5755609Z",
+    "scenarioTiming": "LIVE_READY and LIVE_WAITING were streamed during execution. The final proof step reprinted collected scenario markers after execution; those final marker timestamps are not individual action timestamps.",
+    "artifactContentsIndependentlyDownloaded": true,
+    "artifactZipDigestIndependentlyRecomputed": true,
+    "artifactScenarioMarkersMatchedToJobLog": 43,
+    "retainedJobMarkersIncludingLiveProofAndConfiguration": 54,
+    "liveJobMarkers": 9,
+    "artifactSummaryProofMatchedToJobLog": true,
+    "retainedEvidence": "Complete sanitized markers and proof/configuration/health output are retained here. Selected independent provider readbacks contain identifiers, status and money fields only. Raw SQL/provider snapshots, hosted URLs, credentials, contact/payment details and full application configuration are excluded."
+  },
+  "acceptedChecks": [
+    "preflight_and_protected_baseline",
+    "private_pending_stock_without_credentials",
+    "genuine_customer_checkpoint_without_duplicate",
+    "single_checkout_effect_response_discarded",
+    "original_pending_journal_and_checkout_intent",
+    "unique_bound_checkout_exhaustive_readback",
+    "hosted_payment_completed_before_recovery",
+    "natural_sql_backoff_without_clock_edits",
+    "completed_checkout_recovered_to_terminal_result",
+    "completed_checkout_retry_refused_without_provider_write",
+    "paid_recovery_keeps_stock_pending_until_refresh",
+    "paid_refresh_promotes_exact_private_stock",
+    "paid_refresh_retry_preserves_billing_and_promotion",
+    "single_paid_checkout_and_financial_effect",
+    "protected_accounts_clocks_and_worker_scope_unchanged",
+    "cleanup_retains_all_journal_and_stock_history"
+  ],
+  "pass": {
+    "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+    "mode": "verify",
+    "scenario": "completed-before-recovery",
+    "passed": true,
+    "sandbox": true,
+    "checks": [
+      "preflight_and_protected_baseline",
+      "private_pending_stock_without_credentials",
+      "genuine_customer_checkpoint_without_duplicate",
+      "single_checkout_effect_response_discarded",
+      "original_pending_journal_and_checkout_intent",
+      "unique_bound_checkout_exhaustive_readback",
+      "hosted_payment_completed_before_recovery",
+      "natural_sql_backoff_without_clock_edits",
+      "completed_checkout_recovered_to_terminal_result",
+      "completed_checkout_retry_refused_without_provider_write",
+      "paid_recovery_keeps_stock_pending_until_refresh",
+      "paid_refresh_promotes_exact_private_stock",
+      "paid_refresh_retry_preserves_billing_and_promotion",
+      "single_paid_checkout_and_financial_effect",
+      "protected_accounts_clocks_and_worker_scope_unchanged",
+      "cleanup_retains_all_journal_and_stock_history"
+    ],
+    "scope": "genuine sandbox provider + deployed service/SQL",
+    "customerId": "cus_VdNfPLov8rQ26E",
+    "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+    "customerEventId": "evt_1Uc6uUQ4sARuLNQaSue9cTFU",
+    "originalCustomerKey": "quixo:32D3A074-EB2D-4550-BD15-D3E943B43B31:32D3A074-EB2D-4550-BD15-D3E943B43B31:customer",
+    "originalCheckoutKey": "quixo:32D3A074-EB2D-4550-BD15-D3E943B43B31:32D3A074-EB2D-4550-BD15-D3E943B43B31:checkout",
+    "customerPosts": 1,
+    "checkoutPosts": 1,
+    "recoveryProviderWrites": 0,
+    "refreshProviderWrites": 0,
+    "prepExpiryPosts": 0,
+    "cleanupPosts": 0,
+    "cleanupCancellationRequests": 1,
+    "responseDiscarded": true,
+    "prepExpiryResponseRecovered": false,
+    "originalIdempotencyKeyPreserved": true,
+    "exactRetryAccepted": false,
+    "originalRecoveryRetryStable": true,
+    "terminalResult": {
+      "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+      "requiresNewSession": true,
+      "message": "Checkout completed. Refresh subscription status."
+    },
+    "terminalRequiresNewSession": true,
+    "terminalHasHostedUrl": false,
+    "terminalGuidanceAccepted": true,
+    "checkoutRetryRejected": true,
+    "checkoutRetryCode": "BILLING_REVIEW_EXPIRED",
+    "checkoutSessions": 1,
+    "subscriptionsCreated": 1,
+    "invoicesCreated": 1,
+    "paymentIntentsCreated": 1,
+    "chargesCreated": 1,
+    "stockUnchanged": false,
+    "pendingStockPreserved": false,
+    "actualProperties": 1,
+    "actualUnits": 0,
+    "fixtureInactive": true,
+    "sessionExpired": false,
+    "recordsRetained": true,
+    "protectedBillingUnchanged": true,
+    "workerScopeUnchanged": true,
+    "processLocalStagingReadiness": true,
+    "servingConfigurationChanged": false,
+    "automaticWorkerAccepted": false,
+    "httpAccepted": false,
+    "uiAccepted": false,
+    "credentialLoginAccepted": false,
+    "liveChargingEnabled": false,
+    "wholeProcessCrashAccepted": false,
+    "naturalCheckoutExpiryTimingAccepted": false,
+    "hostedCheckoutCompleted": true,
+    "pendingStockPreservedUntilRefresh": true,
+    "stockPromotedOnce": true,
+    "stockPrivate": true,
+    "promotedStockRetained": true,
+    "initialInvoicePreserved": true,
+    "noAdditionalFinancialObjects": true,
+    "subscriptionCanceled": true,
+    "sessionCompleted": true,
+    "initialInvoiceId": "in_1Uc6yNQ4sARuLNQaqYVE8SCA",
+    "subscriptionId": "sub_1Uc6yQQ4sARuLNQa32lQgvni",
+    "paymentIntentId": "pi_3Uc6yOQ4sARuLNQa0eL8DsVU",
+    "chargeId": "ch_3Uc6yOQ4sARuLNQa0uQlqdSY",
+    "initialInvoiceAmountMinor": 500,
+    "currency": "usd",
+    "billedQuantity": 1,
+    "promotionAuditCount": 1
+  },
+  "cleanup": {
+    "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+    "mode": "verify",
+    "scenario": "completed-before-recovery",
+    "verified": true,
+    "fixtureInactive": true,
+    "sessionExpired": false,
+    "sessionCompleted": true,
+    "subscriptionCanceled": true,
+    "cleanupKind": "paid-subscription-canceled",
+    "noSession": false,
+    "noSubscription": false,
+    "noInvoice": false,
+    "noPayment": false,
+    "recordsRetained": true,
+    "pendingStockRetained": 0,
+    "promotedStockRetained": 1,
+    "initialInvoicePreserved": true,
+    "noAdditionalFinancialObjects": true,
+    "protectedBillingUnchanged": true,
+    "workerScopeUnchanged": true,
+    "prepExpiryPosts": 0,
+    "cleanupPosts": 0,
+    "cleanupCancellationRequests": 1,
+    "prepExpiryResponseRecovered": false,
+    "expiryResponseRecovered": false,
+    "cancellationResponseRecovered": false
+  },
+  "workflowProof": {
+    "valid": true,
+    "errors": []
+  },
+  "workflowExecution": {
+    "remoteExitCode": 0,
+    "liveOutputExitCode": 0
+  },
+  "configurationComparison": {
+    "equal": true,
+    "differentPaths": []
+  },
+  "observedAssertions": {
+    "interrupted": {
+      "commandStatus": "pending",
+      "recoveryState": "pending",
+      "attempts": 1,
+      "providerSteps": 2,
+      "completedProviderSteps": 1,
+      "lastError": "CHECKOUT_ACCEPTANCE_RESPONSE_LOST",
+      "leaseReleased": true,
+      "recoveredAudits": 0,
+      "accountUnchanged": true,
+      "stagedStockUnchanged": true
+    },
+    "paidBeforeRecovery": {
+      "method": "Complete the exact original hosted sandbox Checkout after LIVE_READY with genuine Stripe test payment.",
+      "sessionStatus": "complete",
+      "checkoutPaymentStatus": "paid",
+      "subscriptionStatus": "active",
+      "originalPendingFixtureSnapshotUnchanged": true,
+      "commandStillPending": true,
+      "attempts": 1,
+      "customerStepComplete": true,
+      "checkoutStepIncomplete": true,
+      "originalCheckoutKeyPreserved": true,
+      "localCustomerBinding": null,
+      "localSubscriptionBinding": null,
+      "initialPaymentVerified": false,
+      "pendingStagedDwellings": 1,
+      "actualProperties": 0,
+      "recoveredAudits": 0
+    },
+    "recovered": {
+      "commandStatus": "completed",
+      "recoveryState": "succeeded",
+      "attempts": 2,
+      "providerSteps": 2,
+      "completedProviderSteps": 2,
+      "recoveredAudits": 1,
+      "originalSessionReused": true,
+      "originalKeysPreservedByteForByte": true,
+      "providerWrites": 0,
+      "terminalResult": {
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "requiresNewSession": true,
+        "message": "Checkout completed. Refresh subscription status."
+      },
+      "hostedUrlReturned": false,
+      "exactCheckoutRetryRejected": true,
+      "exactCheckoutRetryStatus": 409,
+      "exactCheckoutRetryCode": "BILLING_REVIEW_EXPIRED",
+      "originalRecoveryRetryStable": true,
+      "localSnapshotAndPaidFinancialSnapshotUnchangedAcrossBothRetries": true,
+      "customerBound": true,
+      "subscriptionStillUnbound": true,
+      "initialPaymentVerified": false,
+      "pendingStagedDwellings": 1,
+      "actualProperties": 0,
+      "localRentInvoices": 0,
+      "localRentPayments": 0
+    },
+    "separatePaidRefresh": {
+      "providerWrites": 0,
+      "boundSubscriptionId": "sub_1Uc6yQQ4sARuLNQa32lQgvni",
+      "subscriptionStatus": "active",
+      "initialPaymentVerified": true,
+      "managementEntitlement": true,
+      "billedQuantity": 1,
+      "inventoryQuantity": 1,
+      "pendingStagedDwellings": 0,
+      "promotedStagedDwellings": 1,
+      "actualProperties": 1,
+      "actualUnits": 0,
+      "propertyStatus": "inactive",
+      "publicListingOptedOut": true,
+      "promotionAudits": 1,
+      "recoveredAudits": 1,
+      "originalCommandRecoveryStepsUnchanged": true,
+      "stagedPayloadPreserved": true,
+      "paidFinancialSnapshotUnchanged": true,
+      "retryStableBusinessFieldsHistoryListingAndFinancialSnapshot": true,
+      "retryComparison": "Account version/updated_at are excluded from business-field comparison; existing audit rows are retained and legitimate stripe.event_reconciled audit additions are allowed."
+    },
+    "billing": {
+      "currency": "usd",
+      "unitAmountMinor": 500,
+      "quantity": 1,
+      "checkoutPaymentStatus": "paid",
+      "checkoutSessions": 1,
+      "subscriptions": 1,
+      "invoices": 1,
+      "invoicePayments": 1,
+      "paymentIntents": 1,
+      "charges": 1,
+      "initialInvoiceId": "in_1Uc6yNQ4sARuLNQaqYVE8SCA",
+      "invoiceStatus": "paid",
+      "invoiceAmountDueMinor": 500,
+      "invoiceAmountPaidMinor": 500,
+      "invoiceAmountRemainingMinor": 0,
+      "invoicePaymentStatus": "paid",
+      "paymentIntentStatus": "succeeded",
+      "chargeStatus": "succeeded",
+      "chargePaid": true,
+      "chargeCapturedMinor": 500,
+      "refunds": 0,
+      "creditNotes": 0,
+      "pendingInvoiceItems": 0,
+      "customerScopedListsExhausted": true,
+      "subscriptionsListStatus": "all",
+      "metadataCustomerPriceQuantityInvoicePaymentAndChargeBindingsVerified": true
+    },
+    "cleanup": {
+      "completedSessionExpired": false,
+      "expirationPosts": 0,
+      "subscriptionCancellationRequests": 1,
+      "cancellationMethod": "DELETE exact owned sandbox subscription with invoice_now=false and prorate=false",
+      "subscriptionStatus": "canceled",
+      "initialInvoicePreserved": true,
+      "noAdditionalFinancialObjects": true,
+      "paidFinancialSnapshotUnchanged": true,
+      "localSubscriptionStatus": "canceled",
+      "managementEntitlement": false,
+      "fixtureTenantActorMembershipInactive": true,
+      "promotedStockAndPropertyRetained": true,
+      "propertyInactiveAndListingOptedOut": true,
+      "stagingCommandRecoveryStepsAuditRetained": true,
+      "customerRetained": true,
+      "cleanupReceipts": 1,
+      "ambiguousCancellationResponseExercised": false
+    },
+    "protected": {
+      "accountsSubscriptionsClocksUnchanged": true,
+      "workerTenantScopeUnchanged": true,
+      "noManualClockBackoffOrLeaseEdits": true,
+      "webhooksSuppressed": false
+    },
+    "basis": "These are assertions enforced by the immutable harness at the named successful checks, not separately exported raw SQL/provider snapshots. The separate independent provider readbacks below corroborate only their explicitly retained fields."
+  },
+  "hostedPaymentObservation": {
+    "merchant": "Quixo Homes sandbox",
+    "livemode": false,
+    "currency": "usd",
+    "amountDueTodayMinor": 500,
+    "item": "Quixo.Homes Managed Dwelling",
+    "quantity": 1,
+    "cadence": "monthly",
+    "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+    "liveReadyObservedBeforeSubmission": true,
+    "sameOriginalHostedSessionSubmittedOnce": true,
+    "officialSandboxTestCardUsed": true,
+    "saveInformationForFasterCheckout": false,
+    "observedResult": "Success",
+    "applicationCredentialLoginPerformed": false,
+    "paymentCompletionCorroboratedByProvider": true
+  },
+  "independentProviderReadbacks": {
+    "method": "Stripe connector GET operations in sandbox account acct_1UTgcdQ4sARuLNQa",
+    "sessionAfterHostedPayment": {
+      "id": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+      "livemode": false,
+      "status": "complete",
+      "paymentStatus": "paid",
+      "amountTotalMinor": 500,
+      "currency": "usd",
+      "customerId": "cus_VdNfPLov8rQ26E",
+      "subscriptionId": "sub_1Uc6yQQ4sARuLNQa32lQgvni",
+      "invoiceId": "in_1Uc6yNQ4sARuLNQaqYVE8SCA"
+    },
+    "subscriptionAfterCleanup": {
+      "id": "sub_1Uc6yQQ4sARuLNQa32lQgvni",
+      "livemode": false,
+      "status": "canceled",
+      "customer": "cus_VdNfPLov8rQ26E",
+      "latest_invoice": "in_1Uc6yNQ4sARuLNQaqYVE8SCA",
+      "canceled_at": 1794762767,
+      "ended_at": 1794762767,
+      "cancel_at_period_end": false
+    },
+    "invoiceAfterCleanup": {
+      "id": "in_1Uc6yNQ4sARuLNQaqYVE8SCA",
+      "livemode": false,
+      "status": "paid",
+      "customer": "cus_VdNfPLov8rQ26E",
+      "amount_due": 500,
+      "amount_paid": 500,
+      "amount_remaining": 0,
+      "currency": "usd",
+      "paid_at": 1794762733
+    },
+    "scope": "Selected point-in-time GET fields; exhaustive list/financial-graph and SQL assertions are supplied by the successful immutable harness."
+  },
+  "publicHealth": {
+    "buildVerified": true,
+    "sqlHealthy": true,
+    "verifiedAt": "2026-11-15T17:13:03Z",
+    "verifiedAtAsiaColombo": "2026-11-15 22:43:03 +0530"
+  },
+  "artifact": {
+    "id": 14171887255,
+    "name": "checkout-operation-recovery-completed-before-recovery-verify",
+    "sizeInBytes": 4287,
+    "digest": "sha256:67ae1f5e6f4aaa43c69fe1e6cebe6e733996dd17da2d00762cc2b14bd3580725",
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43739259423/artifacts/14171887255",
+    "createdAt": "2026-11-15T17:13:04Z",
+    "expiresAt": "2026-12-15T17:13:03Z",
+    "publishedDigestMatchesUploadLog": true,
+    "zipIndependentlyDownloaded": true,
+    "zipDigestIndependentlyRecomputed": true,
+    "recomputedZipSha256": "67ae1f5e6f4aaa43c69fe1e6cebe6e733996dd17da2d00762cc2b14bd3580725",
+    "downloadMethod": "Dedicated GitHub artifact download connector",
+    "extractedFiles": [
+      {
+        "name": "checkout-config-comparison.json",
+        "bytes": 38,
+        "sha256": "f74b76d245e49decdc9f373fd141598c31c72fcba81087f851556a351265842e"
+      },
+      {
+        "name": "checkout-public-health.json",
+        "bytes": 90,
+        "sha256": "9c12c68c7d74ff64dffca5e9a8a865adbb1f2ea991e74a76ce852735b7e6ec40"
+      },
+      {
+        "name": "checkout-recovery-summary.json",
+        "bytes": 4189,
+        "sha256": "06c322854b8ceb4cf152c33d29051264cc5bfab987bbc38577af11afc97fc4b5"
+      },
+      {
+        "name": "checkout-recovery.txt",
+        "bytes": 15630,
+        "sha256": "c0b9abd629cd253319de113b8a7ae44c70dff72ef922f3258b77049a8b510efe"
+      }
+    ],
+    "scenarioMarkersAndSummaryMatchedToJobLog": true
+  },
+  "scope": {
+    "serviceSqlAccepted": true,
+    "genuineSandboxProviderAccepted": true,
+    "completedBeforeRecoveryAccepted": true,
+    "sameHostedSandboxSessionPaid": true,
+    "paidRefreshAndExactPrivateStockPromotionAccepted": true,
+    "automaticWorkerAccepted": false,
+    "httpAccepted": false,
+    "uiAccepted": false,
+    "credentialLoginAccepted": false,
+    "wholeProcessCrashAccepted": false,
+    "subscriptionOperationRecoveryAccepted": false,
+    "naturalCheckoutExpiryTimingAccepted": false,
+    "ambiguousCleanupResponseRecoveryAccepted": false,
+    "paymentVersusExpirationRaceAccepted": false
+  },
+  "limitations": [
+    "The customer POST completed normally and was checkpointed with provider event evidence; the deliberately lost response was from Checkout creation.",
+    "The provider response was discarded by the harness inside a running process; no full process crash or automatic worker recovery was exercised.",
+    "A genuine hosted sandbox payment was completed on the exact original session. This is not acceptance of the application HTTP/UI, credential-login, redirect or automatic-webhook entry paths.",
+    "Original-command recovery completed with provider GETs only and left stock pending. The separate explicit service refresh verified paid billing and promoted one exact private dwelling; the two stages are not interchangeable.",
+    "Webhooks were not suppressed. Serving staging readiness remained OFF; only the isolated harness process enabled staging readiness. Legitimate reconciliation bookkeeping is permitted while immutable history and business fields remain stable.",
+    "Cleanup cancelled the exact owned subscription immediately with no invoice/proration and preserved the initial paid invoice. Cancellation recovery, renewal, schedule-release, terminal-canceled recovery, ambiguous cleanup responses and payment/expiration races were not accepted by this run.",
+    "Only the fixture used process-local staging readiness. Serving flags, revision, image, scale, traffic and existing worker scope stayed unchanged.",
+    "Natural seven-day grace expiry and Evia package/matching audit remain outside R5 and unaccepted by owner decision. R5 remains partial; live charging/full enforcement OFF."
+  ],
+  "previousAcceptedCheckout": [
+    {
+      "runId": 43731599869,
+      "evidence": "r5-checkout-response-loss-20261115.json",
+      "scope": "open unpaid Checkout response-loss recovery",
+      "operationId": "9c65d9dd-a5a4-4362-a0b3-1204de4082d4",
+      "operationStatus": "used; never replay verification",
+      "repeatedByThisRun": false
+    },
+    {
+      "runId": 43737055320,
+      "evidence": "r5-checkout-expired-recovery-20261115.json",
+      "scope": "expired-before-recovery Checkout response-loss recovery",
+      "operationId": "1dcfe972-0ed6-4ac0-ab21-edc95c8013cf",
+      "operationStatus": "used; never replay verification",
+      "repeatedByThisRun": false
+    }
+  ],
+  "nextSlice": {
+    "taskId": "BL08.11",
+    "name": "Period-end cancellation response loss with no existing schedule",
+    "freshFixtureRequired": true,
+    "requirements": [
+      "Use a fresh active paid USD 5 quantity-one sandbox fixture with one private inactive dwelling and no trial, grace, comp, schedule or test clock. Preserve the paid initial invoice and use a target cancellation command UUID distinct from setup Checkout.",
+      "Discard the response from one genuine set_cancellation POST with cancel_at_period_end=true. Preserve the original unsuffixed quixo:{SQL-cased tenant}:{SQL-cased command} key; require the original pending command, attempt one and incomplete provider step while the provider subscription remains active with cancellation scheduled.",
+      "Allow the natural webhook to project the cancellation flag and add reconciliation audit rows; do not require the entire bound billing account or all audit rows to remain byte-identical before recovery.",
+      "Wait for normal SQL retry eligibility and recover the original command with provider GETs only. Require attempt-two completion, one completed provider step and one sandbox.cancellation.recovered audit with the durable {cancelAtPeriodEnd:true,paidThrough} result.",
+      "Require exact cancel/reconcile/recover retries to preserve the saved result and financial history without another provider POST or recovered audit.",
+      "Use a separate exact-owned immediate subscription cancellation for cleanup, with invoice_now=false and prorate=false, preserve the initial invoice/history and deactivate the fixture. Do not reverse cancellation, advance a clock or accept renewal, schedule-release, resume, zero-stock or terminal-canceled recovery in this slice."
+    ],
+    "scope": "Prospective next case only; not implemented or run by this acceptance."
+  },
+  "sanitizedMarkers": [
+    {
+      "loggedAt": "2026-11-15T17:08:14.8539747Z",
+      "kind": "LIVE_READY",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "commandId": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "waitSeconds": 600
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:08:15.0450067Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:08:46.2690368Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 31
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:09:17.5923907Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 62
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:09:48.8546680Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 94
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:10:20.1169626Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 125
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:10:51.3470184Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 156
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:11:22.6363177Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 187
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:11:53.9070133Z",
+      "kind": "LIVE_WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 219
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5558811Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "preflight",
+        "fixtureCreated": false,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5561461Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "preflight_and_protected_baseline"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5564811Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "create_fresh_fixture",
+        "fixtureCreated": false,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5568778Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "prepare_private_stock",
+        "fixtureCreated": true,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5571778Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "private_pending_stock_without_credentials"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5575084Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "create_checkout_with_controlled_response_loss",
+        "fixtureCreated": true,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5579028Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "customer_created_wait_for_normal_checkpoint",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": null,
+        "customerPosts": 1,
+        "checkoutPosts": 0,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5584160Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "checkout_response_discarded",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5587076Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "genuine_customer_checkpoint_without_duplicate"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5588667Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "single_checkout_effect_response_discarded"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5590140Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "original_pending_journal_and_checkout_intent"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5592858Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "provider_readback",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5595015Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "unique_bound_checkout_exhaustive_readback"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5596909Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "await_same_hosted_sandbox_payment",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5599065Z",
+      "kind": "READY",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "commandId": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "waitSeconds": 600
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5600324Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5601276Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 31
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5602305Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 62
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5603209Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 94
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5604119Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 125
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5605016Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 156
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5605893Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 187
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5606840Z",
+      "kind": "WAITING",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "elapsedSeconds": 219
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5607898Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "hosted_payment_completed_before_recovery"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5609795Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "wait_for_natural_sql_retry_due",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5611544Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "natural_sql_backoff_without_clock_edits"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5613601Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "bounded_service_recovery",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5615387Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "completed_checkout_recovered_to_terminal_result"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5715270Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "completed_exact_retry",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5717524Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "completed_checkout_retry_refused_without_provider_write"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5718900Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "paid_recovery_keeps_stock_pending_until_refresh"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5721597Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "explicit_paid_refresh_and_stock_promotion",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5724019Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "paid_refresh_promotes_exact_private_stock"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5726750Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "retry_paid_refresh_without_duplicate_promotion",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5729462Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "paid_refresh_retry_preserves_billing_and_promotion"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5731142Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "single_paid_checkout_and_financial_effect"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5732839Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "protected_accounts_clocks_and_worker_scope_unchanged"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5734794Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "cleanup_inspect_original_effect",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5737313Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "cancel_exact_owned_paid_subscription",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5739943Z",
+      "kind": "PROGRESS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "stage": "deactivate_owned_fixture_preserving_history",
+        "fixtureCreated": true,
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5743535Z",
+      "kind": "CLEANUP",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "verified": true,
+        "fixtureInactive": true,
+        "sessionExpired": false,
+        "sessionCompleted": true,
+        "subscriptionCanceled": true,
+        "cleanupKind": "paid-subscription-canceled",
+        "noSession": false,
+        "noSubscription": false,
+        "noInvoice": false,
+        "noPayment": false,
+        "recordsRetained": true,
+        "pendingStockRetained": 0,
+        "promotedStockRetained": 1,
+        "initialInvoicePreserved": true,
+        "noAdditionalFinancialObjects": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1,
+        "prepExpiryResponseRecovered": false,
+        "expiryResponseRecovered": false,
+        "cancellationResponseRecovered": false
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5745810Z",
+      "kind": "CHECK",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "name": "cleanup_retains_all_journal_and_stock_history"
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5755609Z",
+      "kind": "PASS",
+      "value": {
+        "operation": "32d3a074-eb2d-4550-bd15-d3e943b43b31",
+        "mode": "verify",
+        "scenario": "completed-before-recovery",
+        "passed": true,
+        "sandbox": true,
+        "checks": [
+          "preflight_and_protected_baseline",
+          "private_pending_stock_without_credentials",
+          "genuine_customer_checkpoint_without_duplicate",
+          "single_checkout_effect_response_discarded",
+          "original_pending_journal_and_checkout_intent",
+          "unique_bound_checkout_exhaustive_readback",
+          "hosted_payment_completed_before_recovery",
+          "natural_sql_backoff_without_clock_edits",
+          "completed_checkout_recovered_to_terminal_result",
+          "completed_checkout_retry_refused_without_provider_write",
+          "paid_recovery_keeps_stock_pending_until_refresh",
+          "paid_refresh_promotes_exact_private_stock",
+          "paid_refresh_retry_preserves_billing_and_promotion",
+          "single_paid_checkout_and_financial_effect",
+          "protected_accounts_clocks_and_worker_scope_unchanged",
+          "cleanup_retains_all_journal_and_stock_history"
+        ],
+        "scope": "genuine sandbox provider + deployed service/SQL",
+        "customerId": "cus_VdNfPLov8rQ26E",
+        "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+        "customerEventId": "evt_1Uc6uUQ4sARuLNQaSue9cTFU",
+        "originalCustomerKey": "quixo:32D3A074-EB2D-4550-BD15-D3E943B43B31:32D3A074-EB2D-4550-BD15-D3E943B43B31:customer",
+        "originalCheckoutKey": "quixo:32D3A074-EB2D-4550-BD15-D3E943B43B31:32D3A074-EB2D-4550-BD15-D3E943B43B31:checkout",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "recoveryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "prepExpiryPosts": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1,
+        "responseDiscarded": true,
+        "prepExpiryResponseRecovered": false,
+        "originalIdempotencyKeyPreserved": true,
+        "exactRetryAccepted": false,
+        "originalRecoveryRetryStable": true,
+        "terminalResult": {
+          "sessionId": "cs_test_a00jE77vF36AOjr04jWfpcRAkBuQFJqwgDv4sjoTgHe0Cdr0B2OFhjVmSE",
+          "requiresNewSession": true,
+          "message": "Checkout completed. Refresh subscription status."
+        },
+        "terminalRequiresNewSession": true,
+        "terminalHasHostedUrl": false,
+        "terminalGuidanceAccepted": true,
+        "checkoutRetryRejected": true,
+        "checkoutRetryCode": "BILLING_REVIEW_EXPIRED",
+        "checkoutSessions": 1,
+        "subscriptionsCreated": 1,
+        "invoicesCreated": 1,
+        "paymentIntentsCreated": 1,
+        "chargesCreated": 1,
+        "stockUnchanged": false,
+        "pendingStockPreserved": false,
+        "actualProperties": 1,
+        "actualUnits": 0,
+        "fixtureInactive": true,
+        "sessionExpired": false,
+        "recordsRetained": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "processLocalStagingReadiness": true,
+        "servingConfigurationChanged": false,
+        "automaticWorkerAccepted": false,
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "liveChargingEnabled": false,
+        "wholeProcessCrashAccepted": false,
+        "naturalCheckoutExpiryTimingAccepted": false,
+        "hostedCheckoutCompleted": true,
+        "pendingStockPreservedUntilRefresh": true,
+        "stockPromotedOnce": true,
+        "stockPrivate": true,
+        "promotedStockRetained": true,
+        "initialInvoicePreserved": true,
+        "noAdditionalFinancialObjects": true,
+        "subscriptionCanceled": true,
+        "sessionCompleted": true,
+        "initialInvoiceId": "in_1Uc6yNQ4sARuLNQaqYVE8SCA",
+        "subscriptionId": "sub_1Uc6yQQ4sARuLNQa32lQgvni",
+        "paymentIntentId": "pi_3Uc6yOQ4sARuLNQa0eL8DsVU",
+        "chargeId": "ch_3Uc6yOQ4sARuLNQa0uQlqdSY",
+        "initialInvoiceAmountMinor": 500,
+        "currency": "usd",
+        "billedQuantity": 1,
+        "promotionAuditCount": 1
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:00.5763454Z",
+      "kind": "PROOF",
+      "value": {
+        "valid": true,
+        "errors": []
+      }
+    },
+    {
+      "loggedAt": "2026-11-15T17:13:02.5405188Z",
+      "kind": "CONFIG_COMPARISON",
+      "value": {
+        "equal": true,
+        "differentPaths": []
+      }
+    }
+  ]
+}
