@@ -18,8 +18,9 @@ on:
         description: Acceptance case (do not repeat an already accepted case)
         required: true
         type: choice
-        default: promotion
+        default: http-permissions
         options:
+          - http-permissions
           - promotion
           - transitions
       confirmation:
@@ -67,7 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
-          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions ]]
+          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -103,7 +104,7 @@ jobs:
           script -q -e -c "$invocation" /dev/null | tee paid-inventory.txt
           if grep -Eq 'PAID_INVENTORY_FAILED=|PAID_INVENTORY_CLEANUP_FAILED' paid-inventory.txt; then exit 1; fi
           grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
-          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==false) and (.uiAccepted==false) and (.checks|length)==10' paid-inventory-summary.json
+          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions")) and (.uiAccepted==false) and (.checks|length)==10' paid-inventory-summary.json
       - name: Verify unchanged revision and public health
         if: always()
         shell: bash
@@ -125,4 +126,5 @@ jobs:
             paid-inventory.txt
             paid-inventory-summary.json
           retention-days: 30
+
 

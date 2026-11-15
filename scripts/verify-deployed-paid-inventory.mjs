@@ -1,7 +1,9 @@
-// Genuine sandbox provider + deployed service/SQL proof. No HTTP/UI or login claim.
+// Genuine sandbox provider acceptance. HTTP permissions are a separate scenario;
+// service scenarios do not establish HTTP, and none establishes UI or login.
 // Local dependency flags enable this isolated process only; serving flags stay unchanged.
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes,createHash} from 'node:crypto';
+import {createAuthRecord,revokeAccessToken} from '/app/src/api/auth/index.js';
 import {createBillingStore} from '/app/src/api/managementBilling/store.js';
 import {createBillingService} from '/app/src/api/managementBilling/service.js';
 import {createStripeClient,objectId} from '/app/src/api/managementBilling/stripe.js';
@@ -15,6 +17,8 @@ const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CE
 const store=createBillingStore({env}),stripe=createStripeClient(),service=createBillingService({store,stripe,env});
 const protectedIds=['80a4b392-13f8-484d-81fa-a110a6ef75f0','2383f4fc-e107-4ac7-9e13-39db501f40ec'];
 const proof={operation:tenantId,scenario,checks:[],scope:'genuine sandbox provider + deployed service/SQL',httpAccepted:false,uiAccepted:false};
+const httpTokens=[],httpActors=[];
+let foreignTenant=null;
 let created=false,passed=false,cleanup=false,providerClean=false,stage='preflight',providerAttempted=false,customer,subscription,baseline;
 const check=name=>{proof.checks.push(name);console.log('PAID_INVENTORY_CHECK='+name);};
 const progress=()=>console.log('PAID_INVENTORY_PROGRESS='+JSON.stringify(proof));
@@ -54,8 +58,18 @@ const cleanupFixture=async()=>{
     providerClean=true;
   }catch(error){console.error('PAID_INVENTORY_CLEANUP_FAILED='+JSON.stringify({code:error.code||'UNCONFIRMED',...proof}));process.exitCode=1;}
   try{
+    for(const token of httpTokens){
+      await revokeAccessToken(token);
+      const digest=createHash('sha256').update(token).digest('hex');
+      assert.equal((await store.read('SELECT id FROM dbo.auth_sessions WHERE token_hash=@digest AND revoked_at IS NULL',{digest})).length,0);
+    }
     if(created){
       await store.locked(tenantId,async q=>{
+        for(const id of httpActors){
+          await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@id",{tenantId,id});
+          await q("UPDATE dbo.app_users SET status='inactive' WHERE id=@id AND tenant_id=@tenantId",{tenantId,id});
+        }
+        if(foreignTenant){await q("UPDATE dbo.tenants SET status='inactive' WHERE id=@foreignTenant",{foreignTenant});}
         await q("UPDATE dbo.properties SET status='inactive' WHERE tenant_id=@tenantId",{tenantId});
         await q('UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE tenant_id=@tenantId',{tenantId});
         await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId});
@@ -66,6 +80,8 @@ const cleanupFixture=async()=>{
       assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE id=@actorId AND status='inactive'",{actorId})).length,1);
       assert.equal((await store.read("SELECT id FROM dbo.tenant_memberships WHERE tenant_id=@tenantId AND status='active'",{tenantId})).length,0);
       assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=0',{tenantId})).length,0);
+      for(const id of httpActors){assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE id=@id AND status='inactive'",{id})).length,1);}
+      if(foreignTenant){assert.equal((await store.read("SELECT id FROM dbo.tenants WHERE id=@foreignTenant AND status='inactive'",{foreignTenant})).length,1);}
     }
     if(baseline){assert.deepEqual(await protectedState(),baseline);}
     cleanup=providerClean;
@@ -78,7 +94,7 @@ const cleanupFixture=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');
   assert.equal(String(process.env.MANAGEMENT_RECOVERY_TENANT_IDS).toLowerCase(),protectedIds[0]);
@@ -123,7 +139,84 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='promotion'){
+  if(scenario==='http-permissions'){
+    proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
+    proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
+    const makeSession=async(id,role)=>{
+      const authId=randomUUID(),email='r5-paid-http-'+id+'@example.invalid';
+      if(id!==actorId){
+        await store.locked(tenantId,async q=>{
+          await q("INSERT dbo.app_users(id,tenant_id,name,email,role,user_type,auth_id,status) VALUES(@id,@tenantId,'Private paid HTTP fixture',@email,@role,@role,@authId,'active')",{id,tenantId,email,role,authId});
+          await q("INSERT dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@tenantId,@id,@role,'active',1)",{tenantId,id,role});
+        });httpActors.push(id);
+      }else{
+        await store.locked(tenantId,q=>q('UPDATE dbo.app_users SET auth_id=@authId,email=@email WHERE id=@id AND tenant_id=@tenantId',{authId,email,id,tenantId}));
+      }
+      const record=await createAuthRecord({authId,appUserId:id,email,role,password:randomBytes(32).toString('base64url'),metadata:{acceptance_fixture:tenantId}});
+      const token=randomBytes(32).toString('base64url');httpTokens.push(token);
+      const digest=createHash('sha256').update(token).digest('hex');
+      await store.locked(tenantId,q=>q('INSERT dbo.auth_sessions(auth_user_id,token_hash,expires_at) VALUES(@id,@digest,DATEADD(MINUTE,5,SYSUTCDATETIME()))',{id:record.id,digest}));
+      return token;
+    };
+    stage='http_sessions';
+    const admin=await makeSession(actorId,'admin'),staff=await makeSession(randomUUID(),'staff');
+    const http=async(method,path,body,token=admin,workspace=tenantId,extra={})=>{
+      const response=await fetch('https://app.quixo.homes/api/management-billing/'+path,{method,redirect:'error',signal:AbortSignal.timeout(30000),
+        headers:{...(token?{Authorization:'Bearer '+token}:{}),'x-tenant-id':workspace,...extra,...(body?{'Content-Type':'application/json'}:{})},
+        ...(body?{body:JSON.stringify(body)}:{})});
+      return {status:response.status,body:await response.json()};
+    };
+    const expect=async(method,path,body,status,code,token=admin,workspace=tenantId,extra={})=>{
+      const result=await http(method,path,body,token,workspace,extra);
+      if(result.status!==status||(code&&result.body.code!==code)){
+        console.log('PAID_HTTP_DIAGNOSTIC='+JSON.stringify({stage,path,expectedStatus:status,status:result.status,code:result.body.code||null}));
+      }
+      assert.equal(result.status,status,path);if(code){assert.equal(result.body.code,code,path);}
+      return result.body.data;
+    };
+    stage='http_admin_positive_control';
+    const status=await expect('GET','status',null,200);
+    assert.equal(status.entitlement.state,'active');
+    const preview=await expect('POST','quantity-preview',{requestId:randomUUID()},200);
+    assert.equal(preview.from,2);assert.equal(preview.to,2);assert.equal(preview.timing,'unchanged');
+    check('administrator_paid_http_status_and_preview');
+    // A synthetic foreign completed command is fixture data, not provider evidence.
+    // The genuine primary preview above proves the route's positive path.
+    stage='http_foreign_fixture';
+    const foreign=randomUUID(),foreignCommand=randomUUID();
+    await store.locked(foreign,async q=>{
+      await q("INSERT dbo.tenants(id,name,slug,status,[plan]) VALUES(@foreign,'Private command isolation fixture',@slug,'active','development-testing')",{foreign,slug:'r5-paid-http-'+foreign});
+      await q("INSERT dbo.management_billing_commands(id,tenant_id,kind,payload_hash,payload_json,status,result_json,completed_at) VALUES(@id,@foreign,'quantity_preview',@digest,'{}','completed',@result,SYSUTCDATETIME())",{id:foreignCommand,foreign,digest:hash({}),result:JSON.stringify({...preview,previewId:foreignCommand})});
+    });foreignTenant=foreign;
+    const snapshot=async()=>hash({
+      stock:await store.read('SELECT * FROM dbo.properties WHERE tenant_id=@tenantId ORDER BY id',{tenantId}),
+      staged:await store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@tenantId ORDER BY id',{tenantId}),
+      commands:await store.read('SELECT * FROM dbo.management_billing_commands WHERE tenant_id IN (@tenantId,@foreign) ORDER BY id',{tenantId,foreign}),
+      recovery:await store.read('SELECT r.* FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c ON c.id=r.command_id WHERE c.tenant_id IN (@tenantId,@foreign) ORDER BY r.command_id',{tenantId,foreign}),
+      steps:await store.read('SELECT s.* FROM dbo.management_billing_steps s JOIN dbo.management_billing_commands c ON c.id=s.command_id WHERE c.tenant_id IN (@tenantId,@foreign) ORDER BY s.command_id,s.name',{tenantId,foreign}),
+      audit:await store.read("SELECT * FROM dbo.management_billing_audit WHERE tenant_id IN (@tenantId,@foreign) AND action<>'stripe.event_reconciled' ORDER BY id",{tenantId,foreign})});
+    const before=await snapshot(),providerBefore=hash(await provider());
+    const routes=[['GET','status',null],...['stock/prepare','stock/withdraw','stock/cessation-preview','stock/cessation','stock/restoration-preview','stock/restore','stock/split-preview','stock/split','refresh','checkout','portal','quantity-preview','quantity-apply','reconcile-cancellation','cancellation'].map(path=>['POST',path,{}])];
+    proof.permissionRoutes=routes.length;
+    const denied=async(token,workspace,status,code,extra={})=>{
+      for(const [method,path,body] of routes){await expect(method,path,body,status,code,token,workspace,extra);}
+      assert.equal(await snapshot(),before);assert.equal(hash(await provider()),providerBefore);
+    };
+    stage='http_nonadmin';await denied(staff,tenantId,403,'BILLING_ADMIN_REQUIRED');check('nonadmin_billing_route_matrix_denied_without_effect');
+    stage='http_forged_identity';await denied(null,tenantId,401,null,{'x-user-id':actorId,'x-user-email':'r5-paid-stock-'+tenantId+'@example.invalid','x-dev-bypass-role':'admin'});check('forged_identity_headers_do_not_authenticate');
+    stage='http_foreign_workspace';await denied(admin,foreign,403,'TENANT_ACCESS_DENIED');check('foreign_workspace_route_matrix_denied_without_effect');
+    stage='http_foreign_commands';
+    await expect('POST','quantity-preview',{requestId:foreignCommand},409,'BILLING_REQUEST_CONFLICT');
+    await expect('POST','quantity-apply',{requestId:randomUUID(),previewId:foreignCommand},409,'BILLING_PREVIEW_REQUIRED');
+    assert.equal(await snapshot(),before);assert.equal(hash(await provider()),providerBefore);check('foreign_command_and_preview_ids_rejected_without_effect');
+    stage='http_stale_membership';
+    await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
+    await denied(admin,tenantId,403,'TENANT_NOT_RESOLVED');check('stale_administrator_membership_denied_without_effect');
+    await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='active' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
+    stage='http_revoked_session';await revokeAccessToken(admin);
+    await denied(admin,tenantId,401,'INVALID_SESSION');check('revoked_session_route_matrix_denied_without_effect');
+    proof.httpAccepted=true;
+  }else if(scenario==='promotion'){
     const ids=[randomUUID(),randomUUID(),randomUUID()];
     const records=ids.map((id,n)=>({kind:'property',payload:{id,name:'Private paid addition '+n,
       description:'Synthetic staged promotion evidence '+n,propertytype:'house',country_code:'LK',
@@ -220,3 +313,4 @@ try{
   passed=true;
 }catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
 finally{await cleanupFixture();}
+
