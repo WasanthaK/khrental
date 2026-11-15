@@ -1,5 +1,5 @@
 {
-  "status": "acceptance_pending",
+  "status": "bounded_acceptance_passed",
   "scenario": "cessation-renewal",
   "pullRequest": 659,
   "sourceCommit": "3bfe522d5653273d9c5e75b1c15ffbcb7f6f433c",
@@ -103,11 +103,12 @@
       },
       "failureLimit": "Repeat-read assertion not individually identified; full provider JSON comparison replaced with explicit financial/identity fields in PR661.",
       "cleanup": {
-        "sqlVerified": false,
+        "sqlVerified": true,
         "errorCode": "EREQUEST",
         "sqlNumber": "not retained",
         "subscriptionCanceled": true,
-        "providerCancellationIndependentlyVerified": true
+        "providerCancellationIndependentlyVerified": true,
+        "followupRun": 43704049415
       },
       "configurationEqual": true,
       "buildAndSqlHealthPassed": true,
@@ -128,6 +129,56 @@
           "head_repository_id": 963041494,
           "head_branch": "main",
           "head_sha": "0d56f48265e1caa26f05c3df7f9eb6bcf13adec8"
+        }
+      }
+    },
+    {
+      "runId": 43704182377,
+      "jobId": 132781608229,
+      "sourceCommit": "e900c95651107885688b93233257bc91cb76d4a6",
+      "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+      "operationId": "bcbed94d-c3b8-4f5b-9fd0-76095011ab8d",
+      "replayAllowed": false,
+      "status": "success",
+      "passedGroups": 10,
+      "acceptedAt": "2026-11-15T10:29:02Z",
+      "actualRenewal": {
+        "quantity": 1,
+        "amountPaidMinor": 500,
+        "currency": "usd",
+        "status": "paid",
+        "invoiceCount": 2,
+        "accountQuantity": 1,
+        "pendingQuantity": null,
+        "initialInvoiceUnchanged": true,
+        "refreshRetryNoDuplicate": true
+      },
+      "cleanup": {
+        "verified": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "recordsRetained": true,
+        "protectedBillingUnchanged": true
+      },
+      "configurationEqual": true,
+      "buildAndSqlHealthPassed": true,
+      "artifact": {
+        "id": 14158001255,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 2087,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14158001255",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14158001255/zip",
+        "expired": false,
+        "created_at": "2026-11-15T10:29:06Z",
+        "expires_at": "2026-12-15T10:29:06Z",
+        "updated_at": "2026-11-15T10:29:06Z",
+        "digest": "sha256:2a2f46b71ae014fc3e764d418d85a94d371bf1416cc436019f6318fbe6c28623",
+        "workflow_run": {
+          "id": 43704182377,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "e900c95651107885688b93233257bc91cb76d4a6"
         }
       }
     }
@@ -189,6 +240,53 @@
           "head_sha": "9f029bead093d5b4a056fce0e683628239b188a0"
         }
       }
+    },
+    {
+      "runId": 43704049415,
+      "jobId": 132781191712,
+      "status": "success",
+      "ownershipVerified": true,
+      "subscriptionAlreadyCanceled": true,
+      "cleanupVerified": true,
+      "fixtureInactive": true,
+      "recordsRetained": true,
+      "configurationEqual": true,
+      "buildAndSqlHealthPassed": true,
+      "verifiedAt": "2026-11-15T10:26:41Z",
+      "artifact": {
+        "id": 14157304683,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 914,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14157304683",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14157304683/zip",
+        "expired": false,
+        "created_at": "2026-11-15T10:26:44Z",
+        "expires_at": "2026-12-15T10:26:44Z",
+        "updated_at": "2026-11-15T10:26:44Z",
+        "digest": "sha256:a03a3574618ee7d78aa902eb3b1493ee6eedce3edae3e55e746f854aa1ef82bc",
+        "workflow_run": {
+          "id": 43704049415,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "e900c95651107885688b93233257bc91cb76d4a6"
+        }
+      }
     }
-  ]
+  ],
+  "harnessCorrections": {
+    "pullRequests": [
+      661,
+      662
+    ],
+    "ciRuns": [
+      43703372517,
+      43703372536,
+      43703784861,
+      43703784912
+    ],
+    "scope": "Explicit financial invoice comparison, distinct diagnostics, ownership-checked cleanup-only path and no redundant ceased-property UPDATE."
+  },
+  "latestAcceptedRun": 43704182377,
+  "reconciledThrough": "2026-11-15T10:29:06Z"
 }
