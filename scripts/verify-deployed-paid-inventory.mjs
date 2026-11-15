@@ -21,6 +21,7 @@ const splitRenewal=scenario==='split-renewal';
 const zeroStockCancellation=scenario==='zero-stock-cancellation';
 const cessationRenewal=scenario==='cessation-renewal'||restorationRenewal||splitRenewal||zeroStockCancellation;
 let fixtureClock=null;
+let cessationMaintenanceId=null;
 const hostedCheckout=scenario==='http-hosted-checkout';
 let checkoutSessionId=null,checkoutCommandId=null;
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
@@ -106,6 +107,7 @@ const cleanupFixture=async()=>{
       assert.equal((await store.read('SELECT id FROM dbo.auth_sessions WHERE token_hash=@digest AND revoked_at IS NULL',{digest})).length,0);
     }
     if(created){
+      if(cessationMaintenanceId){await store.locked(tenantId,q=>q("UPDATE dbo.maintenance_requests SET status='cancelled' WHERE tenant_id=@tenantId AND id=@id AND status='pending'",{tenantId,id:cessationMaintenanceId}));}
       for(let attempt=0;attempt<3;attempt++){
       try{await store.locked(tenantId,async q=>{
         for(const id of httpActors){
@@ -361,6 +363,70 @@ const verifyZeroStockCancellation=async()=>{
   proof.subscriptionCanceledAtBoundary=true;proof.clockAdvancedTo=boundary+3600;
 };
 
+
+const verifyCessationObligation=async()=>{
+  proof.scope='genuine sandbox paid cessation maintenance conflict + deployed service/SQL';
+  proof.credentialLoginAccepted=false;proof.maintenanceConflictAccepted=false;
+  stage='maintenance_clean_preview';
+  const clean=await service.cessationPreview({tenantId,actorId,propertyId});
+  assert.equal(clean.eligible,true);assert.deepEqual(clean.blockers,[]);
+  const stale={tenantId,actorId,propertyId,id:randomUUID(),inventoryHash:clean.inventoryHash,reason:'Reject cessation when a maintenance obligation appears after review.'};
+  check('cessation_preview_clean_before_new_obligation');
+  cessationMaintenanceId=randomUUID();
+  stage='maintenance_fixture_insert';
+  await store.locked(tenantId,q=>q("INSERT INTO dbo.maintenance_requests(id,tenant_id,propertyid,title,description,status,assignedto,priority,requesttype,createdat,updatedat) VALUES(@id,@tenantId,@propertyId,'Synthetic cessation obligation','Not a customer request','pending',@actorId,'medium','other',SYSUTCDATETIME(),SYSUTCDATETIME())",{id:cessationMaintenanceId,tenantId,propertyId,actorId}));
+  const blocked=await service.cessationPreview({tenantId,actorId,propertyId});
+  assert.equal(blocked.eligible,false);assert.equal(blocked.inventoryHash,clean.inventoryHash);
+  assert.deepEqual(blocked.blockers.map(b=>({code:b.code,count:b.count})),[{code:'MAINTENANCE_OPEN',count:1}]);
+  check('new_maintenance_blocks_preview_without_changing_inventory_hash');
+  const snapshot=async()=>{
+    const state={};
+    for(const table of ['properties','property_units','maintenance_requests','management_inventory_controls','management_billing_commands']){
+      state[table]=await store.read('SELECT * FROM dbo.'+table+' WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+    }
+    state.recovery=await store.read('SELECT r.* FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c ON c.id=r.command_id WHERE c.tenant_id=@tenantId ORDER BY r.command_id',{tenantId});
+    state.steps=await store.read('SELECT s.* FROM dbo.management_billing_steps s JOIN dbo.management_billing_commands c ON c.id=s.command_id WHERE c.tenant_id=@tenantId ORDER BY s.command_id,s.name',{tenantId});
+    state.audit=await audit();state.stock=await store.inventory(tenantId);
+    return hash(state);
+  };
+  const remote=async()=>{const sub=await provider(),invoices=await read('/v1/invoices',{customer:customer.id,subscription:subscription.id,limit:100});return hash({sub,invoices:{has_more:invoices.has_more,data:invoices.data.map(i=>({id:i.id,status:i.status,total:i.total,paid:i.amount_paid,remaining:i.amount_remaining}))}});};
+  const before=await snapshot(),providerBefore=await remote();
+  stage='maintenance_stale_confirmation';
+  await assert.rejects(service.ceaseStock(stale),{code:'BILLING_CESSATION_BLOCKED'});
+  assert.equal(await snapshot(),before);assert.equal(await remote(),providerBefore);
+  check('previously_clean_confirmation_rejected_without_local_or_provider_effect');
+  stage='maintenance_blocked_retry';
+  await assert.rejects(service.ceaseStock(stale),{code:'BILLING_CESSATION_BLOCKED'});
+  await assert.rejects(service.ceaseStock({...stale,id:randomUUID(),inventoryHash:blocked.inventoryHash}),{code:'BILLING_CESSATION_BLOCKED'});
+  assert.equal(await snapshot(),before);assert.equal(await remote(),providerBefore);
+  check('blocked_retry_and_new_command_preserve_obligation_and_billing');
+  stage='maintenance_resolve_fixture';
+  await store.locked(tenantId,q=>q("UPDATE dbo.maintenance_requests SET status='cancelled' WHERE tenant_id=@tenantId AND id=@id AND status='pending'",{tenantId,id:cessationMaintenanceId}));
+  const resolved=await service.cessationPreview({tenantId,actorId,propertyId});
+  assert.equal(resolved.eligible,true);assert.deepEqual(resolved.blockers,[]);
+  assert.equal(resolved.inventoryHash,clean.inventoryHash);
+  check('cancelled_synthetic_maintenance_allows_fresh_review');
+  const args={...stale,id:randomUUID(),inventoryHash:resolved.inventoryHash,reason:'Confirm cessation after canceling the isolated synthetic maintenance obligation.'};
+  stage='maintenance_resolved_cessation';
+  const result=await service.ceaseStock(args);assert.equal(result.managementEnded,true);assert.equal(await count(),1);
+  const schedule=await scheduled(1);assert.equal((await store.account(tenantId)).pending_quantity,1);
+  const invoice=await read('/v1/invoices/'+proof.initialInvoice);
+  assert.equal(invoice.status,'paid');assert.equal(invoice.total,1000);assert.equal(invoice.amount_paid,1000);
+  check('resolved_obligation_cessation_schedules_one_without_current_invoice_change');
+  stage='maintenance_retained_history';
+  const saved=await snapshot();assert.deepEqual(await service.ceaseStock(args),result);
+  assert.equal(await snapshot(),saved);assert.equal(await scheduled(1),schedule);
+  const requests=await store.read('SELECT id,propertyid,status FROM dbo.maintenance_requests WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(requests.length,1);assert.equal(String(requests[0].id).toLowerCase(),cessationMaintenanceId);
+  assert.equal(String(requests[0].propertyid).toLowerCase(),propertyId);assert.equal(requests[0].status,'cancelled');
+  const controls=await store.read('SELECT property_id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId',{tenantId});
+  assert.equal(controls.length,1);assert.equal(String(controls[0].property_id).toLowerCase(),propertyId);assert.equal(controls[0].restored_at,null);
+  assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND status='inactive'",{tenantId})).length,2);
+  assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,2);
+  check('cancelled_obligation_and_cessation_history_retained_with_exact_retry');
+  proof.maintenanceConflictAccepted=true;proof.blockedCessationRequests=3;proof.obligationRetained=true;
+};
+
 const prepareRenewalCleanup=async()=>{
   stage='existing_renewal_cleanup_ownership';
   const tenants=await store.read('SELECT slug,[plan] FROM dbo.tenants WHERE id=@tenantId',{tenantId});
@@ -513,7 +579,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -568,7 +634,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
