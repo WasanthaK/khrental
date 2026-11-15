@@ -3,6 +3,7 @@
 // HTTP stock mutations use temporary serving readiness and fixture-scoped enforcement;
 // its workflow restores original flags. Other scenarios leave serving flags unchanged.
 import assert from 'node:assert/strict';
+import {setTimeout as delay} from 'node:timers/promises';
 import {randomUUID,randomBytes,createHash} from 'node:crypto';
 import {createAuthRecord,revokeAccessToken} from '/app/src/api/auth/index.js';
 import {createBillingStore} from '/app/src/api/managementBilling/store.js';
@@ -14,6 +15,8 @@ import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 const tenantId=process.env.PAID_INVENTORY_OPERATION,actorId=randomUUID(),propertyId=randomUUID(),second=randomUUID();
 const scenario=process.env.PAID_INVENTORY_SCENARIO||'transitions';
 const httpTransitions=scenario==='http-transitions';
+const hostedCheckout=scenario==='http-hosted-checkout';
+let checkoutSessionId=null,checkoutCommandId=null;
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
   MANAGEMENT_RESTORATION_SCHEMA_READY:'true',MANAGEMENT_SPLIT_SCHEMA_READY:'true'};
 const store=createBillingStore({env}),stripe=createStripeClient(),service=createBillingService({store,stripe,env});
@@ -67,9 +70,23 @@ const cleanupFixture=async()=>{
   // Keep evidence on failure; never replay an ambiguous creation. Known fixture
   // subscription cancellation is bounded and verified, with no proration/invoice.
   try{
+    if(hostedCheckout&&checkoutSessionId){
+      let session=await read('/v1/checkout/sessions/'+checkoutSessionId);
+      assert.equal(session.livemode,false);assert.equal(session.metadata.quixo_tenant,tenantId);
+      // Closing an unfinished session first prevents payment racing fixture cleanup.
+      if(session.status==='open'){
+        await write('/v1/checkout/sessions/'+session.id+'/expire',{},'expire-checkout');
+        session=await read('/v1/checkout/sessions/'+session.id);assert.equal(session.status,'expired');
+      }
+      customer=await read('/v1/customers/'+objectId(session.customer));
+      assert.equal(customer.metadata.quixo_tenant,tenantId);
+      if(objectId(session.subscription)){subscription=await read('/v1/subscriptions/'+objectId(session.subscription));}
+      else{assert.equal(session.status,'expired');providerAttempted=false;}
+    }
     if(subscription){
       const current=await provider();assert.equal(current.livemode,false);assert.equal(objectId(current.customer),customer.id);
-      assert.equal(current.metadata.acceptance_fixture,tenantId);
+      if(hostedCheckout){assert.equal(customer.metadata.quixo_tenant,tenantId);}
+      else{assert.equal(current.metadata.acceptance_fixture,tenantId);}
       await stripe.request('DELETE','/v1/subscriptions/'+subscription.id,{invoice_now:false,prorate:false},`paid-stock:${tenantId}:cleanup-subscription`);
       assert.equal((await provider()).status,'canceled');
       if(await store.account(tenantId)){await service.refresh(tenantId);assert.equal((await store.account(tenantId)).subscription_status,'canceled');}
@@ -110,12 +127,110 @@ const cleanupFixture=async()=>{
   await closeMssqlPool();
 };
 
+const verifyHostedCheckout=async()=>{
+  proof.scope='deployed HTTP staged stock + genuine hosted sandbox Checkout completion + SQL/provider reconciliation';
+  proof.credentialLoginAccepted=false;proof.hostedCheckoutCompleted=false;
+  await store.locked(tenantId,q=>q(`INSERT dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json)
+    VALUES(@tenantId,@account,@price,'LK','[]')`,{tenantId,account:BILLING_ACCOUNT,price:BILLING_PRICE}));
+  let token=await makeSession(actorId,'admin');
+  const http=async(path,body)=>{
+    const response=await fetch('https://app.quixo.homes/api/management-billing/'+path,{method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(30000),
+      headers:{Authorization:'Bearer '+token,'x-tenant-id':tenantId,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+    const result=await response.json();
+    if(!response.ok){throw Object.assign(Error('Hosted Checkout acceptance HTTP request failed'),{code:result.code||'HTTP_UNCONFIRMED',status:response.status});}
+    assert.equal(response.status,200);assert.equal(result.error,null);return result.data;
+  };
+  const records=[1,2,3].map(n=>({kind:'property',payload:{id:randomUUID(),name:'Private hosted Checkout stock '+n,
+    description:'Synthetic staged Checkout acceptance '+n,propertytype:'house',country_code:'LK',
+    rentalvalues:{listingCategory:'residential'},availability:'inactive'}}));
+  const staged=()=>store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+  const stock=()=>store.read('SELECT id,name,description,status FROM dbo.properties WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+  stage='hosted_stage_create_import';
+  await http('stock/prepare',{records:[records[0]],reason:'Prepare private hosted Checkout acceptance.'});
+  await http('stock/prepare',{records:records.slice(1),reason:'Import private hosted Checkout acceptance.'});
+  assert.equal((await staged()).length,3);assert.ok((await staged()).every(r=>r.status==='pending'));
+  assert.equal((await stock()).length,0);assert.equal(await count(),0);check('staged_create_import_pending_before_checkout');
+  stage='hosted_checkout_preview';
+  const status=await http('status');assert.equal(status.stagingEnabled,true);assert.equal(status.inventoryQuantity,0);
+  assert.equal(status.proposedInventoryQuantity,3);assert.equal(status.billedQuantity,0);assert.notEqual(status.entitlement.state,'active');
+  check('http_checkout_preview_counts_only_prepared_stock');
+  stage='hosted_checkout_create';checkoutCommandId=randomUUID();
+  const command={requestId:checkoutCommandId,inventoryHash:status.inventoryHash};providerAttempted=true;
+  const result=await http('checkout',command);checkoutSessionId=result.sessionId;
+  // Never print the hosted URL; retrieve it privately through the sandbox connector.
+  assert.equal(new URL(result.url).hostname,'checkout.stripe.com');
+  let session=await read('/v1/checkout/sessions/'+checkoutSessionId);
+  assert.equal(session.livemode,false);assert.equal(session.status,'open');assert.equal(session.mode,'subscription');
+  assert.equal(session.metadata.quixo_tenant,tenantId);assert.equal(session.metadata.quixo_operation,checkoutCommandId);
+  assert.equal(session.metadata.inventory_hash,status.inventoryHash);assert.equal(session.amount_total,1500);
+  customer=await read('/v1/customers/'+objectId(session.customer));assert.equal(customer.metadata.quixo_tenant,tenantId);
+  assert.equal((await stock()).length,0);assert.ok((await staged()).every(r=>r.status==='pending'));
+  check('open_hosted_checkout_does_not_promote_stock');
+  stage='hosted_checkout_retry';
+  const beforeRetry={staged:hash(await staged()),stock:hash(await stock()),audit:await audit()};
+  const retry=await http('checkout',command);assert.equal(retry.sessionId,checkoutSessionId);
+  assert.deepEqual({staged:hash(await staged()),stock:hash(await stock()),audit:await audit()},beforeRetry);
+  check('checkout_retry_reuses_session_without_stock_effect');
+  stage='await_hosted_sandbox_completion';
+  console.log('PAID_HOSTED_CHECKOUT_READY='+JSON.stringify({operation:tenantId,commandId:checkoutCommandId,sessionId:checkoutSessionId,waitSeconds:600}));
+  for(let attempt=0;attempt<120;attempt++){
+    session=await read('/v1/checkout/sessions/'+checkoutSessionId);
+    if(session.status==='complete'){break;}
+    assert.equal(session.status,'open');
+    if(attempt%6===0){console.log('PAID_HOSTED_CHECKOUT_WAITING='+JSON.stringify({operation:tenantId,elapsedSeconds:attempt*5}));}
+    await delay(5000);
+  }
+  assert.equal(session.status,'complete','Hosted sandbox Checkout did not complete within the bounded wait');
+  assert.equal(session.payment_status,'paid');assert.equal(session.livemode,false);
+  assert.equal(objectId(session.customer),customer.id);assert.ok(objectId(session.subscription));
+  subscription=await read('/v1/subscriptions/'+objectId(session.subscription));
+  assert.equal(subscription.livemode,false);assert.equal(objectId(subscription.customer),customer.id);
+  assert.equal(subscription.status,'active');assert.ok(!subscription.test_clock);
+  assert.equal(subscription.items.data.length,1);assert.equal(subscription.items.data[0].quantity,3);
+  assert.equal(objectId(subscription.items.data[0].price),BILLING_PRICE);
+  const invoice=await read('/v1/invoices/'+objectId(subscription.latest_invoice));
+  assert.equal(invoice.livemode,false);assert.equal(invoice.status,'paid');assert.equal(invoice.amount_paid,1500);
+  assert.equal(invoice.currency,'usd');assert.equal(invoice.billing_reason,'subscription_create');assert.equal(objectId(invoice.customer),customer.id);
+  proof.initialInvoice=invoice.id;proof.subscriptionId=subscription.id;proof.hostedCheckoutCompleted=true;
+  check('hosted_checkout_paid_exact_initial_quantity');
+  // Keep every programmatic session short-lived, including after the browser wait.
+  const previousDigest=createHash('sha256').update(token).digest('hex');
+  const authSession=(await store.read('SELECT auth_user_id FROM dbo.auth_sessions WHERE token_hash=@digest',{digest:previousDigest}))[0];
+  assert.ok(authSession?.auth_user_id);await revokeAccessToken(token);
+  token=randomBytes(32).toString('base64url');httpTokens.push(token);
+  await store.locked(tenantId,q=>q('INSERT dbo.auth_sessions(auth_user_id,token_hash,expires_at) VALUES(@id,@digest,DATEADD(MINUTE,5,SYSUTCDATETIME()))',
+    {id:authSession.auth_user_id,digest:createHash('sha256').update(token).digest('hex')}));
+  stage='hosted_checkout_http_refresh';
+  const refreshed=await http('refresh',{});assert.equal(refreshed.entitlement.state,'active');assert.equal(refreshed.billedQuantity,3);
+  assert.equal(refreshed.inventoryQuantity,3);assert.equal(refreshed.pendingStock.length,0);
+  const promoted=await staged();assert.equal(promoted.length,3);
+  assert.ok(promoted.every(r=>r.status==='promoted'&&String(r.promotion_command_id).toLowerCase()===checkoutCommandId));
+  const rows=await stock();assert.equal(rows.length,3);
+  for(const record of records){
+    const row=rows.find(r=>String(r.id).toLowerCase()===record.payload.id);assert.ok(row);
+    assert.equal(row.name,record.payload.name);assert.equal(row.description,record.payload.description);assert.equal(row.status,'inactive');
+  }
+  assert.equal((await store.read('SELECT property_id FROM dbo.public_listing_preferences WHERE tenant_id=@tenantId AND opted_out=1',{tenantId})).length,3);
+  check('completed_checkout_promotes_exact_private_staged_records');
+  stage='hosted_refresh_retry';
+  const beforeRefresh={staged:hash(await staged()),stock:hash(await stock()),audit:await audit()};
+  await http('refresh',{});await http('status');
+  assert.deepEqual({staged:hash(await staged()),stock:hash(await stock()),audit:await audit()},beforeRefresh);
+  assert.equal((await provider()).items.data[0].quantity,3);check('refresh_retry_no_duplicate_promotion');
+  const sessions=await read('/v1/checkout/sessions',{customer:customer.id,limit:100});
+  const subscriptions=await read('/v1/subscriptions',{customer:customer.id,status:'all',limit:100});
+  assert.equal(sessions.has_more,false);assert.equal(sessions.data.length,1);assert.equal(sessions.data[0].id,checkoutSessionId);
+  assert.equal(subscriptions.has_more,false);assert.equal(subscriptions.data.length,1);assert.equal(subscriptions.data[0].id,subscription.id);
+  check('single_checkout_and_subscription_retained');
+  proof.httpAccepted=true;proof.httpStockMutationAccepted=true;
+};
+
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions'].includes(scenario));
+  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
-  if(scenario==='http-promotion'||httpTransitions){
+  if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
     assert.equal(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS,tenantId);
   }else{assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');}
@@ -132,12 +247,13 @@ try{
     // Non-login synthetic actor exercises the service's existing membership authority.
     await q("INSERT dbo.app_users(id,tenant_id,name,email,role,user_type,status) VALUES(@actorId,@tenantId,'Synthetic paid stock actor',@email,'admin','admin','active')",{tenantId,actorId,email:'r5-paid-stock-'+tenantId+'@example.invalid'});
     await q("INSERT dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@tenantId,@actorId,'admin','active',1)",{tenantId,actorId});
-    for(const id of [propertyId,second]){
+    for(const id of hostedCheckout?[]:[propertyId,second]){
       await q("INSERT dbo.properties(id,tenant_id,name,status,propertytype,country_code) VALUES(@id,@tenantId,'Private synthetic paid stock','inactive','house','LK')",{id,tenantId});
       await q('UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE property_id=@id AND tenant_id=@tenantId',{id,tenantId});
       assert.equal((await q('SELECT property_id FROM dbo.public_listing_preferences WHERE property_id=@id AND tenant_id=@tenantId AND opted_out=1',{id,tenantId})).length,1);
     }
   });created=true;check('isolated_private_fixture');
+  if(hostedCheckout){await verifyHostedCheckout();}else{
   // Check the deployed stock/blocker queries before creating provider objects.
   stage='cessation_sql_preflight';
   const stockPreview=await store.locked(tenantId,q=>store.cessationPreviewLocked(q,{tenantId,actorId,propertyId}));
@@ -435,9 +551,8 @@ try{
     proof.httpAccepted=true;proof.httpStockMutationAccepted=true;
   }
   }
+  }
   assert.deepEqual(await protectedState(),baseline);check('protected_accounts_subscriptions_and_clocks_unchanged');
   passed=true;
 }catch(error){console.error('PAID_INVENTORY_FAILED='+JSON.stringify({stage,code:error.code||'UNCONFIRMED',sqlNumber:Number.isInteger(error.number)?error.number:null,sqlLine:Number.isInteger(error.lineNumber)?error.lineNumber:null,...proof}));process.exitCode=1;}
 finally{await cleanupFixture();}
-
-
