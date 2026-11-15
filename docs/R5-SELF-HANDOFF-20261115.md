@@ -20,6 +20,14 @@ Accepted serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`, deployed in 
 - Retained-history service/API role checks are accepted; rendered journeys and credential login remain separate.
 - Portal/customer recovery and recorded billing renewal/grace checks are accepted. Other recovery kinds and natural seven-day grace expiry are not thereby accepted.
 
+## Split renewal — harness merged; execution pending — 15 November 2026
+
+[PR #665](https://github.com/WasanthaK/khrental/pull/665) merged as `16a619710cd929cee82a470fe03eb1a0d6557461` after syntax validation, lint, authorization tests and build passed (43706960779, 43706960788). Post-merge verification 43707124525 also passed. The fresh `split-renewal` scenario requires three exact units replacing one of two dwellings, an unchanged initial USD 10 invoice and an actual USD 20 renewal for four dwellings; reconciliation, retries, retained identities/history, privacy, protected accounts and cleanup are mandatory.
+
+**Execution is pending, not accepted.** Browser submissions closed the dispatch form, but workflow-page and Actions API readback showed no new run. No split fixture/provider mutation is evidenced. Prepared operation UUID: `97d45d47-899e-490f-bcc1-0a09a02a3431`; expected serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`. Before submitting again, inspect recent dispatches; if this operation has run, do not replay it. Use scenario `split-renewal`, branch `main`, confirmation `VERIFY-PAID-INVENTORY`. The workflow independently verifies serving build before mutation. Do not change triggers, permissions or flags to bypass this dispatch issue.
+
+Restoration and cessation renewals remain accepted within their recorded service/SQL scope. R5 remains partial; live charging/full enforcement OFF; Evia paused.
+
 ## Next executable slice
 **Split renewal execution, then remaining stock states and obligations.**
 Inspect the existing transition harness and choose a fresh isolated sandbox fixture to verify actual next-period invoice quantity after split. Cessation 2→1 and restoration 2→1→2 actual renewals are accepted; do not repeat those as standalone acceptance. Keep final-dwelling zero-stock behavior separately explicit. Do not advance protected or previously accepted clocks.

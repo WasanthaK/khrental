@@ -6,6 +6,14 @@
 
 The dated checkpoints are retained as evidence history. Their earlier “current”, “remaining” and “next” wording describes that checkpoint only; use the controlling queue for today's work. Accepted signing, the controlled rental lifecycle, retained-history role checks and completed reservation cases must not be reopened. No claim is made that the original paid-test SQL error's exact cause was identified.
 
+## Split renewal — harness merged; execution pending — 15 November 2026
+
+[PR #665](https://github.com/WasanthaK/khrental/pull/665) merged as `16a619710cd929cee82a470fe03eb1a0d6557461` after syntax validation, lint, authorization tests and build passed (43706960779, 43706960788). Post-merge verification 43707124525 also passed. The fresh `split-renewal` scenario requires three exact units replacing one of two dwellings, an unchanged initial USD 10 invoice and an actual USD 20 renewal for four dwellings; reconciliation, retries, retained identities/history, privacy, protected accounts and cleanup are mandatory.
+
+**Execution is pending, not accepted.** Browser submissions closed the dispatch form, but workflow-page and Actions API readback showed no new run. No split fixture/provider mutation is evidenced. Prepared operation UUID: `97d45d47-899e-490f-bcc1-0a09a02a3431`; expected serving build: `e0f7e821b8e511898836f71df86fde2fa8399463`. Before submitting again, inspect recent dispatches; if this operation has run, do not replay it. Use scenario `split-renewal`, branch `main`, confirmation `VERIFY-PAID-INVENTORY`. The workflow independently verifies serving build before mutation. Do not change triggers, permissions or flags to bypass this dispatch issue.
+
+Restoration and cessation renewals remain accepted within their recorded service/SQL scope. R5 remains partial; live charging/full enforcement OFF; Evia paused.
+
 ## Actual renewal after restoration — bounded pass — 15 November 2026
 
 [Run 43706276982](https://github.com/WasanthaK/khrental/actions/runs/43706276982) passed twelve groups, with cleanup at **16:26:07 Asia/Colombo**. A fresh sandbox fixture ceased and restored the same dwelling before renewal (2→1→2). The original USD 10 paid invoice remained; the next invoice automatically paid USD 10 for exactly two dwellings, with only the original and renewal invoices present. Application reconciliation cleared pending quantity; exact transition and refresh retries preserved stock and billing. Restoration history, the restored property's available state, the second property's inactive state and both public opt-outs were verified. Protected accounts, subscriptions and clocks were unchanged.
@@ -3873,3 +3881,4 @@ Owner explicitly instructed “merge” after the concrete merge/deployment appr
 Independent public build-info read still returned prior build `2760ad031f5cc92dcfc4d80e0bb9eccbf1694fe7`. Do not claim the new private preview is live or enable pilot controls with the new SHA until actual serving/readiness evidence passes. Existing public listing gates were not enabled by this merge.
 
 Existing [read-only revision diagnostic #40517299900](https://github.com/WasanthaK/khrental/actions/runs/40517299900), job `122234189706`, was dispatched with `restart_latest=false`; queued at the latest inspection. No restart, traffic shift, scaling, SQL migration or speculative source correction was performed. **Next dependency:** inspect this diagnostic, identify the startup/readiness cause, complete the authorized deployment and record matching build/SQL acceptance; then resume the private listing preview. Original R1 remains closed, R3 single-replica condition and deferred invoice R2 remain unchanged.
+
