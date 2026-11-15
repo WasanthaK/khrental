@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
-          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion ]]
+          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion || "$SCENARIO" == http-transitions ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
