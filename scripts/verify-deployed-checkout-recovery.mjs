@@ -1,5 +1,5 @@
-// BL08.11: one unpaid sandbox Checkout response-loss proof, or read-only
-// inspection / bounded cleanup of that same fixture. Never replay verification.
+// BL08.11: one unpaid sandbox Checkout response-loss proof, either still open
+// or explicitly expired before recovery. Inspection / cleanup never replay it.
 // Imports deliberately use the unchanged serving image's implementation.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -13,6 +13,8 @@ import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
 const operation=process.env.CHECKOUT_RECOVERY_OPERATION;
 const mode=process.env.CHECKOUT_RECOVERY_MODE;
+const scenario=process.env.CHECKOUT_RECOVERY_SCENARIO;
+const expiredScenario=scenario==='expired-before-recovery';
 const confirmations={verify:'VERIFY-CHECKOUT-RECOVERY',inspect:'INSPECT-CHECKOUT-RECOVERY',cleanup:'CLEANUP-CHECKOUT-RECOVERY'};
 const protectedIds=['80a4b392-13f8-484d-81fa-a110a6ef75f0','2383f4fc-e107-4ac7-9e13-39db501f40ec'];
 const originalScope=process.env.MANAGEMENT_RECOVERY_TENANT_IDS;
@@ -26,18 +28,19 @@ const cleanupAction='sandbox.checkout_recovery.cleaned';
 const checks=[];
 let stage='input',fixtureCreated=false,fixtureObserved=false,cleanupVerified=false,cleanupAttempted=false;
 let baseline=null,origin=null,customerId=null,sessionId=null,customerEventId=null;
-let customerKey=null,checkoutKey=null,customerPosts=0,checkoutPosts=0,recoveryProviderWrites=0,cleanupPosts=0;
-let responseDiscarded=false,expiryResponseRecovered=false;
+let customerKey=null,checkoutKey=null,customerPosts=0,checkoutPosts=0,recoveryProviderWrites=0,prepExpiryPosts=0,cleanupPosts=0;
+let responseDiscarded=false,prepExpiryResponseRecovered=false,expiryResponseRecovered=false;
 const lower=value=>String(value).toLowerCase();
-const emit=(name,value)=>console.log(name+'='+JSON.stringify({operation,mode,...value}));
+const emit=(name,value)=>console.log(name+'='+JSON.stringify({operation,mode,scenario,...value}));
 const progress=name=>{
   stage=name;
-  emit('CHECKOUT_RECOVERY_PROGRESS',{stage,fixtureCreated,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,cleanupPosts});
+  emit('CHECKOUT_RECOVERY_PROGRESS',{stage,fixtureCreated,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,prepExpiryPosts,cleanupPosts});
 };
 const check=name=>{checks.push(name);emit('CHECKOUT_RECOVERY_CHECK',{name});};
 const fail=code=>Object.assign(new Error(code),{code,status:503});
 const read=(path,params)=>stripe.request('GET',path,params);
-const fixtureStamp=actorId=>({version:1,operation,actorId:lower(actorId),stockId:operation});
+const legacyFixtureStamp=actorId=>({version:1,operation,actorId:lower(actorId),stockId:operation});
+const fixtureStamp=actorId=>({version:2,scenario,operation,actorId:lower(actorId),stockId:operation});
 const stockRecord=()=>({kind:'property',payload:{id:operation,name:'Private unpaid Checkout recovery stock',
   propertytype:'house',country_code:'LK',availability:'inactive',rentalvalues:{listingCategory:'residential'}}});
 
@@ -82,6 +85,7 @@ async function verifyProtected() {
 async function preflight() {
   assert.match(operation||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(Object.hasOwn(confirmations,mode));
+  assert.ok(['open','expired-before-recovery'].includes(scenario));
   assert.equal(process.env.CHECKOUT_RECOVERY_CONFIRMATION,confirmations[mode]);
   assert.ok(!protectedIds.includes(operation));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY','MANAGEMENT_RECOVERY_WORKER_ENABLED']){
@@ -121,7 +125,7 @@ async function createFixture() {
     await q("INSERT dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json,subscription_status) VALUES(@operation,@account,@price,'LK','[]','pending')",
       {operation,account:BILLING_ACCOUNT,price:BILLING_PRICE});
     await store.audit(q,{tenantId:operation,actorId,action:fixtureAction,resourceId:operation,
-      current:fixtureStamp(actorId),reason:'Version 1 isolated unpaid Checkout recovery fixture; no credentials or consent created.'});
+      current:fixtureStamp(actorId),reason:'Version 2 scenario-bound isolated unpaid Checkout recovery fixture; no credentials or consent created.'});
   });
   fixtureCreated=true;progress('prepare_private_stock');
   await store.stageStock({tenantId:operation,actorId,records:[stockRecord()],
@@ -153,7 +157,11 @@ async function loadFixture() {
   const audit=await store.read('SELECT * FROM dbo.management_billing_audit WHERE tenant_id=@operation ORDER BY id',{operation});
   const markers=audit.filter(row=>row.action===fixtureAction);
   assert.equal(markers.length,1);assert.equal(lower(markers[0].resource_id),operation);
-  assert.equal(lower(markers[0].actor_id),lower(actor.id));assert.equal(markers[0].current_hash,hash(fixtureStamp(actor.id)));
+  assert.equal(lower(markers[0].actor_id),lower(actor.id));
+  // Accepted v1 fixtures were open-only. They remain inspectable/cleanable with
+  // that explicit selector, but cannot authorize the new scenario or any replay.
+  const legacyOpen=mode!=='verify'&&scenario==='open'&&markers[0].current_hash===hash(legacyFixtureStamp(actor.id));
+  if(markers[0].current_hash!==hash(fixtureStamp(actor.id))&&!legacyOpen){throw fail('CHECKOUT_FIXTURE_SCENARIO_MISMATCH');}
   const properties=await store.read('SELECT * FROM dbo.properties WHERE tenant_id=@operation',{operation});
   const units=await store.read('SELECT * FROM dbo.property_units WHERE tenant_id=@operation',{operation});
   assert.deepEqual(properties,[]);assert.deepEqual(units,[]);
@@ -309,7 +317,7 @@ async function cleanupFixture() {
     assert.ok(receipts.length<=1);
     if(!receipts.length){
       await store.audit(q,{tenantId:operation,actorId:fixture.actor.id,action:cleanupAction,resourceId:operation,
-        current:{operation,customerId:provider.customer?.id||null,sessionId:provider.session?.id||null,
+        current:{operation,scenario,customerId:provider.customer?.id||null,sessionId:provider.session?.id||null,
           sessionExpired:Boolean(provider.session),noSession:!provider.session,recordsRetained:true},
         reason:'Exact unpaid Checkout closed or no Checkout intent exists; private fixture deactivated with all journal and staging history retained.'});
     }
@@ -326,7 +334,7 @@ async function cleanupFixture() {
   emit('CHECKOUT_RECOVERY_CLEANUP',{verified:true,fixtureInactive:true,sessionExpired:Boolean(provider.session),
     noSession:!provider.session,noSubscription:true,noInvoice:true,noPayment:true,recordsRetained:true,
     pendingStockRetained:after.stock.length,protectedBillingUnchanged:true,workerScopeUnchanged:true,
-    cleanupPosts,expiryResponseRecovered});
+    prepExpiryPosts,cleanupPosts,prepExpiryResponseRecovered,expiryResponseRecovered});
 }
 
 async function verify() {
@@ -390,6 +398,26 @@ async function verify() {
   assert.equal(provider.customer.id,customerId);assert.equal(provider.session.id,sessionId);
   assert.equal(provider.session.status,'open');assert.equal(provider.sessions.length,1);
   check('unique_bound_checkout_exhaustive_readback');
+  if(expiredScenario){
+    const pendingHash=hash(fixture),originalCustomer=provider.customer,originalSession=provider.session;
+    progress('expire_original_session_before_recovery');assert.equal(++prepExpiryPosts,1);
+    try{
+      await stripe.request('POST','/v1/checkout/sessions/'+sessionId+'/expire',{},
+        'quixo:'+fixture.command.tenant_id+':'+fixture.command.id+':acceptance-pre-recovery-expire');
+    }catch{prepExpiryResponseRecovered=true;}
+    // A lost expiry response is resolved only by exact owned-session readback.
+    // Never repeat the prep POST or edit journal time to make recovery eligible.
+    fixture=await loadFixture();assert.equal(hash(fixture),pendingHash);
+    provider=await providerState(fixture);assert.equal(provider.session.id,sessionId);
+    assert.equal(provider.session.status,'expired');assert.equal(provider.sessions.length,1);
+    assert.deepEqual(provider.customer,originalCustomer);
+    for(const field of ['id','customer','metadata','mode','currency','amount_total','payment_status',
+      'subscription','invoice','payment_intent','setup_intent','success_url','cancel_url']){
+      assert.deepEqual(provider.session[field],originalSession[field]);
+    }
+    assert.equal(cleanupPosts,0);assert.equal(recoveryProviderWrites,0);
+    check('original_session_expired_before_recovery');
+  }
   progress('wait_for_natural_sql_retry_due');
   let due=false;
   for(let attempt=0;attempt<36;attempt++){
@@ -406,25 +434,34 @@ async function verify() {
   const recoveredService=createBillingService({store,stripe:readbackOnly,env});
   progress('bounded_service_recovery');
   const result=await recoveredService.recoverOperation({tenantId:operation,id:operation});
-  assert.equal(result.sessionId,sessionId);assert.equal(new URL(result.url).origin,'https://checkout.stripe.com');
-  assert.ok(!result.requiresNewSession);assert.equal(recoveryProviderWrites,0);
+  assert.equal(result.sessionId,sessionId);
+  if(expiredScenario){
+    assert.equal(Object.hasOwn(result,'url'),false);
+    assert.deepEqual(result,{sessionId,requiresNewSession:true,message:'Checkout expired. Open sandbox checkout again.'});
+  }else{
+    assert.equal(new URL(result.url).origin,'https://checkout.stripe.com');assert.ok(!result.requiresNewSession);
+  }
+  assert.equal(recoveryProviderWrites,0);
   fixture=await loadFixture();assert.equal(fixture.command.status,'completed');
   assert.equal(fixture.recovery.state,'succeeded');assert.equal(fixture.recovery.attempts,2);
   assert.equal(fixture.steps.length,2);assert.ok(fixture.steps.every(step=>step.completed_at));
   assert.equal(fixture.steps.find(step=>step.name==='create_checkout').idempotency_key,checkoutKey);
   assert.equal(fixture.audit.filter(row=>row.action==='sandbox.checkout.recovered').length,1);
-  assert.deepEqual(JSON.parse(fixture.command.result_json),result);
+  const savedResult=JSON.parse(fixture.command.result_json);assert.deepEqual(savedResult,result);
   assert.deepEqual(fixture.account,{...accountBefore,stripe_customer_id:customerId,inventory_json:JSON.stringify(inventory)});
-  check('original_checkout_recovered_once');
+  check(expiredScenario?'expired_checkout_recovered_to_terminal_result':'original_checkout_recovered_once');
   progress('completed_exact_retry');
   const completedHash=hash(fixture);
   const beforeProvider=await providerState(fixture);
-  assert.deepEqual(await recoveredService.checkout(args),result);
+  if(expiredScenario){
+    await assert.rejects(recoveredService.checkout(args),error=>error.status===409&&
+      error.code==='BILLING_REVIEW_EXPIRED'&&error.message==='Checkout expired. Open sandbox checkout again.');
+  }else{assert.deepEqual(await recoveredService.checkout(args),result);}
   assert.deepEqual(await recoveredService.recoverOperation({tenantId:operation,id:operation}),result);
   fixture=await loadFixture();assert.equal(hash(fixture),completedHash);
   provider=await providerState(fixture);assert.deepEqual(provider,beforeProvider);
   assert.equal(recoveryProviderWrites,0);assert.equal(customerPosts,1);assert.equal(checkoutPosts,1);
-  check('completed_exact_retry_without_provider_write');
+  check(expiredScenario?'expired_checkout_retry_refused_without_provider_write':'completed_exact_retry_without_provider_write');
   assert.equal(hash(fixture.stock),stockHash);assert.deepEqual(await store.inventory(operation),[]);
   assert.equal(fixture.stock[0].status,'pending');assert.equal(fixture.account.initial_payment_verified,false);
   for(const table of ['invoices','payments']){
@@ -432,16 +469,21 @@ async function verify() {
   }
   check('no_payment_subscription_invoice_or_stock_promotion');
   await verifyProtected();check('protected_accounts_clocks_and_worker_scope_unchanged');
-  await cleanupFixture();check('cleanup_retains_all_journal_and_stock_history');
+  await cleanupFixture();assert.equal(prepExpiryPosts,expiredScenario?1:0);assert.equal(cleanupPosts,expiredScenario?0:1);
+  check('cleanup_retains_all_journal_and_stock_history');
   emit('CHECKOUT_RECOVERY_PASS',{passed:true,sandbox:true,checks,scope:'genuine sandbox provider + deployed service/SQL',
     customerId,sessionId,customerEventId,originalCustomerKey:customerKey,originalCheckoutKey:checkoutKey,
-    customerPosts,checkoutPosts,recoveryProviderWrites,cleanupPosts,responseDiscarded,
-    originalIdempotencyKeyPreserved:true,exactRetryAccepted:true,checkoutSessions:1,
+    customerPosts,checkoutPosts,recoveryProviderWrites,prepExpiryPosts,cleanupPosts,responseDiscarded,prepExpiryResponseRecovered,
+    originalIdempotencyKeyPreserved:true,exactRetryAccepted:!expiredScenario,originalRecoveryRetryStable:true,
+    terminalResult:expiredScenario?savedResult:null,terminalRequiresNewSession:result.requiresNewSession===true,
+    terminalHasHostedUrl:Object.hasOwn(result,'url'),terminalGuidanceAccepted:expiredScenario&&result.message==='Checkout expired. Open sandbox checkout again.',
+    checkoutRetryRejected:expiredScenario,checkoutRetryCode:expiredScenario?'BILLING_REVIEW_EXPIRED':null,checkoutSessions:1,
     subscriptionsCreated:0,invoicesCreated:0,paymentIntentsCreated:0,chargesCreated:0,
     stockUnchanged:true,pendingStockPreserved:true,actualProperties:0,actualUnits:0,
     fixtureInactive:true,sessionExpired:true,recordsRetained:true,protectedBillingUnchanged:true,workerScopeUnchanged:true,
     processLocalStagingReadiness:true,servingConfigurationChanged:false,automaticWorkerAccepted:false,
-    httpAccepted:false,uiAccepted:false,credentialLoginAccepted:false,liveChargingEnabled:false});
+    httpAccepted:false,uiAccepted:false,credentialLoginAccepted:false,liveChargingEnabled:false,
+    wholeProcessCrashAccepted:false,naturalCheckoutExpiryTimingAccepted:false});
 }
 
 async function inspect() {
@@ -480,7 +522,8 @@ try{
   }
   emit('CHECKOUT_RECOVERY_FAILED',{stage:failedStage,code:/^[A-Z0-9_]{3,80}$/.test(error.code||'')?error.code:'UNCONFIRMED',
     sqlNumber:Number.isInteger(error.number)?error.number:null,fixtureCreated,cleanupVerified,
-    fixtureRetained:(fixtureCreated||fixtureObserved)&&!cleanupVerified,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,cleanupPosts,
+    fixtureRetained:(fixtureCreated||fixtureObserved)&&!cleanupVerified,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,prepExpiryPosts,cleanupPosts,
+    prepExpiryResponseRecovered,expiryResponseRecovered,
     replayAllowed:false,acceptance:false});
   process.exitCode=1;
 }finally{await closeMssqlPool();}
