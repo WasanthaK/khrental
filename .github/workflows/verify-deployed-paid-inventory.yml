@@ -18,8 +18,9 @@ on:
         description: Acceptance case (do not repeat an already accepted case)
         required: true
         type: choice
-        default: http-permissions
+        default: http-promotion
         options:
+          - http-promotion
           - http-permissions
           - promotion
           - transitions
@@ -47,7 +48,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 15
+    timeout-minutes: 35
     permissions:
       contents: read
       id-token: write
@@ -68,7 +69,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-PAID-INVENTORY
-          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions ]]
+          [[ "$SCENARIO" == promotion || "$SCENARIO" == transitions || "$SCENARIO" == http-permissions || "$SCENARIO" == http-promotion ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -85,6 +86,31 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Temporarily enable inventory acceptance and scope write enforcement
+        if: inputs.scenario == 'http-promotion'
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-before.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1' "$RUNNER_TEMP/enforcement-before.json" >/dev/null
+          jq '[.properties.template.containers[0].env[]? | select(.name=="MANAGEMENT_INVENTORY_SCHEMA_READY" or .name=="MANAGEMENT_CESSATION_SCHEMA_READY" or .name=="MANAGEMENT_RESTORATION_SCHEMA_READY" or .name=="MANAGEMENT_SPLIT_SCHEMA_READY" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS")]' "$RUNNER_TEMP/enforcement-before.json" > "$RUNNER_TEMP/enforcement-original.json"
+          jq -e 'all(.[]; has("value")) and all(.[]; .name!="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" or .value=="false")' "$RUNNER_TEMP/enforcement-original.json" >/dev/null
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/enforcement-before.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          echo 'RESTORE_ENFORCEMENT=true' >> "$GITHUB_ENV"
+          az containerapp update -g khrental-prod-rg -n khrental-app --set-env-vars "MANAGEMENT_INVENTORY_SCHEMA_READY=true" "MANAGEMENT_CESSATION_SCHEMA_READY=true" "MANAGEMENT_RESTORATION_SCHEMA_READY=true" "MANAGEMENT_SPLIT_SCHEMA_READY=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS=$OPERATION_ID" -o none
+          ready=false
+          for attempt in $(seq 1 60); do
+            az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-ready.json"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+          jq -e --arg id "$OPERATION_ID" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" and .value=="true") and any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS" and .value==$id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null
+          jq -r '"HTTP_SCOPE_ENABLED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" > enforcement-config.txt
       - name: Verify paid transitions through deployed service and sandbox
         shell: bash
         run: |
@@ -104,17 +130,61 @@ jobs:
           script -q -e -c "$invocation" /dev/null | tee paid-inventory.txt
           if grep -Eq 'PAID_INVENTORY_FAILED=|PAID_INVENTORY_CLEANUP_FAILED' paid-inventory.txt; then exit 1; fi
           grep -Eo 'PAID_INVENTORY_PASS=\{[^}]+\}' paid-inventory.txt | tr -d '\r' | sed 's/^PAID_INVENTORY_PASS=//' > paid-inventory-summary.json
-          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions")) and (.uiAccepted==false) and (.checks|length)==10' paid-inventory-summary.json
-      - name: Verify unchanged revision and public health
+          jq -e --arg scenario "$SCENARIO" '.scenario==$scenario and .passed and .fixtureInactive and .subscriptionCanceled and .protectedBillingUnchanged and (.httpAccepted==($scenario=="http-permissions" or $scenario=="http-promotion")) and (.uiAccepted==false) and (.checks|length)==(if $scenario=="http-promotion" then 12 else 10 end)' paid-inventory-summary.json
+      - name: Restore exact original feature and enforcement configuration
+        if: always() && env.RESTORE_ENFORCEMENT == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          for name in MANAGEMENT_INVENTORY_SCHEMA_READY MANAGEMENT_CESSATION_SCHEMA_READY MANAGEMENT_RESTORATION_SCHEMA_READY MANAGEMENT_SPLIT_SCHEMA_READY MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS; do
+            if jq -e --arg name "$name" 'any(.[]; .name==$name)' "$RUNNER_TEMP/enforcement-original.json" >/dev/null; then
+              value=$(jq -r --arg name "$name" '.[] | select(.name==$name) | .value' "$RUNNER_TEMP/enforcement-original.json")
+              args+=(--set-env-vars "$name=$value")
+            else
+              args+=(--remove-env-vars "$name")
+            fi
+          done
+          # Separate set/remove lists avoid repeated argparse options dropping values.
+          set_values=(); remove_names=()
+          for ((i=0;i<${#args[@]};i+=2)); do
+            if [ "${args[i]}" = --set-env-vars ]; then set_values+=("${args[i+1]}"); else remove_names+=("${args[i+1]}"); fi
+          done
+          restore=(); if [ "${#set_values[@]}" -gt 0 ]; then restore+=(--set-env-vars "${set_values[@]}"); fi
+          if [ "${#remove_names[@]}" -gt 0 ]; then restore+=(--remove-env-vars "${remove_names[@]}"); fi
+          az containerapp update -g khrental-prod-rg -n khrental-app "${restore[@]}" -o none
+          ready=false
+          for attempt in $(seq 1 60); do
+            az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-restored.json"
+            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-restored.json" >/dev/null; then ready=true; break; fi
+            sleep 5
+          done
+          test "$ready" = true
+          jq '[.properties.template.containers[0].env[]? | select(.name=="MANAGEMENT_INVENTORY_SCHEMA_READY" or .name=="MANAGEMENT_CESSATION_SCHEMA_READY" or .name=="MANAGEMENT_RESTORATION_SCHEMA_READY" or .name=="MANAGEMENT_SPLIT_SCHEMA_READY" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" or .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS")] | sort_by(.name)' "$RUNNER_TEMP/enforcement-restored.json" > "$RUNNER_TEMP/enforcement-actual.json"
+          jq 'sort_by(.name)' "$RUNNER_TEMP/enforcement-original.json" > "$RUNNER_TEMP/enforcement-expected.json"
+          diff -u "$RUNNER_TEMP/enforcement-expected.json" "$RUNNER_TEMP/enforcement-actual.json"
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/enforcement-restored.json")
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/health >/dev/null
+          jq -r '"HTTP_SCOPE_RESTORED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-restored.json" | tee -a enforcement-config.txt
+      - name: Verify restored configuration and public health
         if: always()
         shell: bash
         run: |
           set -euo pipefail
           if [ ! -f "$RUNNER_TEMP/app-before.json" ]; then exit 0; fi
           az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/app-after.json"
-          for side in before after; do
-            jq '{template:.properties.template,configuration:.properties.configuration,ready:.properties.latestReadyRevisionName}' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
-          done
+          if [ "$SCENARIO" = http-promotion ]; then
+            cp "$RUNNER_TEMP/enforcement-before.json" "$RUNNER_TEMP/app-before.json"
+            jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-after.json" >/dev/null
+            for side in before after; do
+              jq '{template:.properties.template,configuration:.properties.configuration} | .template.containers |= map(.env |= sort_by(.name))' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
+            done
+          else
+            for side in before after; do
+              jq '{template:.properties.template,configuration:.properties.configuration,ready:.properties.latestReadyRevisionName}' "$RUNNER_TEMP/app-$side.json" > "$RUNNER_TEMP/config-$side.json"
+            done
+          fi
           diff -u "$RUNNER_TEMP/config-before.json" "$RUNNER_TEMP/config-after.json" >/dev/null
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
           curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"'
@@ -125,6 +195,8 @@ jobs:
           path: |
             paid-inventory.txt
             paid-inventory-summary.json
+            enforcement-config.txt
           retention-days: 30
+
 
 
