@@ -110,7 +110,8 @@ const cleanupFixture=async()=>{
           await q("UPDATE dbo.app_users SET status='inactive' WHERE id=@id AND tenant_id=@tenantId",{tenantId,id});
         }
         if(foreignTenant){await q("UPDATE dbo.tenants SET status='inactive' WHERE id=@foreignTenant",{foreignTenant});}
-        await q("UPDATE dbo.properties SET status='inactive' WHERE tenant_id=@tenantId",{tenantId});
+        // Ceased records reject all UPDATEs, including a redundant status write.
+        await q("UPDATE dbo.properties SET status='inactive' WHERE tenant_id=@tenantId AND status<>'inactive'",{tenantId});
         await q('UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME() WHERE tenant_id=@tenantId',{tenantId});
         await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId});
         await q("UPDATE dbo.app_users SET status='inactive' WHERE id=@actorId AND tenant_id=@tenantId",{tenantId,actorId});
@@ -119,6 +120,7 @@ const cleanupFixture=async()=>{
         if(error.number!==1205||attempt===2){throw error;}
         console.log('PAID_CLEANUP_SQL_DEADLOCK_RETRY='+String(attempt+1));await delay(1000*(attempt+1));
       }}
+      assert.equal((await store.read("SELECT id FROM dbo.properties WHERE tenant_id=@tenantId AND (status IS NULL OR status<>'inactive')",{tenantId})).length,0);
       assert.equal((await store.read("SELECT id FROM dbo.tenants WHERE id=@tenantId AND status='inactive'",{tenantId})).length,1);
       assert.equal((await store.read("SELECT id FROM dbo.app_users WHERE id=@actorId AND status='inactive'",{actorId})).length,1);
       assert.equal((await store.read("SELECT id FROM dbo.tenant_memberships WHERE tenant_id=@tenantId AND status='active'",{tenantId})).length,0);
