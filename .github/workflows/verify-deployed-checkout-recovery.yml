@@ -25,8 +25,8 @@ on:
         description: Fresh scenario to verify, or the original fixture scenario for inspect or cleanup
         required: true
         type: choice
-        default: expired-before-recovery
-        options: [open, expired-before-recovery]
+        default: completed-before-recovery
+        options: [open, expired-before-recovery, completed-before-recovery]
       confirmation:
         description: VERIFY-CHECKOUT-RECOVERY, INSPECT-CHECKOUT-RECOVERY or CLEANUP-CHECKOUT-RECOVERY
         required: true
@@ -71,22 +71,25 @@ jobs:
           assert checked >= 5, 'Workflow shell blocks were not found'
           source = '\n'.join(lines) + '\n'
           gate = textwrap.dedent(source.split("          python3 - <<'CHECKOUT_RECOVERY_PROOF'\n", 1)[1].split('          CHECKOUT_RECOVERY_PROOF\n', 1)[0])
+          live = textwrap.dedent(source.split("          cat > \"$RUNNER_TEMP/checkout-live-output.py\" <<'CHECKOUT_RECOVERY_LIVE'\n", 1)[1].split('          CHECKOUT_RECOVERY_LIVE\n', 1)[0])
+          compile(live, 'checkout-live-output.py', 'exec')
           assignments = [node for node in ast.walk(ast.parse(gate)) if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'expected_checks_by_scenario' for target in node.targets)]
           assert len(assignments) == 1, 'Proof check allowlist was not found'
           expected = ast.literal_eval(assignments[0].value)
           harness = Path('scripts/verify-deployed-checkout-recovery.mjs').read_text()
           actual = {name for call in re.findall(r'\bcheck\(([^;]+)\)', harness) for name in re.findall(r"'([a-z][a-z0-9_]+)'", call)}
-          assert set(expected) == {'open', 'expired-before-recovery'}
+          assert set(expected) == {'open', 'expired-before-recovery', 'completed-before-recovery'}
           assert len(expected['open']) == len(set(expected['open'])) == 12
           assert len(expected['expired-before-recovery']) == len(set(expected['expired-before-recovery'])) == 13
+          assert len(expected['completed-before-recovery']) == len(set(expected['completed-before-recovery'])) == 16
           assert actual == {name for names in expected.values() for name in names}, 'Harness and workflow evidence contracts differ'
-          print(f'Validated {checked} shell blocks and exact open/expired proof check sets without executing deployed work')
+          print(f'Validated {checked} shell blocks, live marker sanitizer and exact scenario proof check sets without executing deployed work')
           PY
   verify:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 18
+    timeout-minutes: 22
     permissions:
       contents: read
       id-token: write
@@ -112,7 +115,7 @@ jobs:
             *) echo 'CHECKOUT_RECOVERY_BLOCKED=invalid_mode_confirmation' >&2; exit 1 ;;
           esac
           case "$CHECKOUT_RECOVERY_SCENARIO" in
-            open|expired-before-recovery) ;;
+            open|expired-before-recovery|completed-before-recovery) ;;
             *) echo 'CHECKOUT_RECOVERY_BLOCKED=invalid_scenario' >&2; exit 1 ;;
           esac
           [[ "$CHECKOUT_RECOVERY_OPERATION" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
@@ -175,10 +178,66 @@ jobs:
           command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-checkout-recovery.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='$remote';fs.writeFileSync(p,b,{flag:'wx'});process.env.CHECKOUT_RECOVERY_OPERATION='$CHECKOUT_RECOVERY_OPERATION';process.env.CHECKOUT_RECOVERY_MODE='$CHECKOUT_RECOVERY_MODE';process.env.CHECKOUT_RECOVERY_SCENARIO='$CHECKOUT_RECOVERY_SCENARIO';process.env.CHECKOUT_RECOVERY_CONFIRMATION='$CHECKOUT_RECOVERY_CONFIRMATION';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
           test "${#command}" -lt 2000
           printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$SERVING_REVISION" --command "$command"
-          remote_rc=0
-          script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/checkout-result.txt" 2>&1 || remote_rc=$?
+          # Flush the local PTY and Azure Python output. The service transport can
+          # still delay delivery; exact fixture metadata permits read-only discovery.
+          # Only schema-validated IDs/counts are public while raw bytes stay private.
+          cat > "$RUNNER_TEMP/checkout-live-output.py" <<'CHECKOUT_RECOVERY_LIVE'
+          import json, os, re, sys
+          from pathlib import Path
+          operation = os.environ['CHECKOUT_RECOVERY_OPERATION']
+          mode = os.environ['CHECKOUT_RECOVERY_MODE']
+          scenario = os.environ['CHECKOUT_RECOVERY_SCENARIO']
+          invalid = False
+          def forward(line):
+              global invalid
+              line = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', line).strip()
+              match = re.fullmatch(r'CHECKOUT_RECOVERY_(READY|WAITING)=(.*)', line)
+              if not match:
+                  return
+              try:
+                  value = json.loads(match.group(2))
+                  assert isinstance(value, dict)
+                  assert value.get('operation') == operation
+                  assert value.get('mode') == mode == 'verify'
+                  assert value.get('scenario') == scenario == 'completed-before-recovery'
+                  keys = {'operation', 'mode', 'scenario'}
+                  if match.group(1) == 'READY':
+                      assert set(value) == keys | {'commandId', 'customerId', 'sessionId', 'waitSeconds'}
+                      assert value['commandId'] == operation
+                      assert isinstance(value['customerId'], str) and re.fullmatch(r'cus_[A-Za-z0-9]+', value['customerId'])
+                      assert isinstance(value['sessionId'], str) and re.fullmatch(r'cs_test_[A-Za-z0-9]+', value['sessionId'])
+                      assert type(value['waitSeconds']) is int and value['waitSeconds'] == 600
+                  else:
+                      assert set(value) == keys | {'elapsedSeconds'}
+                      assert type(value['elapsedSeconds']) is int and 0 <= value['elapsedSeconds'] <= 600
+              except (ValueError, AssertionError, TypeError):
+                  invalid = True
+                  return
+              print('CHECKOUT_RECOVERY_LIVE_' + match.group(1) + '=' + json.dumps(value, separators=(',', ':')), flush=True)
+          pending = b''
+          with (Path(os.environ['RUNNER_TEMP']) / 'checkout-result.txt').open('wb') as raw:
+              while chunk := sys.stdin.buffer.read1(65536):
+                  raw.write(chunk)
+                  raw.flush()
+                  pending += chunk
+                  while b'\n' in pending:
+                      line, pending = pending.split(b'\n', 1)
+                      forward(line.decode('utf-8', errors='replace'))
+              if pending:
+                  forward(pending.decode('utf-8', errors='replace'))
+          raise SystemExit(invalid)
+          CHECKOUT_RECOVERY_LIVE
+          set +e
+          PYTHONUNBUFFERED=1 script -q -e -f -c "$invocation" /dev/null 2>&1 | python3 -u "$RUNNER_TEMP/checkout-live-output.py"
+          execution_status=("${PIPESTATUS[@]}")
+          set -e
+          remote_rc=${execution_status[0]}
+          stream_rc=${execution_status[1]}
           printf '%s\n' "$remote_rc" > "$RUNNER_TEMP/checkout-exit-code.txt"
+          printf '%s\n' "$stream_rc" > "$RUNNER_TEMP/checkout-live-exit-code.txt"
           echo "CHECKOUT_RECOVERY_EXEC_EXIT_CODE=$remote_rc"
+          echo "CHECKOUT_RECOVERY_STREAM_EXIT_CODE=$stream_rc"
+          if [ "$remote_rc" = 0 ]; then exit "$stream_rc"; fi
           exit "$remote_rc"
       - name: Retain sanitized evidence and require mode-specific proof
         if: always() && steps.execute.outcome != 'skipped'
@@ -198,21 +257,24 @@ jobs:
           raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
           rc_path = root / 'checkout-exit-code.txt'
           rc = int(rc_path.read_text()) if rc_path.exists() else -1
+          stream_path = root / 'checkout-live-exit-code.txt'
+          stream_rc = int(stream_path.read_text()) if stream_path.exists() else -1
           records, errors = [], []
           def safe(value):
               if isinstance(value, dict):
-                  return all(not re.search(r'secret|password|authorization|access.?token|refresh.?token|email|checkout.?url|success.?url|cancel.?url', key, re.I) and safe(item) for key, item in value.items())
+                  return all(not re.search(r'secret|password|authorization|access.?token|refresh.?token|email|checkout.?url|success.?url|cancel.?url|card.?number|(?:^|[_-])(?:cvc|cvv|pan)(?:$|[_-])', key, re.I) and safe(item) for key, item in value.items())
               if isinstance(value, list):
                   return all(safe(item) for item in value)
               if isinstance(value, str):
-                  return not re.search(r'https?://|(?:sk|rk|pk)_(?:test|live)_', value, re.I)
+                  return not re.search(r'https?://|(?:sk|rk|pk)_(?:test|live)_|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', value, re.I)
               return value is None or isinstance(value, (bool, int, float))
           for line in raw.splitlines():
-              match = re.fullmatch(r'CHECKOUT_RECOVERY_(CHECK|PROGRESS|CLEANUP|PASS|INSPECT|FAILED|CLEANUP_FAILED)=(\{.*\})', line.strip())
+              match = re.fullmatch(r'CHECKOUT_RECOVERY_(CHECK|PROGRESS|READY|WAITING|CLEANUP|PASS|INSPECT|FAILED|CLEANUP_FAILED)=(.*)', line.strip())
               if not match:
                   continue
               try:
                   value = json.loads(match.group(2))
+                  assert isinstance(value, dict)
                   assert safe(value)
                   assert value.get('operation') == operation
                   assert value.get('mode') == mode
@@ -223,6 +285,8 @@ jobs:
               records.append((match.group(1), value))
           if rc != 0:
               errors.append('remote_execution_unconfirmed')
+          if stream_rc != 0:
+              errors.append('live_output_unconfirmed')
           if any(kind in ['FAILED', 'CLEANUP_FAILED'] for kind, _ in records):
               errors.append('harness_failed')
           selected = {'verify': 'PASS', 'inspect': 'INSPECT', 'cleanup': 'CLEANUP'}.get(mode)
@@ -232,29 +296,73 @@ jobs:
               errors.append('missing_or_ambiguous_final_proof')
           expected_checks_by_scenario = {
               'open': ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'natural_sql_backoff_without_clock_edits', 'original_checkout_recovered_once', 'completed_exact_retry_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history'],
-              'expired-before-recovery': ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'original_session_expired_before_recovery', 'natural_sql_backoff_without_clock_edits', 'expired_checkout_recovered_to_terminal_result', 'expired_checkout_retry_refused_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history']
+              'expired-before-recovery': ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'original_session_expired_before_recovery', 'natural_sql_backoff_without_clock_edits', 'expired_checkout_recovered_to_terminal_result', 'expired_checkout_retry_refused_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history'],
+              'completed-before-recovery': ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'hosted_payment_completed_before_recovery', 'natural_sql_backoff_without_clock_edits', 'completed_checkout_recovered_to_terminal_result', 'completed_checkout_retry_refused_without_provider_write', 'paid_recovery_keeps_stock_pending_until_refresh', 'paid_refresh_promotes_exact_private_stock', 'paid_refresh_retry_preserves_billing_and_promotion', 'single_paid_checkout_and_financial_effect', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history']
           }
           if scenario not in expected_checks_by_scenario:
               errors.append('invalid_scenario')
           cleanup = [value for kind, value in records if kind == 'CLEANUP']
+          def identifier(value, pattern):
+              return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+          def integers(value, expected):
+              return all(type(value.get(key)) is int and value[key] == count for key, count in expected.items())
+          def paid_cleanup(value, allow_expiry_race=False):
+              required = ['verified', 'fixtureInactive', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'sessionCompleted', 'subscriptionCanceled', 'initialInvoicePreserved', 'noAdditionalFinancialObjects']
+              denied = ['noSession', 'sessionExpired', 'noSubscription', 'noInvoice', 'noPayment']
+              retained = [value.get(key) for key in ['pendingStockRetained', 'promotedStockRetained']]
+              expiration = (integers(value, {'cleanupPosts': 0}) and value.get('expiryResponseRecovered', False) is False) or (allow_expiry_race and integers(value, {'cleanupPosts': 1}) and value.get('expiryResponseRecovered') is True)
+              return all(value.get(key) is True for key in required) and all(value.get(key) is False for key in denied) and expiration and type(value.get('cleanupCancellationRequests')) is int and value['cleanupCancellationRequests'] in [0, 1] and all(type(count) is int and count in [0, 1] for count in retained) and sum(retained) == 1
+          def live_marker(kind, value):
+              keys = {'operation', 'mode', 'scenario'}
+              if mode != 'verify' or scenario != 'completed-before-recovery':
+                  return False
+              if kind == 'READY':
+                  return set(value) == keys | {'commandId', 'customerId', 'sessionId', 'waitSeconds'} and value.get('commandId') == operation and value.get('customerId') == result.get('customerId') and value.get('sessionId') == result.get('sessionId') and identifier(value.get('customerId'), r'cus_[A-Za-z0-9]+') and identifier(value.get('sessionId'), r'cs_test_[A-Za-z0-9]+') and integers(value, {'waitSeconds': 600})
+              return set(value) == keys | {'elapsedSeconds'} and type(value.get('elapsedSeconds')) is int and 0 <= value['elapsedSeconds'] <= 600
+          live = [(index, kind, value) for index, (kind, value) in enumerate(records) if kind in ['READY', 'WAITING']]
+          if any(not live_marker(kind, value) for _, kind, value in live):
+              errors.append('hosted_wait_marker_unconfirmed')
           if mode == 'verify':
-              required = ['passed', 'sandbox', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'originalRecoveryRetryStable', 'stockUnchanged', 'pendingStockPreserved', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
+              completed = scenario == 'completed-before-recovery'
+              required = ['passed', 'sandbox', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'originalRecoveryRetryStable', 'fixtureInactive', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
               denied = ['automaticWorkerAccepted', 'httpAccepted', 'uiAccepted', 'credentialLoginAccepted', 'wholeProcessCrashAccepted', 'naturalCheckoutExpiryTimingAccepted', 'liveChargingEnabled', 'servingConfigurationChanged']
-              counts = {'customerPosts': 1, 'checkoutPosts': 1, 'recoveryProviderWrites': 0, 'checkoutSessions': 1, 'subscriptionsCreated': 0, 'invoicesCreated': 0, 'paymentIntentsCreated': 0, 'chargesCreated': 0, 'actualProperties': 0, 'actualUnits': 0}
-              counts.update(prepExpiryPosts=1 if scenario == 'expired-before-recovery' else 0, cleanupPosts=0 if scenario == 'expired-before-recovery' else 1)
-              if not all(result.get(key) is True for key in required) or not all(result.get(key) is False for key in denied) or not all(type(result.get(key)) is int and result[key] == count for key, count in counts.items()):
+              counts = {'customerPosts': 1, 'checkoutPosts': 1, 'recoveryProviderWrites': 0, 'checkoutSessions': 1, 'subscriptionsCreated': int(completed), 'invoicesCreated': int(completed), 'paymentIntentsCreated': int(completed), 'chargesCreated': int(completed), 'actualProperties': int(completed), 'actualUnits': 0}
+              counts.update(prepExpiryPosts=1 if scenario == 'expired-before-recovery' else 0, cleanupPosts=1 if scenario == 'open' else 0)
+              if completed:
+                  required += ['hostedCheckoutCompleted', 'pendingStockPreservedUntilRefresh', 'stockPromotedOnce', 'stockPrivate', 'promotedStockRetained', 'initialInvoicePreserved', 'noAdditionalFinancialObjects', 'subscriptionCanceled', 'sessionCompleted']
+                  denied += ['sessionExpired', 'prepExpiryResponseRecovered']
+                  counts.update(refreshProviderWrites=0, cleanupCancellationRequests=1, initialInvoiceAmountMinor=500, billedQuantity=1, promotionAuditCount=1)
+                  if result.get('currency') != 'usd' or any(key in result and result[key] is not False for key in ['stockUnchanged', 'pendingStockPreserved']):
+                      errors.append('paid_stock_or_currency_unconfirmed')
+                  if not all(identifier(result.get(key), pattern) for key, pattern in [('subscriptionId', r'sub_[A-Za-z0-9]+'), ('initialInvoiceId', r'in_[A-Za-z0-9]+'), ('paymentIntentId', r'pi_[A-Za-z0-9]+'), ('chargeId', r'ch_[A-Za-z0-9]+')]):
+                      errors.append('paid_financial_identity_unconfirmed')
+              else:
+                  required += ['stockUnchanged', 'pendingStockPreserved', 'sessionExpired']
+              if not all(result.get(key) is True for key in required) or not all(result.get(key) is False for key in denied) or not integers(result, counts) or any(kind == 'INSPECT' for kind, _ in records):
                   errors.append('acceptance_contract_unconfirmed')
               if result.get('exactRetryAccepted') is not (scenario == 'open'):
                   errors.append('checkout_retry_outcome_unconfirmed')
-              if len(cleanup) != 1 or not all(cleanup[0].get(key) is True for key in ['verified', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']):
-                  errors.append('cleanup_unconfirmed')
-              if len(cleanup) != 1 or cleanup[0].get('noSession') is not False or type(cleanup[0].get('cleanupPosts')) is not int or cleanup[0]['cleanupPosts'] != counts['cleanupPosts']:
-                  errors.append('cleanup_expiration_count_unconfirmed')
-              if scenario == 'expired-before-recovery':
-                  terminal = {'sessionId': result.get('sessionId'), 'requiresNewSession': True, 'message': 'Checkout expired. Open sandbox checkout again.'}
+              if completed:
+                  if len(cleanup) != 1 or not paid_cleanup(cleanup[0]) or not integers(cleanup[0], {'cleanupCancellationRequests': 1, 'pendingStockRetained': 0, 'promotedStockRetained': 1}):
+                      errors.append('paid_cleanup_unconfirmed')
+                  ready = [index for index, kind, _ in live if kind == 'READY']
+                  waiting = [(index, value.get('elapsedSeconds')) for index, kind, value in live if kind == 'WAITING']
+                  before_wait = [index for index, (kind, value) in enumerate(records) if kind == 'CHECK' and value.get('name') == 'unique_bound_checkout_exhaustive_readback']
+                  after_wait = [index for index, (kind, value) in enumerate(records) if kind == 'CHECK' and value.get('name') == 'hosted_payment_completed_before_recovery']
+                  elapsed = [seconds for _, seconds in waiting]
+                  if len(ready) != 1 or len(before_wait) != 1 or len(after_wait) != 1 or not before_wait[0] < ready[0] < after_wait[0] or any(not ready[0] < index < after_wait[0] for index, _ in waiting) or any(type(seconds) is not int for seconds in elapsed) or elapsed != sorted(set(elapsed)):
+                      errors.append('hosted_wait_sequence_unconfirmed')
+              else:
+                  if len(cleanup) != 1 or not all(cleanup[0].get(key) is True for key in ['verified', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']):
+                      errors.append('cleanup_unconfirmed')
+                  if len(cleanup) != 1 or cleanup[0].get('noSession') is not False or not integers(cleanup[0], {'cleanupPosts': counts['cleanupPosts']}):
+                      errors.append('cleanup_expiration_count_unconfirmed')
+              if scenario in ['expired-before-recovery', 'completed-before-recovery']:
+                  guidance = 'Checkout completed. Refresh subscription status.' if completed else 'Checkout expired. Open sandbox checkout again.'
+                  terminal = {'sessionId': result.get('sessionId'), 'requiresNewSession': True, 'message': guidance}
                   terminal_result = result.get('terminalResult')
-                  if not re.fullmatch(r'cs_test_[A-Za-z0-9]+', result.get('sessionId') or '') or not isinstance(terminal_result, dict) or terminal_result.get('requiresNewSession') is not True or terminal_result != terminal or not all(result.get(key) is True for key in ['terminalRequiresNewSession', 'terminalGuidanceAccepted', 'checkoutRetryRejected']) or result.get('terminalHasHostedUrl') is not False or result.get('checkoutRetryCode') != 'BILLING_REVIEW_EXPIRED':
-                      errors.append('expired_terminal_result_unconfirmed')
+                  if not identifier(result.get('sessionId'), r'cs_test_[A-Za-z0-9]+') or not isinstance(terminal_result, dict) or terminal_result.get('requiresNewSession') is not True or terminal_result != terminal or not all(result.get(key) is True for key in ['terminalRequiresNewSession', 'terminalGuidanceAccepted', 'checkoutRetryRejected']) or result.get('terminalHasHostedUrl') is not False or result.get('checkoutRetryCode') != 'BILLING_REVIEW_EXPIRED':
+                      errors.append('terminal_result_unconfirmed')
               expected_checks = expected_checks_by_scenario.get(scenario, [])
               checks = result.get('checks')
               observed = [value.get('name') for kind, value in records if kind == 'CHECK']
@@ -264,11 +372,13 @@ jobs:
               if not all(result.get(key) is True for key in ['readOnly', 'protectedBillingUnchanged', 'workerScopeUnchanged']) or not all(type(result.get(key)) is int and result[key] == 0 for key in ['providerWrites', 'localWrites']) or any(kind in ['PASS', 'CLEANUP'] for kind, _ in records):
                   errors.append('inspection_contract_unconfirmed')
           elif mode == 'cleanup':
-              if not all(result.get(key) is True for key in ['verified', 'fixtureInactive', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']) or not (result.get('sessionExpired') is True or result.get('noSession') is True) or any(kind in ['PASS', 'INSPECT'] for kind, _ in records):
+              unpaid = all(result.get(key) is True for key in ['verified', 'fixtureInactive', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']) and (result.get('sessionExpired') is True or result.get('noSession') is True)
+              paid = scenario == 'completed-before-recovery' and paid_cleanup(result, allow_expiry_race=True)
+              if not (unpaid or paid) or any(kind in ['PASS', 'INSPECT'] for kind, _ in records):
                   errors.append('cleanup_contract_unconfirmed')
           else:
               errors.append('invalid_mode')
-          summary = {'operation': operation, 'mode': mode, 'scenario': scenario, 'sourceSha': os.environ['GITHUB_SHA'], 'servingBuild': os.environ['EXPECTED_BUILD'], 'servingRevision': os.environ['SERVING_REVISION'], 'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'workflowProofValid': not errors, 'remoteExitCode': rc, 'errors': sorted(set(errors)), 'proof': result}
+          summary = {'operation': operation, 'mode': mode, 'scenario': scenario, 'sourceSha': os.environ['GITHUB_SHA'], 'servingBuild': os.environ['EXPECTED_BUILD'], 'servingRevision': os.environ['SERVING_REVISION'], 'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'workflowProofValid': not errors, 'remoteExitCode': rc, 'liveOutputExitCode': stream_rc, 'errors': sorted(set(errors)), 'proof': result}
           log = ''.join('CHECKOUT_RECOVERY_' + kind + '=' + json.dumps(value, separators=(',', ':')) + '\n' for kind, value in records)
           Path('checkout-recovery.txt').write_text(log)
           Path('checkout-recovery-summary.json').write_text(json.dumps(summary, indent=2) + '\n')

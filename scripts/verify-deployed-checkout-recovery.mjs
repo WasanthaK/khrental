@@ -1,12 +1,12 @@
-// BL08.11: one unpaid sandbox Checkout response-loss proof, either still open
-// or explicitly expired before recovery. Inspection / cleanup never replay it.
+// BL08.11: one sandbox Checkout response-loss proof, open, expired or genuinely
+// paid before recovery. Inspection / cleanup never replay the original command.
 // Imports deliberately use the unchanged serving image's implementation.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createBillingStore} from '/app/src/api/managementBilling/store.js';
 import {createBillingService} from '/app/src/api/managementBilling/service.js';
-import {createStripeClient,objectId} from '/app/src/api/managementBilling/stripe.js';
+import {createStripeClient,invoiceSubscription,objectId} from '/app/src/api/managementBilling/stripe.js';
 import {requestObjectEvidence} from '/app/src/api/managementBilling/recoveryEvidence.js';
 import {BILLING_ACCOUNT,BILLING_PRICE,entitlement,hash,stagedStock} from '/app/src/api/managementBilling/contract.js';
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
@@ -15,6 +15,8 @@ const operation=process.env.CHECKOUT_RECOVERY_OPERATION;
 const mode=process.env.CHECKOUT_RECOVERY_MODE;
 const scenario=process.env.CHECKOUT_RECOVERY_SCENARIO;
 const expiredScenario=scenario==='expired-before-recovery';
+const completedScenario=scenario==='completed-before-recovery';
+const terminalScenario=expiredScenario||completedScenario;
 const confirmations={verify:'VERIFY-CHECKOUT-RECOVERY',inspect:'INSPECT-CHECKOUT-RECOVERY',cleanup:'CLEANUP-CHECKOUT-RECOVERY'};
 const protectedIds=['80a4b392-13f8-484d-81fa-a110a6ef75f0','2383f4fc-e107-4ac7-9e13-39db501f40ec'];
 const originalScope=process.env.MANAGEMENT_RECOVERY_TENANT_IDS;
@@ -28,20 +30,20 @@ const cleanupAction='sandbox.checkout_recovery.cleaned';
 const checks=[];
 let stage='input',fixtureCreated=false,fixtureObserved=false,cleanupVerified=false,cleanupAttempted=false;
 let baseline=null,origin=null,customerId=null,sessionId=null,customerEventId=null;
-let customerKey=null,checkoutKey=null,customerPosts=0,checkoutPosts=0,recoveryProviderWrites=0,prepExpiryPosts=0,cleanupPosts=0;
-let responseDiscarded=false,prepExpiryResponseRecovered=false,expiryResponseRecovered=false;
+let customerKey=null,checkoutKey=null,customerPosts=0,checkoutPosts=0,recoveryProviderWrites=0,refreshProviderWrites=0,prepExpiryPosts=0,cleanupPosts=0,cleanupCancellationRequests=0;
+let responseDiscarded=false,prepExpiryResponseRecovered=false,expiryResponseRecovered=false,cancellationResponseRecovered=false,hostedWaitStarted=false;
 const lower=value=>String(value).toLowerCase();
 const emit=(name,value)=>console.log(name+'='+JSON.stringify({operation,mode,scenario,...value}));
 const progress=name=>{
   stage=name;
-  emit('CHECKOUT_RECOVERY_PROGRESS',{stage,fixtureCreated,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,prepExpiryPosts,cleanupPosts});
+  emit('CHECKOUT_RECOVERY_PROGRESS',{stage,fixtureCreated,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,refreshProviderWrites,prepExpiryPosts,cleanupPosts,cleanupCancellationRequests});
 };
 const check=name=>{checks.push(name);emit('CHECKOUT_RECOVERY_CHECK',{name});};
 const fail=code=>Object.assign(new Error(code),{code,status:503});
 const read=(path,params)=>stripe.request('GET',path,params);
 const legacyFixtureStamp=actorId=>({version:1,operation,actorId:lower(actorId),stockId:operation});
 const fixtureStamp=actorId=>({version:2,scenario,operation,actorId:lower(actorId),stockId:operation});
-const stockRecord=()=>({kind:'property',payload:{id:operation,name:'Private unpaid Checkout recovery stock',
+const stockRecord=()=>({kind:'property',payload:{id:operation,name:completedScenario?'Private paid Checkout recovery stock':'Private unpaid Checkout recovery stock',
   propertytype:'house',country_code:'LK',availability:'inactive',rentalvalues:{listingCategory:'residential'}}});
 
 async function listAll(path,params={}) {
@@ -85,13 +87,16 @@ async function verifyProtected() {
 async function preflight() {
   assert.match(operation||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(Object.hasOwn(confirmations,mode));
-  assert.ok(['open','expired-before-recovery'].includes(scenario));
+  assert.ok(['open','expired-before-recovery','completed-before-recovery'].includes(scenario));
   assert.equal(process.env.CHECKOUT_RECOVERY_CONFIRMATION,confirmations[mode]);
   assert.ok(!protectedIds.includes(operation));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY','MANAGEMENT_RECOVERY_WORKER_ENABLED']){
     assert.equal(process.env[flag],'true');
   }
   assert.notEqual(process.env.MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED,'true');
+  // Preserve the serving webhook's existing promotion boundary. The harness's
+  // private env copy alone permits the separately verified explicit refresh.
+  if(completedScenario){assert.notEqual(process.env.MANAGEMENT_INVENTORY_SCHEMA_READY,'true');}
   assert.match(process.env.STRIPE_SANDBOX_SECRET_KEY||'',/^(sk|rk)_test_/);
   assert.equal(process.env.STRIPE_SANDBOX_ACCOUNT_ID,BILLING_ACCOUNT);
   const scopes=String(originalScope||'').split(',').map(value=>value.trim().toLowerCase()).filter(Boolean);
@@ -149,11 +154,18 @@ async function loadFixture() {
   assert.equal(memberships[0].role,'admin');assert.equal(memberships[0].status,actor.status);assert.equal(actor.status,tenant.status);
   const account=await store.account(operation);assert.ok(account);
   assert.equal(account.stripe_account_id,BILLING_ACCOUNT);assert.equal(account.stripe_price_id,BILLING_PRICE);
-  assert.equal(account.market,'LK');assert.equal(account.stripe_subscription_id,null);
-  assert.equal(account.stripe_item_id,null);assert.equal(account.stripe_schedule_id,null);
-  assert.equal(account.subscription_status,'pending');assert.equal(account.initial_payment_verified,false);
-  assert.equal(account.quantity,0);assert.equal(account.paid_through,null);assert.equal(account.grace_started_at,null);
-  assert.equal(account.comp_type,null);assert.equal(account.pending_quantity,null);assert.equal(entitlement(account).management,false);
+  assert.equal(account.market,'LK');assert.equal(account.stripe_schedule_id,null);
+  assert.equal(account.grace_started_at,null);assert.equal(account.comp_type,null);assert.equal(account.pending_quantity,null);
+  if(completedScenario&&account.stripe_subscription_id){
+    assert.match(account.stripe_subscription_id,/^sub_[A-Za-z0-9]+$/);assert.match(account.stripe_item_id||'',/^si_[A-Za-z0-9]+$/);
+    assert.ok(['active','canceled'].includes(account.subscription_status));assert.equal(account.initial_payment_verified,true);
+    assert.equal(account.quantity,1);assert.ok(Number.isFinite(Date.parse(account.paid_through)));
+    assert.equal(entitlement(account).management,account.subscription_status==='active');
+  }else{
+    assert.equal(account.stripe_subscription_id,null);assert.equal(account.stripe_item_id,null);
+    assert.equal(account.subscription_status,'pending');assert.equal(account.initial_payment_verified,false);
+    assert.equal(account.quantity,0);assert.equal(account.paid_through,null);assert.equal(entitlement(account).management,false);
+  }
   const audit=await store.read('SELECT * FROM dbo.management_billing_audit WHERE tenant_id=@operation ORDER BY id',{operation});
   const markers=audit.filter(row=>row.action===fixtureAction);
   assert.equal(markers.length,1);assert.equal(lower(markers[0].resource_id),operation);
@@ -164,16 +176,27 @@ async function loadFixture() {
   if(markers[0].current_hash!==hash(fixtureStamp(actor.id))&&!legacyOpen){throw fail('CHECKOUT_FIXTURE_SCENARIO_MISMATCH');}
   const properties=await store.read('SELECT * FROM dbo.properties WHERE tenant_id=@operation',{operation});
   const units=await store.read('SELECT * FROM dbo.property_units WHERE tenant_id=@operation',{operation});
-  assert.deepEqual(properties,[]);assert.deepEqual(units,[]);
+  assert.deepEqual(units,[]);assert.ok(properties.length<=(completedScenario?1:0));
+  const listings=completedScenario?await store.read('SELECT * FROM dbo.public_listing_preferences WHERE tenant_id=@operation ORDER BY property_id',{operation}):[];
   const stock=await store.read('SELECT * FROM dbo.management_inventory_staging WHERE tenant_id=@operation ORDER BY id',{operation});
   assert.ok(stock.length<=1);
   if(stock.length){
     const item=stock[0],expected=stagedStock([stockRecord()])[0];
-    assert.equal(lower(item.id),operation);assert.equal(item.kind,'property');assert.equal(item.status,'pending');
+    assert.equal(lower(item.id),operation);assert.equal(item.kind,'property');
+    assert.ok((completedScenario?['pending','promoted']:['pending']).includes(item.status));
     assert.equal(lower(item.created_by),lower(actor.id));assert.deepEqual(JSON.parse(item.payload_json),expected.payload);
-    assert.equal(item.payload_hash,hash(expected.payload));assert.equal(item.promoted_at,null);
-    assert.equal(item.promotion_command_id,null);
-  }
+    assert.equal(item.payload_hash,hash(expected.payload));
+    if(item.status==='promoted'){
+      assert.ok(item.promoted_at);assert.equal(lower(item.promotion_command_id),operation);assert.equal(properties.length,1);
+      const property=properties[0];assert.equal(lower(property.id),operation);assert.equal(property.status,'inactive');
+      assert.equal(property.name,expected.payload.name);assert.equal(property.propertytype,expected.payload.propertytype);
+      assert.equal(property.country_code,expected.payload.country_code);assert.deepEqual(JSON.parse(property.rentalvalues),expected.payload.rentalvalues);
+      assert.equal(listings.length,1);assert.equal(lower(listings[0].property_id),operation);
+      assert.equal(typeof listings[0].opted_out,'boolean');
+    }else{
+      assert.equal(item.promoted_at,null);assert.equal(item.promotion_command_id,null);assert.deepEqual(properties,[]);assert.deepEqual(listings,[]);
+    }
+  }else{assert.deepEqual(properties,[]);assert.deepEqual(listings,[]);}
   const commands=await store.read('SELECT * FROM dbo.management_billing_commands WHERE tenant_id=@operation ORDER BY id',{operation});
   assert.ok(commands.length<=1);const command=commands[0]||null;
   const recovery=await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@operation',{operation});
@@ -184,7 +207,16 @@ async function loadFixture() {
     assert.equal(lower(recovery[0].actor_id),lower(actor.id));intent=JSON.parse(recovery[0].intent_json);
     assert.equal(intent.customerId,null);assert.equal(intent._subscriptionId,null);assert.equal(intent.priceId,BILLING_PRICE);
     assert.equal(intent.origin,origin);assert.equal(stock.length,1);assert.equal(intent.inventory.length,1);
-    assert.deepEqual(intent.inventory,await store.inventory(operation,undefined,{includePending:true}));
+    if(stock[0].status==='pending'){
+      assert.deepEqual(intent.inventory,await store.inventory(operation,undefined,{includePending:true}));
+    }else{
+      // Promotion changes the live inventory representation; the original
+      // saved staged snapshot remains immutable and independently validated.
+      assert.deepEqual(intent.inventory,[{key:'property:'+operation,propertyId:operation,unitId:null,
+        label:stockRecord().payload.name,stagedRecords:[{id:operation,hash:stock[0].payload_hash}]}]);
+      assert.equal(command.status,'completed');assert.ok(account.stripe_subscription_id);
+      assert.deepEqual(JSON.parse(account.inventory_json),await store.inventory(operation));
+    }
     assert.equal(intent.inventoryHash,hash(intent.inventory));
     assert.equal(command.payload_hash,hash({inventoryHash:intent.inventoryHash}));
     assert.deepEqual(JSON.parse(command.payload_json),{inventoryHash:intent.inventoryHash,_subscriptionId:null});
@@ -202,7 +234,7 @@ async function loadFixture() {
       }
     }
   }else{assert.deepEqual(recovery,[]);assert.deepEqual(steps,[]);assert.equal(account.stripe_customer_id,null);}
-  return {tenant,actor,memberships,account,audit,stock,command,recovery:recovery[0]||null,steps,intent};
+  return {tenant,actor,memberships,account,audit,stock,properties,units,listings,command,recovery:recovery[0]||null,steps,intent};
 }
 
 async function customerEvents(fixture,step) {
@@ -236,9 +268,13 @@ async function providerState(fixture) {
   assert.equal(customer.id,savedCustomer.customerId);assert.equal(customer.livemode,false);assert.ok(!customer.deleted);
   assert.equal(customer.metadata?.quixo_operation,fixture.command.id);
   assert.equal(customer.metadata?.quixo_tenant,fixture.command.tenant_id);
-  assert.equal(objectId(customer.test_clock)||null,null);assert.ok(!customer.email);
-  assert.equal(objectId(customer.invoice_settings?.default_payment_method)||null,null);
-  assert.equal(objectId(customer.default_source)||null,null);assert.equal(customer.balance,0);
+  assert.equal(objectId(customer.test_clock)||null,null);assert.equal(customer.balance,0);
+  // Hosted Checkout may populate contact/payment details. Their contents never
+  // leave this process; the unpaid scenarios retain their stricter invariants.
+  if(!completedScenario||(mode==='verify'&&!hostedWaitStarted&&!cleanupAttempted)){
+    assert.ok(!customer.email);assert.equal(objectId(customer.invoice_settings?.default_payment_method)||null,null);
+    assert.equal(objectId(customer.default_source)||null,null);
+  }
   if(fixture.account.stripe_customer_id){assert.equal(fixture.account.stripe_customer_id,customer.id);}
   const sessions=await listAll('/v1/checkout/sessions',{customer:customer.id});
   let session=null;
@@ -255,8 +291,14 @@ async function providerState(fixture) {
     const input=JSON.parse(checkoutStep.input_json);assert.equal(input.customer,customer.id);
     assert.equal(session.success_url,input.success_url);assert.equal(session.cancel_url,input.cancel_url);
     assert.equal(session.currency,'usd');assert.equal(session.amount_total,500);
-    assert.equal(session.payment_status,'unpaid');assert.ok(['open','expired'].includes(session.status));
-    for(const field of ['subscription','invoice','payment_intent','setup_intent']){assert.equal(objectId(session[field])||null,null);}
+    assert.ok((completedScenario?['open','expired','complete']:['open','expired']).includes(session.status));
+    if(session.status==='complete'){
+      assert.equal(session.payment_status,'paid');assert.match(objectId(session.subscription)||'',/^sub_[A-Za-z0-9]+$/);
+      assert.equal(objectId(session.setup_intent)||null,null);
+    }else{
+      assert.equal(session.payment_status,'unpaid');
+      for(const field of ['subscription','invoice','payment_intent','setup_intent']){assert.equal(objectId(session[field])||null,null);}
+    }
     const lines=await listAll('/v1/checkout/sessions/'+session.id+'/line_items');
     assert.equal(lines.length,1);assert.equal(objectId(lines[0].price),BILLING_PRICE);assert.equal(lines[0].quantity,1);
     if(checkoutStep.completed_at){
@@ -267,8 +309,122 @@ async function providerState(fixture) {
   const invoices=await listAll('/v1/invoices',{customer:customer.id});
   const paymentIntents=await listAll('/v1/payment_intents',{customer:customer.id});
   const charges=await listAll('/v1/charges',{customer:customer.id});
-  for(const rows of [subscriptions,invoices,paymentIntents,charges]){assert.deepEqual(rows,[]);}
-  return {customer,session,sessions,subscriptions,invoices,paymentIntents,charges};
+  if(session?.status!=='complete'){
+    for(const rows of [subscriptions,invoices,paymentIntents,charges]){assert.deepEqual(rows,[]);}
+    return {customer,session,sessions,subscriptions,invoices,paymentIntents,charges};
+  }
+  assert.equal(completedScenario,true);
+  for(const rows of [subscriptions,invoices,paymentIntents,charges]){assert.equal(rows.length,1);}
+  const subscription=await read('/v1/subscriptions/'+objectId(session.subscription));
+  assert.equal(subscription.id,subscriptions[0].id);assert.equal(subscription.livemode,false);
+  assert.equal(objectId(subscription.customer),customer.id);assert.ok(['active','canceled'].includes(subscription.status));
+  assert.equal(subscription.collection_method,'charge_automatically');assert.equal(subscription.currency,'usd');
+  assert.ok(!subscription.trial_start&&!subscription.trial_end);assert.equal(objectId(subscription.test_clock)||null,null);
+  assert.equal(objectId(subscription.schedule)||null,null);assert.equal(subscription.cancel_at_period_end,false);
+  assert.equal(subscription.items?.data?.length,1);assert.equal(subscription.items.has_more,false);
+  const item=subscription.items.data[0];assert.equal(objectId(item.price),BILLING_PRICE);assert.equal(item.quantity,1);
+  assert.equal(item.price.currency,'usd');assert.equal(item.price.unit_amount,500);assert.equal(item.price.recurring?.interval,'month');
+  if(fixture.account.stripe_subscription_id){
+    assert.equal(fixture.account.stripe_subscription_id,subscription.id);assert.equal(fixture.account.stripe_item_id,item.id);
+  }
+  const invoice=await read('/v1/invoices/'+objectId(subscription.latest_invoice));
+  assert.equal(invoice.id,invoices[0].id);assert.equal(invoice.livemode,false);assert.equal(invoice.status,'paid');
+  assert.equal(objectId(invoice.customer),customer.id);assert.equal(invoiceSubscription(invoice),subscription.id);
+  assert.equal(invoice.currency,'usd');assert.equal(invoice.billing_reason,'subscription_create');
+  for(const field of ['subtotal','total','amount_due','amount_paid']){assert.equal(invoice[field],500);}
+  for(const field of ['amount_remaining','pre_payment_credit_notes_amount','post_payment_credit_notes_amount']){assert.equal(invoice[field],0);}
+  const invoiceLines=await listAll('/v1/invoices/'+invoice.id+'/lines');assert.equal(invoiceLines.length,1);
+  const line=invoiceLines[0];assert.equal(line.livemode,false);assert.equal(objectId(line.invoice),invoice.id);
+  assert.equal(objectId(line.parent?.subscription_item_details?.subscription||line.subscription),subscription.id);
+  assert.equal(line.quantity,1);assert.equal(line.amount,500);assert.equal(line.currency,'usd');
+  assert.equal(objectId(line.pricing?.price_details?.price||line.price),BILLING_PRICE);
+  assert.equal(objectId(line.parent?.subscription_item_details?.subscription_item||line.subscription_item),item.id);
+  assert.equal(line.parent?.subscription_item_details?.proration??line.proration,false);
+  assert.ok(Number.isSafeInteger(line.period?.start)&&Number.isSafeInteger(line.period?.end)&&line.period.end>line.period.start);
+  if(subscription.status==='active'){assert.equal(line.period.end,item.current_period_end||subscription.current_period_end);}
+  const invoicePayments=await listAll('/v1/invoice_payments',{invoice:invoice.id});assert.equal(invoicePayments.length,1);
+  const paid=invoicePayments[0];assert.equal(paid.livemode,false);assert.equal(objectId(paid.invoice),invoice.id);
+  assert.equal(paid.status,'paid');assert.equal(paid.currency,'usd');assert.equal(paid.amount_paid,500);assert.equal(paid.amount_requested,500);
+  assert.equal(paid.payment?.type,'payment_intent');
+  const paymentIntent=paymentIntents[0],charge=charges[0];
+  assert.equal(objectId(paid.payment.payment_intent),paymentIntent.id);assert.equal(paymentIntent.livemode,false);
+  assert.equal(objectId(paymentIntent.customer),customer.id);assert.equal(paymentIntent.status,'succeeded');
+  assert.equal(paymentIntent.amount,500);assert.equal(paymentIntent.amount_received,500);assert.equal(paymentIntent.currency,'usd');
+  assert.equal(objectId(paymentIntent.latest_charge),charge.id);assert.equal(charge.livemode,false);
+  assert.equal(objectId(charge.customer),customer.id);assert.equal(objectId(charge.payment_intent),paymentIntent.id);
+  assert.equal(charge.status,'succeeded');assert.equal(charge.paid,true);assert.equal(charge.captured,true);
+  assert.equal(charge.amount,500);assert.equal(charge.amount_captured,500);assert.equal(charge.currency,'usd');
+  assert.equal(charge.amount_refunded,0);assert.equal(charge.refunded,false);assert.equal(charge.disputed,false);
+  const method=objectId(paymentIntent.payment_method);assert.match(method||'',/^pm_[A-Za-z0-9]+$/);
+  assert.equal(objectId(charge.payment_method),method);
+  assert.equal(objectId(subscription.default_payment_method)||objectId(customer.invoice_settings?.default_payment_method),method);
+  if(objectId(session.invoice)){assert.equal(objectId(session.invoice),invoice.id);}
+  if(objectId(session.payment_intent)){assert.equal(objectId(session.payment_intent),paymentIntent.id);}
+  const refunds=await listAll('/v1/refunds',{charge:charge.id});assert.deepEqual(refunds,[]);
+  const creditNotes=await listAll('/v1/credit_notes',{invoice:invoice.id});assert.deepEqual(creditNotes,[]);
+  const pendingInvoiceItems=await listAll('/v1/invoiceitems',{customer:customer.id,pending:true});assert.deepEqual(pendingInvoiceItems,[]);
+  return {customer,session,sessions,subscriptions,invoices,paymentIntents,charges,subscription,invoice,invoiceLines,
+    invoicePayments,paymentIntent,charge,refunds,creditNotes,pendingInvoiceItems};
+}
+
+async function confirmedProvider(fixture) {
+  // A browser payment may finish between individual GETs. Retry readback only,
+  // boundedly, until one coherent ownership/financial snapshot is established.
+  for(let attempt=0;attempt<(completedScenario?6:1);attempt++){
+    try{return await providerState(fixture);}
+    catch(error){if(!completedScenario||attempt===5){throw error;}await delay(2000);}
+  }
+  throw fail('CHECKOUT_PROVIDER_STATE_UNCONFIRMED');
+}
+
+function paidFinancialSnapshot(provider) {
+  const {customer,session,subscription,invoice,invoiceLines,invoicePayments,paymentIntent,charge}=provider;
+  return {customerId:customer.id,customerBalance:customer.balance,sessionId:session.id,sessionStatus:session.status,
+    paymentStatus:session.payment_status,subscriptionId:subscription.id,
+    items:subscription.items.data.map(item=>({id:item.id,price:objectId(item.price),quantity:item.quantity})),
+    invoice:{id:invoice.id,customer:objectId(invoice.customer),subscription:invoiceSubscription(invoice),status:invoice.status,
+      currency:invoice.currency,reason:invoice.billing_reason,subtotal:invoice.subtotal,total:invoice.total,
+      due:invoice.amount_due,paid:invoice.amount_paid,remaining:invoice.amount_remaining,
+      preCredit:invoice.pre_payment_credit_notes_amount,postCredit:invoice.post_payment_credit_notes_amount},
+    lines:invoiceLines.map(line=>({id:line.id,amount:line.amount,quantity:line.quantity,currency:line.currency,period:line.period})),
+    invoicePayments:invoicePayments.map(value=>({id:value.id,invoice:objectId(value.invoice),status:value.status,
+      requested:value.amount_requested,paid:value.amount_paid,currency:value.currency,payment:objectId(value.payment?.payment_intent)})),
+    payment:{id:paymentIntent.id,status:paymentIntent.status,amount:paymentIntent.amount,received:paymentIntent.amount_received,
+      currency:paymentIntent.currency,charge:objectId(paymentIntent.latest_charge)},
+    charge:{id:charge.id,status:charge.status,amount:charge.amount,captured:charge.amount_captured,refunded:charge.amount_refunded,
+      currency:charge.currency,paid:charge.paid,disputed:charge.disputed},
+    sessions:provider.sessions.map(value=>value.id),subscriptions:provider.subscriptions.map(value=>value.id),
+    invoices:provider.invoices.map(value=>value.id),paymentIntents:provider.paymentIntents.map(value=>value.id),charges:provider.charges.map(value=>value.id),
+    refunds:provider.refunds,creditNotes:provider.creditNotes,pendingInvoiceItems:provider.pendingInvoiceItems};
+}
+
+const historyCore=fixture=>({stock:fixture.stock,properties:fixture.properties,command:fixture.command,recovery:fixture.recovery,steps:fixture.steps});
+function assertAuditRetained(before,after,{cleanup=false,promotion=false}={}) {
+  const existing=new Map(before.map(row=>[String(row.id),row]));
+  for(const row of before){assert.deepEqual(after.find(value=>String(value.id)===String(row.id)),row);}
+  for(const row of after.filter(value=>!existing.has(String(value.id)))){
+    assert.ok((completedScenario&&row.action==='stripe.event_reconciled')||(cleanup&&row.action===cleanupAction)||
+      (promotion&&row.action==='inventory.promoted'));
+  }
+}
+
+async function ensurePrivateStock(fixture) {
+  if(!fixture.properties.length){return;}
+  assert.equal(completedScenario,true);assert.equal(fixture.properties.length,1);assert.equal(fixture.properties[0].status,'inactive');
+  await store.locked(operation,q=>q(`UPDATE dbo.public_listing_preferences SET opted_out=1,opted_out_at=SYSUTCDATETIME()
+    WHERE tenant_id=@operation AND property_id=@operation AND opted_out=0`,{operation}));
+  const rows=await store.read('SELECT property_id,opted_out FROM dbo.public_listing_preferences WHERE tenant_id=@operation',{operation});
+  assert.equal(rows.length,1);assert.equal(lower(rows[0].property_id),operation);assert.equal(rows[0].opted_out,true);
+}
+
+function readbackClient(phase) {
+  return {...stripe,request:async(method,path,body)=>{
+    if(method!=='GET'){
+      if(phase==='recovery'){recoveryProviderWrites++;}else{refreshProviderWrites++;}
+      throw fail('CHECKOUT_RECOVERY_PROVIDER_WRITE_FORBIDDEN');
+    }
+    return read(path,body);
+  }};
 }
 
 async function waitForCustomerEvent(key,id,createdAt,metadata) {
@@ -281,12 +437,70 @@ async function waitForCustomerEvent(key,id,createdAt,metadata) {
   throw fail('CHECKOUT_CUSTOMER_EVENT_UNCONFIRMED');
 }
 
+async function waitForHostedPayment(fixture) {
+  const pendingHash=hash(fixture),started=Date.now(),deadline=started+600000;
+  let session=null,nextHeartbeat=0;
+  hostedWaitStarted=true;progress('await_same_hosted_sandbox_payment');
+  emit('CHECKOUT_RECOVERY_READY',{commandId:operation,customerId,sessionId,waitSeconds:600});
+  while(Date.now()<deadline){
+    session=await read('/v1/checkout/sessions/'+sessionId);
+    assert.equal(session.id,sessionId);assert.equal(session.livemode,false);assert.equal(objectId(session.customer),customerId);
+    assert.equal(session.metadata?.quixo_operation,fixture.command.id);assert.equal(session.metadata?.quixo_tenant,fixture.command.tenant_id);
+    if(session.status==='complete'){break;}
+    assert.equal(session.status,'open');
+    const elapsedSeconds=Math.min(600,Math.floor((Date.now()-started)/1000));
+    if(elapsedSeconds>=nextHeartbeat){emit('CHECKOUT_RECOVERY_WAITING',{elapsedSeconds});nextHeartbeat=elapsedSeconds+30;}
+    await delay(Math.max(0,Math.min(5000,deadline-Date.now())));
+  }
+  if(session?.status!=='complete'){throw fail('CHECKOUT_HOSTED_PAYMENT_TIMEOUT');}
+  assert.equal(session.payment_status,'paid');
+  fixture=await loadFixture();assert.equal(hash(fixture),pendingHash);
+  const provider=await confirmedProvider(fixture);assert.equal(provider.session.id,sessionId);assert.equal(provider.subscription.status,'active');
+  assert.equal(fixture.account.stripe_customer_id,null);assert.equal(fixture.account.stripe_subscription_id,null);
+  assert.equal(fixture.account.initial_payment_verified,false);assert.equal(fixture.stock[0].status,'pending');
+  return {fixture,provider};
+}
+
+const stableAccount=account=>{const value={...account};delete value.version;delete value.updated_at;return value;};
+async function verifyPaidRefresh(fixture,provider) {
+  const journal=hash({command:fixture.command,recovery:fixture.recovery,steps:fixture.steps}),beforeAudit=fixture.audit;
+  const stagedBefore={...fixture.stock[0]},financialBefore=paidFinancialSnapshot(provider);
+  for(const key of ['status','promoted_at','promotion_command_id']){delete stagedBefore[key];}
+  const service=createBillingService({store,stripe:readbackClient('refresh'),env});
+  progress('explicit_paid_refresh_and_stock_promotion');
+  const result=await service.refresh(operation);
+  assert.equal(result.entitlement.state,'active');assert.equal(result.billedQuantity,1);
+  assert.equal(result.inventoryQuantity,1);assert.equal(result.pendingStock.length,0);
+  fixture=await loadFixture();await ensurePrivateStock(fixture);fixture=await loadFixture();
+  assert.equal(fixture.account.stripe_subscription_id,provider.subscription.id);
+  assert.equal(fixture.account.subscription_status,'active');assert.equal(fixture.account.initial_payment_verified,true);
+  assert.equal(entitlement(fixture.account).management,true);assert.equal(fixture.account.quantity,1);
+  assert.equal(fixture.stock.length,1);assert.equal(fixture.stock[0].status,'promoted');
+  const stagedAfter={...fixture.stock[0]};for(const key of ['status','promoted_at','promotion_command_id']){delete stagedAfter[key];}
+  assert.deepEqual(stagedAfter,stagedBefore);assert.equal(fixture.properties.length,1);assert.equal(fixture.listings[0].opted_out,true);
+  assert.equal(fixture.audit.filter(row=>row.action==='inventory.promoted').length,1);
+  assert.equal(fixture.audit.filter(row=>row.action==='sandbox.checkout.recovered').length,1);
+  assert.equal(hash({command:fixture.command,recovery:fixture.recovery,steps:fixture.steps}),journal);
+  assertAuditRetained(beforeAudit,fixture.audit,{promotion:true});
+  provider=await confirmedProvider(fixture);assert.deepEqual(paidFinancialSnapshot(provider),financialBefore);
+  check('paid_refresh_promotes_exact_private_stock');
+  const beforeRetry={core:hash(historyCore(fixture)),account:stableAccount(fixture.account),listings:fixture.listings,audit:fixture.audit};
+  progress('retry_paid_refresh_without_duplicate_promotion');await service.refresh(operation);
+  fixture=await loadFixture();provider=await confirmedProvider(fixture);
+  assert.equal(hash(historyCore(fixture)),beforeRetry.core);assert.deepEqual(stableAccount(fixture.account),beforeRetry.account);
+  assert.deepEqual(fixture.listings,beforeRetry.listings);assertAuditRetained(beforeRetry.audit,fixture.audit);
+  assert.equal(fixture.audit.filter(row=>row.action==='inventory.promoted').length,1);
+  assert.deepEqual(paidFinancialSnapshot(provider),financialBefore);assert.equal(refreshProviderWrites,0);
+  check('paid_refresh_retry_preserves_billing_and_promotion');
+  return {fixture,provider};
+}
+
 async function cleanupFixture() {
   cleanupAttempted=true;progress('cleanup_inspect_original_effect');
   let fixture=await loadFixture();
   if(fixture.recovery?.state==='running'||fixture.recovery?.lease_until){throw fail('CHECKOUT_RECOVERY_STILL_RUNNING');}
-  const beforeRetained=hash({stock:fixture.stock,command:fixture.command,recovery:fixture.recovery,steps:fixture.steps,audit:fixture.audit});
-  let provider=await providerState(fixture);
+  const beforeRetained=hash(historyCore(fixture)),beforeAudit=fixture.audit;
+  let provider=await confirmedProvider(fixture),paidBefore=null;
   if(provider.session?.status==='open'){
     progress('expire_exact_unpaid_session');cleanupPosts++;
     try{
@@ -294,11 +508,39 @@ async function cleanupFixture() {
         'quixo:'+fixture.command.tenant_id+':'+fixture.command.id+':acceptance-cleanup-expire');
     }catch{expiryResponseRecovered=true;}
     // Confirm even after an ambiguous expire response; never blindly repeat POST.
-    provider=await providerState(fixture);assert.equal(provider.session?.status,'expired');
+    // Payment may have won the race. Its exact proven subscription then takes
+    // the cancellation branch below; a completed session is never expired.
+    provider=await confirmedProvider(fixture);
+    assert.ok(provider.session?.status==='expired'||(completedScenario&&provider.session?.status==='complete'));
   }
-  if(provider.session){assert.equal(provider.session.status,'expired');}
+  if(provider.session?.status==='complete'){
+    assert.equal(completedScenario,true);paidBefore=paidFinancialSnapshot(provider);
+    if(provider.subscription.status!=='canceled'){
+      progress('cancel_exact_owned_paid_subscription');cleanupCancellationRequests++;
+      try{
+        await stripe.request('DELETE','/v1/subscriptions/'+provider.subscription.id,{invoice_now:false,prorate:false},
+          'quixo:'+fixture.command.tenant_id+':'+fixture.command.id+':acceptance-cleanup-subscription');
+      }catch{cancellationResponseRecovered=true;}
+      provider=await confirmedProvider(fixture);
+    }
+    assert.equal(provider.subscription.status,'canceled');assert.deepEqual(paidFinancialSnapshot(provider),paidBefore);
+    // A paid effect can precede local recovery. Cleanup never completes or
+    // fabricates a binding for that pending command. Completed commands can
+    // safely reconcile the confirmed cancellation without promoting stock.
+    if(fixture.command.status==='completed'){
+      await createBillingService({store,stripe:readbackClient('refresh'),env}).refresh(operation);
+      fixture=await loadFixture();assert.equal(fixture.account.stripe_subscription_id,provider.subscription.id);
+      assert.equal(fixture.account.subscription_status,'canceled');assert.equal(entitlement(fixture.account).management,false);
+    }
+    await ensurePrivateStock(fixture);
+  }else if(provider.session){assert.equal(provider.session.status,'expired');}
   fixture=await loadFixture();
-  assert.equal(hash({stock:fixture.stock,command:fixture.command,recovery:fixture.recovery,steps:fixture.steps,audit:fixture.audit}),beforeRetained);
+  assert.equal(hash(historyCore(fixture)),beforeRetained);assertAuditRetained(beforeAudit,fixture.audit);
+  if(fixture.properties.length){assert.equal(fixture.listings[0].opted_out,true);}
+  if(paidBefore){
+    provider=await confirmedProvider(fixture);assert.equal(provider.subscription.status,'canceled');
+    assert.deepEqual(paidFinancialSnapshot(provider),paidBefore);
+  }
   await verifyProtected();
   progress('deactivate_owned_fixture_preserving_history');
   await store.locked(operation,async q=>{
@@ -318,23 +560,31 @@ async function cleanupFixture() {
     if(!receipts.length){
       await store.audit(q,{tenantId:operation,actorId:fixture.actor.id,action:cleanupAction,resourceId:operation,
         current:{operation,scenario,customerId:provider.customer?.id||null,sessionId:provider.session?.id||null,
-          sessionExpired:Boolean(provider.session),noSession:!provider.session,recordsRetained:true},
-        reason:'Exact unpaid Checkout closed or no Checkout intent exists; private fixture deactivated with all journal and staging history retained.'});
+          sessionExpired:provider.session?.status==='expired',sessionCompleted:provider.session?.status==='complete',
+          subscriptionId:provider.subscription?.id||null,subscriptionCanceled:provider.subscription?.status==='canceled',
+          noSession:!provider.session,recordsRetained:true},
+        reason:'Exact owned Checkout closed or paid subscription canceled without invoice/proration; private fixture deactivated with all history retained.'});
     }
   });
   const after=await loadFixture();
   assert.equal(after.tenant.status,'inactive');assert.equal(after.actor.status,'inactive');
-  assert.equal(hash({stock:after.stock,command:after.command,recovery:after.recovery,steps:after.steps,
-    audit:after.audit.filter(row=>row.action!==cleanupAction)}),
-  hash({stock:fixture.stock,command:fixture.command,recovery:fixture.recovery,steps:fixture.steps,
-    audit:fixture.audit.filter(row=>row.action!==cleanupAction)}));
+  assert.equal(hash(historyCore(after)),beforeRetained);assertAuditRetained(fixture.audit,after.audit,{cleanup:true});
   assert.equal(after.audit.filter(row=>row.action===cleanupAction).length,1);
-  provider=await providerState(after);if(provider.session){assert.equal(provider.session.status,'expired');}
+  provider=await confirmedProvider(after);
+  if(paidBefore){assert.equal(provider.subscription.status,'canceled');assert.deepEqual(paidFinancialSnapshot(provider),paidBefore);}
+  else if(provider.session){assert.equal(provider.session.status,'expired');}
+  if(after.properties.length){assert.equal(after.listings[0].opted_out,true);}
   await verifyProtected();cleanupVerified=true;
-  emit('CHECKOUT_RECOVERY_CLEANUP',{verified:true,fixtureInactive:true,sessionExpired:Boolean(provider.session),
-    noSession:!provider.session,noSubscription:true,noInvoice:true,noPayment:true,recordsRetained:true,
-    pendingStockRetained:after.stock.length,protectedBillingUnchanged:true,workerScopeUnchanged:true,
-    prepExpiryPosts,cleanupPosts,prepExpiryResponseRecovered,expiryResponseRecovered});
+  emit('CHECKOUT_RECOVERY_CLEANUP',{verified:true,fixtureInactive:true,sessionExpired:provider.session?.status==='expired',
+    sessionCompleted:provider.session?.status==='complete',subscriptionCanceled:provider.subscription?.status==='canceled',
+    cleanupKind:paidBefore?'paid-subscription-canceled':provider.session?'unpaid-session-expired':'no-checkout-effect',
+    noSession:!provider.session,noSubscription:provider.subscriptions.length===0,noInvoice:provider.invoices.length===0,
+    noPayment:provider.paymentIntents.length===0&&provider.charges.length===0,recordsRetained:true,
+    pendingStockRetained:after.stock.filter(row=>row.status==='pending').length,
+    promotedStockRetained:after.stock.filter(row=>row.status==='promoted').length,
+    initialInvoicePreserved:Boolean(paidBefore),noAdditionalFinancialObjects:true,protectedBillingUnchanged:true,workerScopeUnchanged:true,
+    prepExpiryPosts,cleanupPosts,cleanupCancellationRequests,prepExpiryResponseRecovered,expiryResponseRecovered,cancellationResponseRecovered});
+  return {fixture:after,provider};
 }
 
 async function verify() {
@@ -418,6 +668,18 @@ async function verify() {
     assert.equal(cleanupPosts,0);assert.equal(recoveryProviderWrites,0);
     check('original_session_expired_before_recovery');
   }
+  let originalPaidSnapshot=null;
+  if(completedScenario){
+    ({fixture,provider}=await waitForHostedPayment(fixture));
+    assert.equal(fixture.command.status,'pending');assert.equal(fixture.recovery.state,'pending');assert.equal(fixture.recovery.attempts,1);
+    assert.ok(fixture.steps.find(step=>step.name==='create_customer').completed_at);
+    assert.equal(fixture.steps.find(step=>step.name==='create_checkout').completed_at,null);
+    assert.equal(fixture.steps.find(step=>step.name==='create_checkout').idempotency_key,checkoutKey);
+    assert.equal(fixture.account.stripe_customer_id,null);assert.equal(fixture.account.stripe_subscription_id,null);
+    assert.equal(fixture.account.initial_payment_verified,false);assert.equal(hash(fixture.stock),stockHash);
+    assert.deepEqual(fixture.properties,[]);assert.equal(fixture.audit.filter(row=>row.action==='sandbox.checkout.recovered').length,0);
+    originalPaidSnapshot=paidFinancialSnapshot(provider);check('hosted_payment_completed_before_recovery');
+  }
   progress('wait_for_natural_sql_retry_due');
   let due=false;
   for(let attempt=0;attempt<36;attempt++){
@@ -427,17 +689,14 @@ async function verify() {
     if(state.due===1){due=true;break;}await delay(2500);
   }
   assert.ok(due);check('natural_sql_backoff_without_clock_edits');
-  const readbackOnly={...stripe,request:async(method,path,body)=>{
-    if(method!=='GET'){recoveryProviderWrites++;throw fail('CHECKOUT_RECOVERY_PROVIDER_WRITE_FORBIDDEN');}
-    return read(path,body);
-  }};
-  const recoveredService=createBillingService({store,stripe:readbackOnly,env});
+  const recoveredService=createBillingService({store,stripe:readbackClient('recovery'),env});
   progress('bounded_service_recovery');
   const result=await recoveredService.recoverOperation({tenantId:operation,id:operation});
   assert.equal(result.sessionId,sessionId);
-  if(expiredScenario){
+  const terminalMessage=completedScenario?'Checkout completed. Refresh subscription status.':'Checkout expired. Open sandbox checkout again.';
+  if(terminalScenario){
     assert.equal(Object.hasOwn(result,'url'),false);
-    assert.deepEqual(result,{sessionId,requiresNewSession:true,message:'Checkout expired. Open sandbox checkout again.'});
+    assert.deepEqual(result,{sessionId,requiresNewSession:true,message:terminalMessage});
   }else{
     assert.equal(new URL(result.url).origin,'https://checkout.stripe.com');assert.ok(!result.requiresNewSession);
   }
@@ -449,47 +708,73 @@ async function verify() {
   assert.equal(fixture.audit.filter(row=>row.action==='sandbox.checkout.recovered').length,1);
   const savedResult=JSON.parse(fixture.command.result_json);assert.deepEqual(savedResult,result);
   assert.deepEqual(fixture.account,{...accountBefore,stripe_customer_id:customerId,inventory_json:JSON.stringify(inventory)});
-  check(expiredScenario?'expired_checkout_recovered_to_terminal_result':'original_checkout_recovered_once');
+  check(completedScenario?'completed_checkout_recovered_to_terminal_result':expiredScenario?'expired_checkout_recovered_to_terminal_result':'original_checkout_recovered_once');
   progress('completed_exact_retry');
   const completedHash=hash(fixture);
-  const beforeProvider=await providerState(fixture);
-  if(expiredScenario){
+  const beforeProvider=await confirmedProvider(fixture);
+  if(terminalScenario){
     await assert.rejects(recoveredService.checkout(args),error=>error.status===409&&
-      error.code==='BILLING_REVIEW_EXPIRED'&&error.message==='Checkout expired. Open sandbox checkout again.');
+      error.code==='BILLING_REVIEW_EXPIRED'&&error.message===terminalMessage);
   }else{assert.deepEqual(await recoveredService.checkout(args),result);}
   assert.deepEqual(await recoveredService.recoverOperation({tenantId:operation,id:operation}),result);
   fixture=await loadFixture();assert.equal(hash(fixture),completedHash);
-  provider=await providerState(fixture);assert.deepEqual(provider,beforeProvider);
+  provider=await confirmedProvider(fixture);
+  if(completedScenario){assert.deepEqual(paidFinancialSnapshot(provider),paidFinancialSnapshot(beforeProvider));}
+  else{assert.deepEqual(provider,beforeProvider);}
   assert.equal(recoveryProviderWrites,0);assert.equal(customerPosts,1);assert.equal(checkoutPosts,1);
-  check(expiredScenario?'expired_checkout_retry_refused_without_provider_write':'completed_exact_retry_without_provider_write');
+  check(completedScenario?'completed_checkout_retry_refused_without_provider_write':expiredScenario?'expired_checkout_retry_refused_without_provider_write':'completed_exact_retry_without_provider_write');
   assert.equal(hash(fixture.stock),stockHash);assert.deepEqual(await store.inventory(operation),[]);
   assert.equal(fixture.stock[0].status,'pending');assert.equal(fixture.account.initial_payment_verified,false);
+  assert.equal(fixture.account.stripe_subscription_id,null);
   for(const table of ['invoices','payments']){
     assert.equal((await store.read('SELECT id FROM dbo.'+table+' WHERE tenant_id=@operation',{operation})).length,0);
   }
-  check('no_payment_subscription_invoice_or_stock_promotion');
+  if(completedScenario){
+    assert.deepEqual(paidFinancialSnapshot(provider),originalPaidSnapshot);check('paid_recovery_keeps_stock_pending_until_refresh');
+    ({fixture,provider}=await verifyPaidRefresh(fixture,provider));
+    assert.deepEqual(paidFinancialSnapshot(provider),originalPaidSnapshot);
+    assert.equal(provider.session.status,'complete');assert.equal(provider.subscription.status,'active');
+    check('single_paid_checkout_and_financial_effect');
+  }else{check('no_payment_subscription_invoice_or_stock_promotion');}
   await verifyProtected();check('protected_accounts_clocks_and_worker_scope_unchanged');
-  await cleanupFixture();assert.equal(prepExpiryPosts,expiredScenario?1:0);assert.equal(cleanupPosts,expiredScenario?0:1);
+  const cleaned=await cleanupFixture();assert.equal(prepExpiryPosts,expiredScenario?1:0);assert.equal(cleanupPosts,terminalScenario?0:1);
+  assert.equal(cleanupCancellationRequests,completedScenario?1:0);assert.equal(refreshProviderWrites,0);
+  if(completedScenario){assert.deepEqual(paidFinancialSnapshot(cleaned.provider),originalPaidSnapshot);}
   check('cleanup_retains_all_journal_and_stock_history');
   emit('CHECKOUT_RECOVERY_PASS',{passed:true,sandbox:true,checks,scope:'genuine sandbox provider + deployed service/SQL',
     customerId,sessionId,customerEventId,originalCustomerKey:customerKey,originalCheckoutKey:checkoutKey,
-    customerPosts,checkoutPosts,recoveryProviderWrites,prepExpiryPosts,cleanupPosts,responseDiscarded,prepExpiryResponseRecovered,
-    originalIdempotencyKeyPreserved:true,exactRetryAccepted:!expiredScenario,originalRecoveryRetryStable:true,
-    terminalResult:expiredScenario?savedResult:null,terminalRequiresNewSession:result.requiresNewSession===true,
-    terminalHasHostedUrl:Object.hasOwn(result,'url'),terminalGuidanceAccepted:expiredScenario&&result.message==='Checkout expired. Open sandbox checkout again.',
-    checkoutRetryRejected:expiredScenario,checkoutRetryCode:expiredScenario?'BILLING_REVIEW_EXPIRED':null,checkoutSessions:1,
-    subscriptionsCreated:0,invoicesCreated:0,paymentIntentsCreated:0,chargesCreated:0,
-    stockUnchanged:true,pendingStockPreserved:true,actualProperties:0,actualUnits:0,
-    fixtureInactive:true,sessionExpired:true,recordsRetained:true,protectedBillingUnchanged:true,workerScopeUnchanged:true,
+    customerPosts,checkoutPosts,recoveryProviderWrites,refreshProviderWrites,prepExpiryPosts,cleanupPosts,cleanupCancellationRequests,responseDiscarded,prepExpiryResponseRecovered,
+    originalIdempotencyKeyPreserved:true,exactRetryAccepted:!terminalScenario,originalRecoveryRetryStable:true,
+    terminalResult:terminalScenario?savedResult:null,terminalRequiresNewSession:result.requiresNewSession===true,
+    terminalHasHostedUrl:Object.hasOwn(result,'url'),terminalGuidanceAccepted:terminalScenario&&result.message===terminalMessage,
+    checkoutRetryRejected:terminalScenario,checkoutRetryCode:terminalScenario?'BILLING_REVIEW_EXPIRED':null,checkoutSessions:1,
+    subscriptionsCreated:completedScenario?1:0,invoicesCreated:completedScenario?1:0,paymentIntentsCreated:completedScenario?1:0,chargesCreated:completedScenario?1:0,
+    stockUnchanged:!completedScenario,pendingStockPreserved:!completedScenario,actualProperties:completedScenario?1:0,actualUnits:0,
+    fixtureInactive:true,sessionExpired:!completedScenario,recordsRetained:true,protectedBillingUnchanged:true,workerScopeUnchanged:true,
     processLocalStagingReadiness:true,servingConfigurationChanged:false,automaticWorkerAccepted:false,
     httpAccepted:false,uiAccepted:false,credentialLoginAccepted:false,liveChargingEnabled:false,
-    wholeProcessCrashAccepted:false,naturalCheckoutExpiryTimingAccepted:false});
+    wholeProcessCrashAccepted:false,naturalCheckoutExpiryTimingAccepted:false,
+    ...(completedScenario?{hostedCheckoutCompleted:true,pendingStockPreservedUntilRefresh:true,stockPromotedOnce:true,stockPrivate:true,
+      promotedStockRetained:true,initialInvoicePreserved:true,noAdditionalFinancialObjects:true,subscriptionCanceled:true,sessionCompleted:true,
+      initialInvoiceId:provider.invoice.id,subscriptionId:provider.subscription.id,paymentIntentId:provider.paymentIntent.id,chargeId:provider.charge.id,
+      initialInvoiceAmountMinor:provider.invoice.amount_paid,currency:provider.invoice.currency,billedQuantity:1,promotionAuditCount:1}: {})});
 }
 
 async function inspect() {
   progress('read_only_preflight');await preflight();
-  const fixture=await loadFixture();const before=hash(fixture);const provider=await providerState(fixture);
-  assert.equal(hash(await loadFixture()),before);await verifyProtected();
+  let fixture=await loadFixture(),provider=await confirmedProvider(fixture);
+  const after=await loadFixture();
+  if(completedScenario){
+    assert.deepEqual(historyCore(after),historyCore(fixture));assertAuditRetained(fixture.audit,after.audit);
+    assert.deepEqual(after.tenant,fixture.tenant);assert.deepEqual(after.actor,fixture.actor);
+    assert.deepEqual(after.memberships,fixture.memberships);assert.deepEqual(after.listings,fixture.listings);
+    fixture=after;provider=await confirmedProvider(fixture);
+    if(fixture.account.stripe_subscription_id){
+      assert.equal(fixture.account.stripe_subscription_id,provider.subscription.id);
+      assert.equal(fixture.account.subscription_status,provider.subscription.status);
+    }
+  }else{assert.equal(hash(after),hash(fixture));}
+  await verifyProtected();
   emit('CHECKOUT_RECOVERY_INSPECT',{readOnly:true,providerWrites:0,localWrites:0,
     fixtureInactive:fixture.tenant.status==='inactive',commandExists:Boolean(fixture.command),
     commandStatus:fixture.command?.status||null,recoveryState:fixture.recovery?.state||null,
@@ -499,7 +784,9 @@ async function inspect() {
     cleanupReceipts:fixture.audit.filter(row=>row.action===cleanupAction).length,
     customerId:provider.customer?.id||null,sessionId:provider.session?.id||null,sessionStatus:provider.session?.status||null,
     checkoutSessions:provider.sessions.length,subscriptions:provider.subscriptions.length,invoices:provider.invoices.length,
-    paymentIntents:provider.paymentIntents.length,charges:provider.charges.length,pendingStock:fixture.stock.length,
+    paymentIntents:provider.paymentIntents.length,charges:provider.charges.length,pendingStock:fixture.stock.filter(row=>row.status==='pending').length,
+    promotedStock:fixture.stock.filter(row=>row.status==='promoted').length,actualProperties:fixture.properties.length,actualUnits:fixture.units.length,
+    subscriptionId:provider.subscription?.id||null,subscriptionStatus:provider.subscription?.status||null,initialInvoiceId:provider.invoice?.id||null,
     protectedBillingUnchanged:true,workerScopeUnchanged:true,recordsRetained:true,
     originalCustomerKey:fixture.steps.find(step=>step.name==='create_customer')?.idempotency_key||null,
     originalCheckoutKey:fixture.steps.find(step=>step.name==='create_checkout')?.idempotency_key||null});
@@ -522,8 +809,8 @@ try{
   }
   emit('CHECKOUT_RECOVERY_FAILED',{stage:failedStage,code:/^[A-Z0-9_]{3,80}$/.test(error.code||'')?error.code:'UNCONFIRMED',
     sqlNumber:Number.isInteger(error.number)?error.number:null,fixtureCreated,cleanupVerified,
-    fixtureRetained:(fixtureCreated||fixtureObserved)&&!cleanupVerified,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,prepExpiryPosts,cleanupPosts,
-    prepExpiryResponseRecovered,expiryResponseRecovered,
+    fixtureRetained:(fixtureCreated||fixtureObserved)&&!cleanupVerified,customerId,sessionId,customerPosts,checkoutPosts,recoveryProviderWrites,refreshProviderWrites,prepExpiryPosts,cleanupPosts,cleanupCancellationRequests,
+    prepExpiryResponseRecovered,expiryResponseRecovered,cancellationResponseRecovered,
     replayAllowed:false,acceptance:false});
   process.exitCode=1;
 }finally{await closeMssqlPool();}
