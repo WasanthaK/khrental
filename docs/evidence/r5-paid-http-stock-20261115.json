@@ -1,0 +1,115 @@
+{
+  "recordedDate": "2026-11-15",
+  "scope": "Genuine sandbox paid public HTTP create/import promotion",
+  "pullRequest": 651,
+  "mergeCommit": "f76aea664095bbbd7ea8b7745d6cd12f3783cc07",
+  "servingBuild": "95a6e147baf236ef61a64b6c5579e9cb5055838c",
+  "run": {
+    "id": 43669450738,
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43669450738",
+    "conclusion": "failure",
+    "job": 132676009710,
+    "acceptancePassedAtUtc": "2026-11-15T02:50:27Z",
+    "acceptance": {
+      "operation": "77b6ce1a-94a3-47b8-8215-f20f09acdc56",
+      "scenario": "http-promotion",
+      "checks": [
+        "isolated_private_fixture",
+        "genuine_paid_capacity_reconciled",
+        "public_http_paid_stock_readiness",
+        "create_and_import_remain_private_pending",
+        "staging_retry_no_duplicate_effect",
+        "conflicting_import_rolls_back_entire_batch",
+        "nonadmin_cannot_stage_stock",
+        "foreign_prepared_stock_and_workspace_override_rejected",
+        "quantity_preview_does_not_promote_stock",
+        "paid_quantity_confirmation_promotes_exact_records",
+        "promotion_retry_no_duplicate_effect",
+        "protected_accounts_subscriptions_and_clocks_unchanged"
+      ],
+      "scope": "genuine sandbox provider + deployed public HTTP paid create/import promotion",
+      "httpAccepted": true,
+      "uiAccepted": false,
+      "credentialLoginAccepted": false,
+      "httpStockMutationAccepted": true,
+      "passed": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "protectedBillingUnchanged": true
+    },
+    "cleanup": {
+      "verified": true,
+      "fixtureInactive": true,
+      "subscriptionCanceled": true,
+      "recordsRetained": true,
+      "sessionsRevoked": true
+    },
+    "restore": {
+      "sixOriginalFlagsVerified": true,
+      "imageUnchanged": true,
+      "readyRevision": "khrental-app--0000514",
+      "publicApiHealthPassed": true,
+      "fullConfigurationComparison": "failed; differing paths not retained; final build/SQL probes skipped"
+    },
+    "artifact": {
+      "id": 14143439589,
+      "sha256": "8503930ae1651d8b0e7cef38e09a5961354d45a308292ff9f88891e8e8c07fad"
+    }
+  },
+  "doNotReplayOperations": [
+    "77b6ce1a-94a3-47b8-8215-f20f09acdc56"
+  ],
+  "boundaries": {
+    "credentialLogin": false,
+    "renderedUi": false,
+    "paidCessationRestoreSplitHttp": false,
+    "hostedCheckoutStockPromotion": false,
+    "liveCharging": false,
+    "fullEnforcement": false
+  },
+  "readOnlyFollowup": {
+    "pullRequest": 652,
+    "run": 43670014635,
+    "job": 132677770995,
+    "conclusion": "success",
+    "restart": false,
+    "servingBuildVerified": true,
+    "sqlConnection": "ready",
+    "readyRevision": "khrental-app--0000514",
+    "health": "Healthy",
+    "verifiedAtUtc": "2026-11-15T02:56:36Z",
+    "comparisonLimitation": "Initial template diagnostic compared revision and app API formats; reported defaults/shape differences are not proof of drift."
+  },
+  "correctedReadOnlyFollowup": {
+    "pullRequest": 653,
+    "mergeCommit": "19f7fa1d776df44bf6e1d9f4fa3c703fb7e78cee",
+    "run": 43670434905,
+    "job": 132679044022,
+    "conclusion": "success",
+    "restart": false,
+    "verifiedAtUtc": "2026-11-15T03:02:31Z",
+    "baselineRevision": "khrental-app--0000512",
+    "readyRevision": "khrental-app--0000514",
+    "retainedRevisionTemplatesEqual": true,
+    "differentTemplatePaths": [],
+    "traffic": {
+      "revisionName": "khrental-app--0000514",
+      "weight": 100
+    },
+    "servingBuildVerified": true,
+    "sqlConnection": "ready",
+    "health": "Healthy",
+    "originalFullConfigurationParity": "Not retrospectively established: original app configuration snapshots and differing paths were not retained."
+  },
+  "checkerFixValidation": {
+    "ciRuns": [
+      43670228377,
+      43670228362
+    ],
+    "local": [
+      "YAML, Bash and embedded Python syntax",
+      "Equivalent Ready revision traffic matches; wrong target and partial traffic reject; environment drift remains detectable"
+    ],
+    "deployedFullConfigGate": "Not replayed; verify on the next distinct controlled acceptance case."
+  }
+}
