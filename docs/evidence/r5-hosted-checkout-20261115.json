@@ -32,8 +32,12 @@
       },
       "cleanup": {
         "sqlFixtureInactive": true,
-        "providerVerified": false,
-        "followupRun": 43676365001
+        "providerVerified": true,
+        "followupRun": 43676365001,
+        "followupJob": 132697493856,
+        "sessionExpired": true,
+        "noSubscription": true,
+        "verifiedAt": "2026-11-15T04:22:33Z"
       },
       "restoration": {
         "originalFlags": true,
@@ -62,6 +66,103 @@
         }
       },
       "followupPullRequest": 657
+    },
+    {
+      "runId": 43676546101,
+      "jobId": 132697839877,
+      "sourceCommit": "8a849e28a79cefb63e327cdbf5ff95ae09d04b7e",
+      "operationId": "4adeff3c-334b-4042-99c3-d4a4ea15dd45",
+      "replayAllowed": false,
+      "scenario": "http-hosted-checkout",
+      "status": "failed_after_hosted_payment",
+      "passedGroups": 6,
+      "hostedPayment": {
+        "observedBrowserSuccess": true,
+        "providerStatus": "complete",
+        "paymentStatus": "paid",
+        "livemode": false,
+        "quantity": 3,
+        "amountMinor": 1500,
+        "currency": "usd",
+        "verifiedAt": "2026-11-15T04:26:46Z"
+      },
+      "failure": {
+        "stage": "hosted_checkout_http_refresh",
+        "code": "ERR_ASSERTION",
+        "exactAssertion": "not individually logged",
+        "verifiedHarnessIssue": "The property insert trigger defaults opted_out to 0, but the new harness asserted 1 without setting the fixture preference.",
+        "correctionPullRequest": 658
+      },
+      "cleanup": {
+        "verified": true,
+        "fixtureInactive": true,
+        "subscriptionCanceled": true,
+        "sessionsRevoked": true,
+        "recordsRetained": true
+      },
+      "restoration": {
+        "originalFlags": true,
+        "fullConfigurationEqual": true,
+        "differentPaths": [],
+        "servingBuildUnchanged": true,
+        "sqlHealthReady": true
+      },
+      "artifact": {
+        "id": 14146663337,
+        "name": "paid-inventory-role-acceptance",
+        "size_in_bytes": 1448,
+        "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14146663337",
+        "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14146663337/zip",
+        "expired": false,
+        "created_at": "2026-11-15T04:28:03Z",
+        "expires_at": "2026-12-15T04:28:02Z",
+        "updated_at": "2026-11-15T04:28:03Z",
+        "digest": "sha256:161d9be6e7797e6f372b33d2c8a14026cc1c544b01d77abc71fb6da9f29771d7",
+        "workflow_run": {
+          "id": 43676546101,
+          "repository_id": 963041494,
+          "head_repository_id": 963041494,
+          "head_branch": "main",
+          "head_sha": "8a849e28a79cefb63e327cdbf5ff95ae09d04b7e"
+        }
+      }
     }
-  ]
+  ],
+  "cleanupFollowup": {
+    "runId": 43676365001,
+    "jobId": 132697493856,
+    "status": "success",
+    "sessionExpired": true,
+    "noSubscription": true,
+    "fixtureInactive": true,
+    "protectedBillingUnchanged": true,
+    "configurationUnchanged": true,
+    "buildAndSqlHealthPassed": true,
+    "artifact": {
+      "id": 14145923050,
+      "name": "paid-inventory-role-acceptance",
+      "size_in_bytes": 1010,
+      "url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14145923050",
+      "archive_download_url": "https://api.github.com/repos/WasanthaK/khrental/actions/artifacts/14145923050/zip",
+      "expired": false,
+      "created_at": "2026-11-15T04:22:37Z",
+      "expires_at": "2026-12-15T04:22:36Z",
+      "updated_at": "2026-11-15T04:22:37Z",
+      "digest": "sha256:dcfd04756ee80f6bd9c58de45c0987ebfeec253903eb6cfd74535a10dc1e2233",
+      "workflow_run": {
+        "id": 43676365001,
+        "repository_id": 963041494,
+        "head_repository_id": 963041494,
+        "head_branch": "main",
+        "head_sha": "11f7cc3c6fe44ecdd347d27cca1c30d06f7e4dba"
+      }
+    }
+  },
+  "boundaries": {
+    "credentialLoginAccepted": false,
+    "applicationUiAccepted": false,
+    "liveChargingEnabled": false,
+    "fullEnforcementEnabled": false,
+    "evia": "owner-paused"
+  }
 }
