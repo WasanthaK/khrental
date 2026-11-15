@@ -1,0 +1,300 @@
+name: R5 genuine sandbox Checkout response-loss acceptance
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify-deployed-checkout-recovery.mjs'
+      - '.github/workflows/verify-deployed-checkout-recovery.yml'
+      - 'tests/checkout-recovery-harness.test.mjs'
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      operation_id:
+        description: Fresh fixture UUID for verify; exact used UUID for inspect or cleanup
+        required: true
+        type: string
+      mode:
+        description: Inspect or clean up an existing attempt without replaying verify
+        required: true
+        type: choice
+        default: verify
+        options: [verify, inspect, cleanup]
+      confirmation:
+        description: VERIFY-CHECKOUT-RECOVERY, INSPECT-CHECKOUT-RECOVERY or CLEANUP-CHECKOUT-RECOVERY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Validate syntax and the harness-to-workflow proof contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/verify-deployed-checkout-recovery.mjs
+          python3 - <<'PY'
+          import ast, re, subprocess, textwrap
+          from pathlib import Path
+          lines = Path('.github/workflows/verify-deployed-checkout-recovery.yml').read_text().splitlines()
+          checked = 0
+          for index, line in enumerate(lines):
+              match = re.fullmatch(r'( +)run: \|', line)
+              if not match:
+                  continue
+              indent = len(match.group(1)) + 2
+              block = []
+              for following in lines[index + 1:]:
+                  if following.strip() and len(following) - len(following.lstrip()) < indent:
+                      break
+                  block.append(following[indent:])
+              subprocess.run(['bash', '-n'], input='\n'.join(block) + '\n', text=True, check=True)
+              checked += 1
+          assert checked >= 5, 'Workflow shell blocks were not found'
+          source = '\n'.join(lines) + '\n'
+          gate = textwrap.dedent(source.split("          python3 - <<'CHECKOUT_RECOVERY_PROOF'\n", 1)[1].split('          CHECKOUT_RECOVERY_PROOF\n', 1)[0])
+          assignments = [node for node in ast.walk(ast.parse(gate)) if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'expected_checks' for target in node.targets)]
+          assert len(assignments) == 1, 'Proof check allowlist was not found'
+          expected = ast.literal_eval(assignments[0].value)
+          harness = Path('scripts/verify-deployed-checkout-recovery.mjs').read_text()
+          actual = re.findall(r"\bcheck\('([^']+)'\)", harness)
+          assert actual == expected and len(expected) == 12 and len(set(expected)) == 12, 'Harness and workflow evidence contracts differ'
+          print(f'Validated {checked} shell blocks and twelve proof checks without executing deployed work')
+          PY
+  verify:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 18
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CHECKOUT_RECOVERY_OPERATION: ${{ inputs.operation_id }}
+      CHECKOUT_RECOVERY_MODE: ${{ inputs.mode }}
+      CHECKOUT_RECOVERY_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify exact reviewed source, mode and serving build
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$CHECKOUT_RECOVERY_MODE:$CHECKOUT_RECOVERY_CONFIRMATION" in
+            verify:VERIFY-CHECKOUT-RECOVERY|inspect:INSPECT-CHECKOUT-RECOVERY|cleanup:CLEANUP-CHECKOUT-RECOVERY) ;;
+            *) echo 'CHECKOUT_RECOVERY_BLOCKED=invalid_mode_confirmation' >&2; exit 1 ;;
+          esac
+          [[ "$CHECKOUT_RECOVERY_OPERATION" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ && "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          test "$EXPECTED_BUILD" = e0f7e821b8e511898836f71df86fde2fa8399463
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ "$CHECKOUT_RECOVERY_MODE" = verify ] && [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
+            echo 'CHECKOUT_RECOVERY_BLOCKED=inspect_original_operation_before_retry' >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          git diff --name-only -z "$EXPECTED_BUILD" "$GITHUB_SHA" > "$RUNNER_TEMP/checkout-source-diff.txt"
+          while IFS= read -r -d '' changed; do
+            case "$changed" in
+              docs/*|tests/*|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|scripts/verify-deployed-checkout-recovery.mjs|.github/workflows/verify-deployed-checkout-recovery.yml) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < "$RUNNER_TEMP/checkout-source-diff.txt"
+          node --check scripts/verify-deployed-checkout-recovery.mjs
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' >/dev/null
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Capture single-replica configuration and Ready revision
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/checkout-app-before.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1 and
+            (.properties.template.containers|length)==1 and
+            (.properties.configuration.ingress.traffic|length)==1 and
+            .properties.configuration.ingress.traffic[0].weight==100 and
+            (.properties.configuration.ingress.traffic[0].revisionName==.properties.latestReadyRevisionName or
+             (.properties.configuration.ingress.traffic[0].latestRevision==true and .properties.configuration.ingress.traffic[0].revisionName==null))' "$RUNNER_TEMP/checkout-app-before.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/checkout-app-before.json")
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/checkout-app-before.json")
+          [[ "$revision" =~ ^khrental-app--[a-z0-9-]+$ ]]
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - name: Run selected mode once through the unchanged deployed service
+        id: execute
+        env:
+          SERVING_REVISION: ${{ steps.baseline.outputs.revision }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          digest=$(sha256sum scripts/verify-deployed-checkout-recovery.mjs | cut -d ' ' -f 1)
+          remote="/tmp/checkout-recovery-$CHECKOUT_RECOVERY_OPERATION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$CHECKOUT_RECOVERY_MODE.mjs"
+          # One bounded connection, pinned source bytes, exclusive temporary file.
+          # Never retry an ambiguous execution; inspect its original operation UUID.
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-checkout-recovery.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='$remote';fs.writeFileSync(p,b,{flag:'wx'});process.env.CHECKOUT_RECOVERY_OPERATION='$CHECKOUT_RECOVERY_OPERATION';process.env.CHECKOUT_RECOVERY_MODE='$CHECKOUT_RECOVERY_MODE';process.env.CHECKOUT_RECOVERY_CONFIRMATION='$CHECKOUT_RECOVERY_CONFIRMATION';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          test "${#command}" -lt 2000
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$SERVING_REVISION" --command "$command"
+          remote_rc=0
+          script -q -e -c "$invocation" /dev/null > "$RUNNER_TEMP/checkout-result.txt" 2>&1 || remote_rc=$?
+          printf '%s\n' "$remote_rc" > "$RUNNER_TEMP/checkout-exit-code.txt"
+          echo "CHECKOUT_RECOVERY_EXEC_EXIT_CODE=$remote_rc"
+          exit "$remote_rc"
+      - name: Retain sanitized evidence and require mode-specific proof
+        if: always() && steps.execute.outcome != 'skipped'
+        env:
+          SERVING_REVISION: ${{ steps.baseline.outputs.revision }}
+        shell: bash
+        run: |
+          python3 - <<'CHECKOUT_RECOVERY_PROOF'
+          import json, os, re
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          operation = os.environ['CHECKOUT_RECOVERY_OPERATION']
+          mode = os.environ['CHECKOUT_RECOVERY_MODE']
+          raw_path = root / 'checkout-result.txt'
+          raw = raw_path.read_text(errors='replace') if raw_path.exists() else ''
+          raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+          rc_path = root / 'checkout-exit-code.txt'
+          rc = int(rc_path.read_text()) if rc_path.exists() else -1
+          records, errors = [], []
+          def safe(value):
+              if isinstance(value, dict):
+                  return all(not re.search(r'secret|password|authorization|access.?token|refresh.?token|email|checkout.?url|success.?url|cancel.?url', key, re.I) and safe(item) for key, item in value.items())
+              if isinstance(value, list):
+                  return all(safe(item) for item in value)
+              if isinstance(value, str):
+                  return not re.search(r'https?://|(?:sk|rk|pk)_(?:test|live)_', value, re.I)
+              return value is None or isinstance(value, (bool, int, float))
+          for line in raw.splitlines():
+              match = re.fullmatch(r'CHECKOUT_RECOVERY_(CHECK|PROGRESS|CLEANUP|PASS|INSPECT|FAILED|CLEANUP_FAILED)=(\{.*\})', line.strip())
+              if not match:
+                  continue
+              try:
+                  value = json.loads(match.group(2))
+                  assert safe(value)
+                  assert value.get('operation') == operation
+                  assert value.get('mode', mode) == mode
+              except (ValueError, AssertionError, TypeError):
+                  errors.append('invalid_or_unsafe_marker')
+                  continue
+              records.append((match.group(1), value))
+          if rc != 0:
+              errors.append('remote_execution_unconfirmed')
+          if any(kind in ['FAILED', 'CLEANUP_FAILED'] for kind, _ in records):
+              errors.append('harness_failed')
+          selected = {'verify': 'PASS', 'inspect': 'INSPECT', 'cleanup': 'CLEANUP'}.get(mode)
+          finals = [value for kind, value in records if kind == selected]
+          result = finals[0] if len(finals) == 1 else {'operation': operation, 'mode': mode}
+          if len(finals) != 1 or result.get('mode') != mode:
+              errors.append('missing_or_ambiguous_final_proof')
+          cleanup = [value for kind, value in records if kind == 'CLEANUP']
+          if mode == 'verify':
+              required = ['passed', 'sandbox', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'exactRetryAccepted', 'stockUnchanged', 'pendingStockPreserved', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
+              denied = ['automaticWorkerAccepted', 'httpAccepted', 'uiAccepted', 'credentialLoginAccepted', 'liveChargingEnabled', 'servingConfigurationChanged']
+              counts = {'customerPosts': 1, 'checkoutPosts': 1, 'recoveryProviderWrites': 0, 'checkoutSessions': 1, 'subscriptionsCreated': 0, 'invoicesCreated': 0, 'paymentIntentsCreated': 0, 'chargesCreated': 0, 'actualProperties': 0, 'actualUnits': 0}
+              if not all(result.get(key) is True for key in required) or not all(result.get(key) is False for key in denied) or not all(type(result.get(key)) is int and result[key] == count for key, count in counts.items()):
+                  errors.append('acceptance_contract_unconfirmed')
+              if len(cleanup) != 1 or not all(cleanup[0].get(key) is True for key in ['verified', 'fixtureInactive', 'sessionExpired', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']):
+                  errors.append('cleanup_unconfirmed')
+              expected_checks = ['preflight_and_protected_baseline', 'private_pending_stock_without_credentials', 'genuine_customer_checkpoint_without_duplicate', 'single_checkout_effect_response_discarded', 'original_pending_journal_and_checkout_intent', 'unique_bound_checkout_exhaustive_readback', 'natural_sql_backoff_without_clock_edits', 'original_checkout_recovered_once', 'completed_exact_retry_without_provider_write', 'no_payment_subscription_invoice_or_stock_promotion', 'protected_accounts_clocks_and_worker_scope_unchanged', 'cleanup_retains_all_journal_and_stock_history']
+              checks = result.get('checks')
+              observed = [value.get('name') for kind, value in records if kind == 'CHECK']
+              if checks != expected_checks or observed != expected_checks:
+                  errors.append('check_sequence_unconfirmed')
+          elif mode == 'inspect':
+              if not all(result.get(key) is True for key in ['readOnly', 'protectedBillingUnchanged', 'workerScopeUnchanged']) or not all(type(result.get(key)) is int and result[key] == 0 for key in ['providerWrites', 'localWrites']) or any(kind in ['PASS', 'CLEANUP'] for kind, _ in records):
+                  errors.append('inspection_contract_unconfirmed')
+          elif mode == 'cleanup':
+              if not all(result.get(key) is True for key in ['verified', 'fixtureInactive', 'recordsRetained', 'noSubscription', 'noInvoice', 'noPayment', 'protectedBillingUnchanged', 'workerScopeUnchanged']) or not (result.get('sessionExpired') is True or result.get('noSession') is True) or any(kind in ['PASS', 'INSPECT'] for kind, _ in records):
+                  errors.append('cleanup_contract_unconfirmed')
+          else:
+              errors.append('invalid_mode')
+          summary = {'operation': operation, 'mode': mode, 'sourceSha': os.environ['GITHUB_SHA'], 'servingBuild': os.environ['EXPECTED_BUILD'], 'servingRevision': os.environ['SERVING_REVISION'], 'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'workflowProofValid': not errors, 'remoteExitCode': rc, 'errors': sorted(set(errors)), 'proof': result}
+          log = ''.join('CHECKOUT_RECOVERY_' + kind + '=' + json.dumps(value, separators=(',', ':')) + '\n' for kind, value in records)
+          Path('checkout-recovery.txt').write_text(log)
+          Path('checkout-recovery-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(log, end='')
+          print('CHECKOUT_RECOVERY_PROOF=' + json.dumps({'valid': not errors, 'errors': summary['errors']}))
+          raise SystemExit(bool(errors))
+          CHECKOUT_RECOVERY_PROOF
+      - name: Verify complete application configuration stayed unchanged
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ ! -s "$RUNNER_TEMP/checkout-app-before.json" ]; then
+            echo '{"equal":null,"notCaptured":true}' > checkout-config-comparison.json
+            exit 0
+          fi
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/checkout-app-after.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          def config(side):
+              properties = json.loads((root / f'checkout-app-{side}.json').read_text())['properties']
+              return {'template': properties['template'], 'configuration': properties['configuration'], 'ready': properties['latestReadyRevisionName'], 'latest': properties['latestRevisionName']}
+          def differences(a, b, path='config'):
+              if type(a) is not type(b):
+                  return [path]
+              if isinstance(a, dict):
+                  return [p for key in sorted(set(a) | set(b)) for p in ([path + '.' + key] if key not in a or key not in b else differences(a[key], b[key], path + '.' + key))]
+              if isinstance(a, list):
+                  return [path + '.length'] if len(a) != len(b) else [p for i, (x, y) in enumerate(zip(a, b)) for p in differences(x, y, path + '[' + str(i) + ']')]
+              return [] if a == b else [path]
+          paths = differences(config('before'), config('after'))
+          result = {'equal': not paths, 'differentPaths': paths}
+          Path('checkout-config-comparison.json').write_text(json.dumps(result) + '\n')
+          print('CHECKOUT_RECOVERY_CONFIG_COMPARISON=' + json.dumps(result))
+          raise SystemExit(bool(paths))
+          PY
+      - name: Verify public build and SQL health independently
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          build_ok=false
+          sql_ok=false
+          if curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' >/dev/null; then build_ok=true; fi
+          if curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"' >/dev/null; then sql_ok=true; fi
+          jq -n --argjson build "$build_ok" --argjson sql "$sql_ok" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{buildVerified:$build,sqlHealthy:$sql,verifiedAt:$at}' | tee checkout-public-health.json
+          test "$build_ok" = true && test "$sql_ok" = true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: checkout-operation-recovery-${{ inputs.mode }}
+          path: |
+            checkout-recovery.txt
+            checkout-recovery-summary.json
+            checkout-config-comparison.json
+            checkout-public-health.json
+          if-no-files-found: warn
+          retention-days: 30
