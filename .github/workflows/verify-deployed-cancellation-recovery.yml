@@ -1,0 +1,485 @@
+name: R5 sandbox period-end cancellation response-loss acceptance
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify-deployed-cancellation-recovery.mjs'
+      - '.github/workflows/verify-deployed-cancellation-recovery.yml'
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact accepted serving application SHA
+        required: true
+        type: string
+      operation_id:
+        description: Fresh tenant and target cancellation UUID; exact used UUID for inspect or cleanup
+        required: true
+        type: string
+      mode:
+        description: Inspect or clean up an existing attempt without replaying verify
+        required: true
+        type: choice
+        default: verify
+        options: [verify, inspect, cleanup]
+      scenario:
+        description: Fresh scenario to verify, or the original fixture scenario for inspect or cleanup
+        required: true
+        type: choice
+        default: period-end-no-schedule
+        options: [period-end-no-schedule]
+      confirmation:
+        description: VERIFY-CANCELLATION-RECOVERY, INSPECT-CANCELLATION-RECOVERY or CLEANUP-CANCELLATION-RECOVERY
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Validate syntax and the harness-to-workflow proof contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/verify-deployed-cancellation-recovery.mjs
+          python3 - <<'PY'
+          import ast, re, subprocess, textwrap
+          from pathlib import Path
+          lines = Path('.github/workflows/verify-deployed-cancellation-recovery.yml').read_text().splitlines()
+          checked = 0
+          for index, line in enumerate(lines):
+              match = re.fullmatch(r'( +)run: \|', line)
+              if not match:
+                  continue
+              indent = len(match.group(1)) + 2
+              block = []
+              for following in lines[index + 1:]:
+                  if following.strip() and len(following) - len(following.lstrip()) < indent:
+                      break
+                  block.append(following[indent:])
+              subprocess.run(['bash', '-n'], input='\n'.join(block) + '\n', text=True, check=True)
+              checked += 1
+          assert checked == 7, 'Workflow shell blocks differ from the reviewed contract'
+          source = '\n'.join(lines) + '\n'
+          gate = textwrap.dedent(source.split("          python3 - <<'CANCELLATION_RECOVERY_PROOF'\n", 1)[1].split('          CANCELLATION_RECOVERY_PROOF\n', 1)[0])
+          live = textwrap.dedent(source.split("          cat > \"$RUNNER_TEMP/cancellation-live-output.py\" <<'CANCELLATION_RECOVERY_LIVE'\n", 1)[1].split('          CANCELLATION_RECOVERY_LIVE\n', 1)[0])
+          compile(live, 'cancellation-live-output.py', 'exec')
+          assignments = [node for node in ast.walk(ast.parse(gate)) if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'expected_checks' for target in node.targets)]
+          assert len(assignments) == 1, 'Proof check allowlist was not found'
+          expected = ast.literal_eval(assignments[0].value)
+          harness = Path('scripts/verify-deployed-cancellation-recovery.mjs').read_text()
+          actual = [name for call in re.findall(r'\bcheck\(([^;]+)\)', harness) for name in re.findall(r"'([a-z][a-z0-9_-]+)'", call)]
+          assert len(expected) == len(set(expected)) == 16
+          assert actual == expected, 'Harness and workflow evidence contracts differ'
+          print(f'Validated {checked} shell blocks, live marker sanitizer and exact ordered cancellation proof checks without executing deployed work')
+          PY
+  verify:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 22
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      CANCELLATION_RECOVERY_OPERATION: ${{ inputs.operation_id }}
+      CANCELLATION_RECOVERY_MODE: ${{ inputs.mode }}
+      CANCELLATION_RECOVERY_SCENARIO: ${{ inputs.scenario }}
+      CANCELLATION_RECOVERY_CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify exact reviewed source, mode and serving build
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$CANCELLATION_RECOVERY_MODE:$CANCELLATION_RECOVERY_CONFIRMATION" in
+            verify:VERIFY-CANCELLATION-RECOVERY|inspect:INSPECT-CANCELLATION-RECOVERY|cleanup:CLEANUP-CANCELLATION-RECOVERY) ;;
+            *) echo 'CANCELLATION_RECOVERY_BLOCKED=invalid_mode_confirmation' >&2; exit 1 ;;
+          esac
+          case "$CANCELLATION_RECOVERY_SCENARIO" in
+            period-end-no-schedule) ;;
+            *) echo 'CANCELLATION_RECOVERY_BLOCKED=invalid_scenario' >&2; exit 1 ;;
+          esac
+          [[ "$CANCELLATION_RECOVERY_OPERATION" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ && "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          test "$EXPECTED_BUILD" = e0f7e821b8e511898836f71df86fde2fa8399463
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ "$CANCELLATION_RECOVERY_MODE" = verify ] && [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
+            echo 'CANCELLATION_RECOVERY_BLOCKED=inspect_original_operation_before_retry' >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
+          git diff --name-only -z "$EXPECTED_BUILD" "$GITHUB_SHA" > "$RUNNER_TEMP/cancellation-source-diff.txt"
+          while IFS= read -r -d '' changed; do
+            case "$changed" in
+              docs/*|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|scripts/verify-deployed-checkout-recovery.mjs|.github/workflows/verify-deployed-checkout-recovery.yml|scripts/verify-deployed-cancellation-recovery.mjs|.github/workflows/verify-deployed-cancellation-recovery.yml) ;;
+              *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
+            esac
+          done < "$RUNNER_TEMP/cancellation-source-diff.txt"
+          node --check scripts/verify-deployed-cancellation-recovery.mjs
+          curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' >/dev/null
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Capture single-replica configuration and Ready revision
+        id: baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/cancellation-app-before.json"
+          jq -e '.properties.configuration.activeRevisionsMode=="Single" and
+            .properties.latestRevisionName==.properties.latestReadyRevisionName and
+            .properties.template.scale.minReplicas==1 and .properties.template.scale.maxReplicas==1 and
+            (.properties.template.containers|length)==1 and
+            (.properties.configuration.ingress.traffic|length)==1 and
+            .properties.configuration.ingress.traffic[0].weight==100 and
+            (.properties.configuration.ingress.traffic[0].revisionName==.properties.latestReadyRevisionName or
+             (.properties.configuration.ingress.traffic[0].latestRevision==true and .properties.configuration.ingress.traffic[0].revisionName==null))' "$RUNNER_TEMP/cancellation-app-before.json" >/dev/null
+          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/cancellation-app-before.json")
+          image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/cancellation-app-before.json")
+          [[ "$revision" =~ ^khrental-app--[a-z0-9-]+$ ]]
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          test "$revision" = khrental-app--0000523
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - name: Run selected mode once through the unchanged deployed service
+        id: execute
+        env:
+          SERVING_REVISION: ${{ steps.baseline.outputs.revision }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          digest=$(sha256sum scripts/verify-deployed-cancellation-recovery.mjs | cut -d ' ' -f 1)
+          remote="/tmp/cancellation-recovery-$CANCELLATION_RECOVERY_OPERATION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT-$CANCELLATION_RECOVERY_MODE-$CANCELLATION_RECOVERY_SCENARIO.mjs"
+          # One bounded connection, pinned source bytes, exclusive temporary file.
+          # Never retry an ambiguous execution; inspect its original operation UUID.
+          command="node --input-type=module -e \"const fs=await import('node:fs');const c=await import('node:crypto');const r=await fetch('https://raw.githubusercontent.com/WasanthaK/khrental/$GITHUB_SHA/scripts/verify-deployed-cancellation-recovery.mjs',{signal:AbortSignal.timeout(30000)});if(!r.ok)throw Error('Source unavailable');const b=await r.text();if(c.createHash('sha256').update(b).digest('hex')!=='$digest')throw Error('Source mismatch');const p='$remote';fs.writeFileSync(p,b,{flag:'wx'});process.env.CANCELLATION_RECOVERY_OPERATION='$CANCELLATION_RECOVERY_OPERATION';process.env.CANCELLATION_RECOVERY_MODE='$CANCELLATION_RECOVERY_MODE';process.env.CANCELLATION_RECOVERY_SCENARIO='$CANCELLATION_RECOVERY_SCENARIO';process.env.CANCELLATION_RECOVERY_CONFIRMATION='$CANCELLATION_RECOVERY_CONFIRMATION';try{await import('file://'+p)}finally{fs.unlinkSync(p)}\""
+          test "${#command}" -lt 2000
+          printf -v invocation '%q ' az containerapp exec -g khrental-prod-rg -n khrental-app --revision "$SERVING_REVISION" --command "$command"
+          # Flush the local PTY and Azure Python output. The service transport can
+          # still delay delivery; exact fixture metadata permits read-only discovery.
+          # Only schema-validated IDs/counts are public while raw bytes stay private.
+          cat > "$RUNNER_TEMP/cancellation-live-output.py" <<'CANCELLATION_RECOVERY_LIVE'
+          import json, os, re, sys
+          from pathlib import Path
+          operation = os.environ['CANCELLATION_RECOVERY_OPERATION']
+          mode = os.environ['CANCELLATION_RECOVERY_MODE']
+          scenario = os.environ['CANCELLATION_RECOVERY_SCENARIO']
+          uuid = r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}'
+          identity_keys = {'operation', 'mode', 'scenario', 'targetCommandId', 'setupCommandId', 'customerId', 'sessionId'}
+          invalid, ready_identity, last_elapsed = False, None, -1
+          def pairs(items):
+              result = {}
+              for key, value in items:
+                  if key in result:
+                      raise ValueError('duplicate_json_key')
+                  result[key] = value
+              return result
+          def constant(_):
+              raise ValueError('non_json_constant')
+          def forward(line):
+              global invalid, ready_identity, last_elapsed
+              line = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', line).strip()
+              match = re.fullmatch(r'CANCELLATION_RECOVERY_(READY|WAITING)=(.*)', line)
+              if not match:
+                  return
+              try:
+                  value = json.loads(match.group(2), object_pairs_hook=pairs, parse_constant=constant)
+                  assert isinstance(value, dict)
+                  assert re.fullmatch(uuid, operation)
+                  assert value.get('operation') == operation
+                  assert value.get('mode') == mode == 'verify'
+                  assert value.get('scenario') == scenario == 'period-end-no-schedule'
+                  assert value.get('targetCommandId') == operation
+                  assert isinstance(value.get('setupCommandId'), str) and re.fullmatch(uuid, value['setupCommandId'])
+                  assert value['setupCommandId'] != operation
+                  assert isinstance(value.get('customerId'), str) and re.fullmatch(r'cus_[A-Za-z0-9]+', value['customerId'])
+                  assert isinstance(value.get('sessionId'), str) and re.fullmatch(r'cs_test_[A-Za-z0-9]+', value['sessionId'])
+                  identity = {key: value[key] for key in identity_keys}
+                  if match.group(1) == 'READY':
+                      assert set(value) == identity_keys | {'waitSeconds'}
+                      assert type(value['waitSeconds']) is int and value['waitSeconds'] == 600
+                      assert ready_identity is None
+                      ready_identity = identity
+                  else:
+                      assert set(value) == identity_keys | {'elapsedSeconds'}
+                      assert identity == ready_identity
+                      assert type(value['elapsedSeconds']) is int and last_elapsed < value['elapsedSeconds'] <= 600
+                      last_elapsed = value['elapsedSeconds']
+              except (ValueError, AssertionError, TypeError, KeyError):
+                  invalid = True
+                  return
+              print('CANCELLATION_RECOVERY_LIVE_' + match.group(1) + '=' + json.dumps(value, separators=(',', ':')), flush=True)
+          pending = b''
+          with (Path(os.environ['RUNNER_TEMP']) / 'cancellation-result.txt').open('wb') as raw:
+              while chunk := sys.stdin.buffer.read1(65536):
+                  raw.write(chunk)
+                  raw.flush()
+                  pending += chunk
+                  while b'\n' in pending:
+                      line, pending = pending.split(b'\n', 1)
+                      forward(line.decode('utf-8', errors='replace'))
+              if pending:
+                  forward(pending.decode('utf-8', errors='replace'))
+          raise SystemExit(invalid)
+          CANCELLATION_RECOVERY_LIVE
+          set +e
+          PYTHONUNBUFFERED=1 script -q -e -f -c "$invocation" /dev/null 2>&1 | python3 -u "$RUNNER_TEMP/cancellation-live-output.py"
+          execution_status=("${PIPESTATUS[@]}")
+          set -e
+          remote_rc=${execution_status[0]}
+          stream_rc=${execution_status[1]}
+          printf '%s\n' "$remote_rc" > "$RUNNER_TEMP/cancellation-exit-code.txt"
+          printf '%s\n' "$stream_rc" > "$RUNNER_TEMP/cancellation-live-exit-code.txt"
+          echo "CANCELLATION_RECOVERY_EXEC_EXIT_CODE=$remote_rc"
+          echo "CANCELLATION_RECOVERY_STREAM_EXIT_CODE=$stream_rc"
+          if [ "$remote_rc" = 0 ]; then exit "$stream_rc"; fi
+          exit "$remote_rc"
+      - name: Retain sanitized evidence and require mode-specific proof
+        if: always() && steps.execute.outcome != 'skipped'
+        env:
+          SERVING_REVISION: ${{ steps.baseline.outputs.revision }}
+        shell: bash
+        run: |
+          python3 - <<'CANCELLATION_RECOVERY_PROOF'
+          import datetime, json, os, re
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          operation = os.environ['CANCELLATION_RECOVERY_OPERATION']
+          mode = os.environ['CANCELLATION_RECOVERY_MODE']
+          scenario = os.environ['CANCELLATION_RECOVERY_SCENARIO']
+          uuid = r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}'
+          raw_path = root / 'cancellation-result.txt'
+          raw = raw_path.read_text(errors='replace') if raw_path.exists() else ''
+          raw = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', raw)
+          def exit_code(name):
+              try:
+                  return int((root / name).read_text())
+              except (OSError, ValueError):
+                  return -1
+          rc = exit_code('cancellation-exit-code.txt')
+          stream_rc = exit_code('cancellation-live-exit-code.txt')
+          records, errors = [], []
+          def pairs(items):
+              result = {}
+              for key, value in items:
+                  if key in result:
+                      raise ValueError('duplicate_json_key')
+                  result[key] = value
+              return result
+          def constant(_):
+              raise ValueError('non_json_constant')
+          def safe(value):
+              if isinstance(value, dict):
+                  return all(not re.search(r'secret|password|authorization|access.?token|refresh.?token|email|checkout.?url|success.?url|cancel.?url|card.?number|(?:^|[_-])(?:cvc|cvv|pan)(?:$|[_-])', key, re.I) and safe(item) for key, item in value.items())
+              if isinstance(value, list):
+                  return all(safe(item) for item in value)
+              if isinstance(value, str):
+                  return not re.search(r'https?://|(?:sk|rk|pk)_(?:test|live)_|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', value, re.I)
+              return value is None or isinstance(value, (bool, int, float))
+          for line in raw.splitlines():
+              match = re.fullmatch(r'CANCELLATION_RECOVERY_(CHECK|PROGRESS|READY|WAITING|CLEANUP|PASS|INSPECT|FAILED|CLEANUP_FAILED)=(.*)', line.strip())
+              if not match:
+                  continue
+              try:
+                  value = json.loads(match.group(2), object_pairs_hook=pairs, parse_constant=constant)
+                  assert isinstance(value, dict) and safe(value)
+                  assert value.get('operation') == operation
+                  assert value.get('mode') == mode
+                  assert value.get('scenario') == scenario == 'period-end-no-schedule'
+              except (ValueError, AssertionError, TypeError):
+                  errors.append('invalid_or_unsafe_marker')
+                  continue
+              records.append((match.group(1), value))
+          if rc != 0:
+              errors.append('remote_execution_unconfirmed')
+          if stream_rc != 0:
+              errors.append('live_output_unconfirmed')
+          if any(kind in ['FAILED', 'CLEANUP_FAILED'] for kind, _ in records):
+              errors.append('harness_failed')
+          if scenario != 'period-end-no-schedule':
+              errors.append('invalid_scenario')
+          selected = {'verify': 'PASS', 'inspect': 'INSPECT', 'cleanup': 'CLEANUP'}.get(mode)
+          finals = [value for kind, value in records if kind == selected]
+          result = finals[0] if len(finals) == 1 else {'operation': operation, 'mode': mode, 'scenario': scenario}
+          if len(finals) != 1:
+              errors.append('missing_or_ambiguous_final_proof')
+          expected_checks = ['protected-baseline', 'fresh-isolated-fixture', 'normal-checkout-setup', 'unique-bound-checkout', 'hosted-payment-completed', 'paid-stock-promoted', 'paid-no-schedule-baseline', 'cancellation-response-lost', 'original-cancellation-intent-preserved', 'naturally-due', 'original-cancellation-recovered', 'exact-operation-retries-stable', 'refresh-retry-stable', 'original-financials-stock-preserved', 'protected-scope-unchanged', 'cleanup-retained']
+          def identifier(value, pattern):
+              return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+          def integers(value, expected):
+              return all(type(value.get(key)) is int and value[key] == count for key, count in expected.items())
+          def flags(value, required=(), denied=()):
+              return all(value.get(key) is True for key in required) and all(value.get(key) is False for key in denied)
+          def bound_ids(value):
+              return identifier(operation, uuid) and value.get('targetCommandId') == operation and identifier(value.get('setupCommandId'), uuid) and value['setupCommandId'] != operation
+          def same_commands(value):
+              return bound_ids(value) and value.get('setupCommandId') == result.get('setupCommandId')
+          if not bound_ids(result):
+              errors.append('setup_target_identity_unconfirmed')
+          cleanup = [(index, value) for index, (kind, value) in enumerate(records) if kind == 'CLEANUP']
+          for _, value in cleanup:
+              if not same_commands(value):
+                  errors.append('cleanup_command_identity_unconfirmed')
+          identity_keys = {'operation', 'mode', 'scenario', 'targetCommandId', 'setupCommandId', 'customerId', 'sessionId'}
+          def live_marker(kind, value):
+              identity = {key: value.get(key) for key in identity_keys}
+              expected = {key: result.get(key) for key in identity_keys}
+              if mode != 'verify' or scenario != 'period-end-no-schedule' or identity != expected or not same_commands(value):
+                  return False
+              if not identifier(value.get('customerId'), r'cus_[A-Za-z0-9]+') or not identifier(value.get('sessionId'), r'cs_test_[A-Za-z0-9]+'):
+                  return False
+              if kind == 'READY':
+                  return set(value) == identity_keys | {'waitSeconds'} and integers(value, {'waitSeconds': 600})
+              return set(value) == identity_keys | {'elapsedSeconds'} and type(value.get('elapsedSeconds')) is int and 0 <= value['elapsedSeconds'] <= 600
+          live = [(index, kind, value) for index, (kind, value) in enumerate(records) if kind in ['READY', 'WAITING']]
+          if any(not live_marker(kind, value) for _, kind, value in live):
+              errors.append('hosted_wait_marker_unconfirmed')
+          def retained_stock(value):
+              counts = [value.get(key) for key in ['pendingStockRetained', 'promotedStockRetained']]
+              return counts if all(type(count) is int and count in [0, 1] for count in counts) else None
+          def cleanup_common(value):
+              return flags(value, ['verified', 'fixtureInactive', 'recordsRetained', 'targetJournalRetained', 'setupJournalRetained', 'noAdditionalFinancialObjects', 'protectedBillingUnchanged', 'workerScopeUnchanged']) and same_commands(value) and type(value.get('expiryResponseRecovered')) is bool and type(value.get('cancellationResponseRecovered')) is bool
+          def paid_cleanup(value, maintenance=False):
+              retained = retained_stock(value)
+              expiration = (integers(value, {'cleanupPosts': 0}) and value.get('expiryResponseRecovered') is False) or (maintenance and integers(value, {'cleanupPosts': 1}) and value.get('expiryResponseRecovered') is True)
+              return cleanup_common(value) and value.get('cleanupKind') == 'paid-subscription-canceled' and flags(value, ['sessionCompleted', 'subscriptionCanceled', 'initialInvoicePreserved'], ['noSession', 'sessionExpired', 'noSubscription', 'noInvoice', 'noPayment']) and expiration and type(value.get('cleanupCancellationRequests')) is int and value['cleanupCancellationRequests'] in [0, 1] and retained is not None and sum(retained) == 1
+          def unpaid_cleanup(value):
+              retained = retained_stock(value)
+              if not cleanup_common(value) or not flags(value, ['noSubscription', 'noInvoice', 'noPayment'], ['sessionCompleted', 'subscriptionCanceled', 'initialInvoicePreserved', 'cancellationResponseRecovered']) or not integers(value, {'cleanupCancellationRequests': 0}) or retained is None or retained[1] != 0:
+                  return False
+              if value.get('cleanupKind') == 'no-checkout-effect':
+                  return flags(value, ['noSession'], ['sessionExpired', 'expiryResponseRecovered']) and integers(value, {'cleanupPosts': 0})
+              if value.get('cleanupKind') == 'unpaid-session-expired':
+                  return flags(value, ['sessionExpired'], ['noSession']) and type(value.get('cleanupPosts')) is int and value['cleanupPosts'] in [0, 1] and (value['cleanupPosts'] == 1 or value.get('expiryResponseRecovered') is False)
+              return False
+          if mode == 'verify':
+              required = ['passed', 'sandbox', 'normalCheckoutSetup', 'hostedCheckoutCompleted', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'originalIntentPreserved', 'cancelAtPeriodEnd', 'paidAccessRetained', 'exactCancelRetryStable', 'exactReconcileRetryStable', 'originalRecoveryRetryStable', 'refreshRetryStable', 'stockUnchanged', 'stockPrivate', 'promotedStockRetained', 'initialInvoicePreserved', 'noAdditionalFinancialObjects', 'subscriptionCanceled', 'sessionCompleted', 'fixtureInactive', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
+              denied = ['sessionExpired', 'servingConfigurationChanged', 'automaticWorkerAccepted', 'httpAccepted', 'uiAccepted', 'credentialLoginAccepted', 'liveChargingEnabled', 'wholeProcessCrashAccepted', 'naturalPaidBoundaryAccepted', 'scheduleReleaseAccepted', 'cancellationReversalAccepted']
+              counts = {'customerPosts': 1, 'checkoutPosts': 1, 'cancellationPosts': 1, 'recoveryProviderWrites': 0, 'retryProviderWrites': 0, 'refreshProviderWrites': 0, 'cleanupPosts': 0, 'cleanupCancellationRequests': 1, 'setupAttempts': 1, 'setupCompletedSteps': 2, 'targetAttempts': 2, 'targetCompletedSteps': 1, 'targetRecoveredAudits': 1, 'releaseScheduleSteps': 0, 'checkoutSessions': 1, 'subscriptionsCreated': 1, 'invoicesCreated': 1, 'paymentIntentsCreated': 1, 'chargesCreated': 1, 'initialInvoiceAmountMinor': 500, 'billedQuantity': 1, 'actualProperties': 1, 'actualUnits': 0, 'promotionAuditCount': 1}
+              if not flags(result, required, denied) or not integers(result, counts) or result.get('currency') != 'usd' or any(kind == 'INSPECT' for kind, _ in records):
+                  errors.append('acceptance_contract_unconfirmed')
+              if not all(identifier(result.get(key), pattern) for key, pattern in [('customerId', r'cus_[A-Za-z0-9]+'), ('sessionId', r'cs_test_[A-Za-z0-9]+'), ('customerEventId', r'evt_[A-Za-z0-9]+'), ('subscriptionId', r'sub_[A-Za-z0-9]+'), ('initialInvoiceId', r'in_[A-Za-z0-9]+'), ('paymentIntentId', r'pi_[A-Za-z0-9]+'), ('chargeId', r'ch_[A-Za-z0-9]+')]):
+                  errors.append('paid_financial_identity_unconfirmed')
+              key_uuid = r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-4[a-fA-F0-9]{3}-[89abAB][a-fA-F0-9]{3}-[a-fA-F0-9]{12}'
+              key_pattern = 'quixo:(' + key_uuid + '):(' + key_uuid + ')'
+              keys = [re.fullmatch(key_pattern + suffix, result.get(name) or '') if isinstance(result.get(name), str) else None for name, suffix in [('originalCustomerKey', ':customer'), ('originalCheckoutKey', ':checkout'), ('originalCancellationKey', '')]]
+              if not all(keys) or keys[0].groups() != keys[1].groups() or keys[0][1].lower() != operation or keys[0][2].lower() != result.get('setupCommandId') or keys[2][1] != keys[0][1] or keys[2][2].lower() != operation:
+                  errors.append('original_setup_or_unsuffixed_target_key_unconfirmed')
+              paid_through = result.get('paidThrough')
+              cancellation = result.get('cancellationResult')
+              boundary_valid = False
+              if identifier(paid_through, r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z') and type(result.get('providerPeriodEnd')) is int and result['providerPeriodEnd'] > 0:
+                  try:
+                      boundary = datetime.datetime.strptime(paid_through, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=datetime.timezone.utc)
+                      boundary_valid = boundary.timestamp() == result['providerPeriodEnd']
+                  except ValueError:
+                      pass
+              if not boundary_valid or not isinstance(cancellation, dict) or cancellation.get('cancelAtPeriodEnd') is not True or cancellation != {'cancelAtPeriodEnd': True, 'paidThrough': paid_through}:
+                  errors.append('saved_cancellation_result_or_paid_boundary_unconfirmed')
+              observed = [value.get('name') for kind, value in records if kind == 'CHECK']
+              if result.get('checks') != expected_checks or observed != expected_checks:
+                  errors.append('check_sequence_unconfirmed')
+              ready = [index for index, kind, _ in live if kind == 'READY']
+              waiting = [(index, value.get('elapsedSeconds')) for index, kind, value in live if kind == 'WAITING']
+              before_wait = [index for index, (kind, value) in enumerate(records) if kind == 'CHECK' and value.get('name') == 'unique-bound-checkout']
+              after_wait = [index for index, (kind, value) in enumerate(records) if kind == 'CHECK' and value.get('name') == 'hosted-payment-completed']
+              elapsed = [seconds for _, seconds in waiting]
+              if len(ready) != 1 or len(before_wait) != 1 or len(after_wait) != 1 or not before_wait[0] < ready[0] < after_wait[0] or any(not ready[0] < index < after_wait[0] for index, _ in waiting) or any(type(seconds) is not int for seconds in elapsed) or elapsed != sorted(set(elapsed)):
+                  errors.append('hosted_wait_sequence_unconfirmed')
+              if len(cleanup) != 1 or not paid_cleanup(cleanup[0][1]) or not integers(cleanup[0][1], {'cleanupCancellationRequests': 1, 'pendingStockRetained': 0, 'promotedStockRetained': 1}):
+                  errors.append('paid_cleanup_unconfirmed')
+              protected = [index for index, (kind, value) in enumerate(records) if kind == 'CHECK' and value.get('name') == 'protected-scope-unchanged']
+              retained = [index for index, (kind, value) in enumerate(records) if kind == 'CHECK' and value.get('name') == 'cleanup-retained']
+              passed = [index for index, (kind, _) in enumerate(records) if kind == 'PASS']
+              if len(cleanup) != 1 or len(protected) != 1 or len(retained) != 1 or len(passed) != 1 or not protected[0] < cleanup[0][0] < retained[0] < passed[0]:
+                  errors.append('cleanup_phase_sequence_unconfirmed')
+          elif mode == 'inspect':
+              if not flags(result, ['readOnly', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged']) or not integers(result, {'providerWrites': 0, 'localWrites': 0}) or any(kind in ['PASS', 'CLEANUP', 'CHECK', 'READY', 'WAITING'] for kind, _ in records):
+                  errors.append('inspection_contract_unconfirmed')
+          elif mode == 'cleanup':
+              if not (paid_cleanup(result, maintenance=True) or unpaid_cleanup(result)) or any(kind in ['PASS', 'INSPECT', 'CHECK', 'READY', 'WAITING'] for kind, _ in records):
+                  errors.append('cleanup_contract_unconfirmed')
+          else:
+              errors.append('invalid_mode')
+          summary = {'operation': operation, 'mode': mode, 'scenario': scenario, 'sourceSha': os.environ['GITHUB_SHA'], 'servingBuild': os.environ['EXPECTED_BUILD'], 'servingRevision': os.environ['SERVING_REVISION'], 'runId': os.environ['GITHUB_RUN_ID'], 'runAttempt': os.environ['GITHUB_RUN_ATTEMPT'], 'workflowProofValid': not errors, 'remoteExitCode': rc, 'liveOutputExitCode': stream_rc, 'errors': sorted(set(errors)), 'proof': result}
+          log = ''.join('CANCELLATION_RECOVERY_' + kind + '=' + json.dumps(value, separators=(',', ':')) + '\n' for kind, value in records)
+          Path('cancellation-recovery.txt').write_text(log)
+          Path('cancellation-recovery-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(log, end='')
+          print('CANCELLATION_RECOVERY_PROOF=' + json.dumps({'valid': not errors, 'errors': summary['errors']}))
+          raise SystemExit(bool(errors))
+          CANCELLATION_RECOVERY_PROOF
+      - name: Verify complete application configuration stayed unchanged
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ ! -s "$RUNNER_TEMP/cancellation-app-before.json" ]; then
+            echo '{"equal":null,"notCaptured":true}' > cancellation-config-comparison.json
+            exit 0
+          fi
+          az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/cancellation-app-after.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          def config(side):
+              properties = json.loads((root / f'cancellation-app-{side}.json').read_text())['properties']
+              return {'template': properties['template'], 'configuration': properties['configuration'], 'ready': properties['latestReadyRevisionName'], 'latest': properties['latestRevisionName']}
+          def differences(a, b, path='config'):
+              if type(a) is not type(b):
+                  return [path]
+              if isinstance(a, dict):
+                  return [p for key in sorted(set(a) | set(b)) for p in ([path + '.' + key] if key not in a or key not in b else differences(a[key], b[key], path + '.' + key))]
+              if isinstance(a, list):
+                  return [path + '.length'] if len(a) != len(b) else [p for i, (x, y) in enumerate(zip(a, b)) for p in differences(x, y, path + '[' + str(i) + ']')]
+              return [] if a == b else [path]
+          paths = differences(config('before'), config('after'))
+          result = {'equal': not paths, 'differentPaths': paths}
+          Path('cancellation-config-comparison.json').write_text(json.dumps(result) + '\n')
+          print('CANCELLATION_RECOVERY_CONFIG_COMPARISON=' + json.dumps(result))
+          raise SystemExit(bool(paths))
+          PY
+      - name: Verify public build and SQL health independently
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          build_ok=false
+          sql_ok=false
+          if curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' >/dev/null; then build_ok=true; fi
+          if curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"' >/dev/null; then sql_ok=true; fi
+          jq -n --argjson build "$build_ok" --argjson sql "$sql_ok" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{buildVerified:$build,sqlHealthy:$sql,verifiedAt:$at}' | tee cancellation-public-health.json
+          test "$build_ok" = true && test "$sql_ok" = true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: cancellation-operation-recovery-${{ inputs.scenario }}-${{ inputs.mode }}
+          path: |
+            cancellation-recovery.txt
+            cancellation-recovery-summary.json
+            cancellation-config-comparison.json
+            cancellation-public-health.json
+          if-no-files-found: warn
+          retention-days: 30
