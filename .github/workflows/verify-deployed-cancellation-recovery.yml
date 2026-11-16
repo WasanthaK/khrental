@@ -4,6 +4,7 @@ on:
     paths:
       - 'scripts/verify-deployed-cancellation-recovery.mjs'
       - '.github/workflows/verify-deployed-cancellation-recovery.yml'
+      - 'tests/cancellation-recovery-harness.test.js'
   workflow_dispatch:
     inputs:
       expected_build:
@@ -50,6 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check scripts/verify-deployed-cancellation-recovery.mjs
+          node --test tests/cancellation-recovery-harness.test.js
           python3 - <<'PY'
           import ast, re, subprocess, textwrap
           from pathlib import Path
@@ -130,7 +132,7 @@ jobs:
           git diff --name-only -z "$EXPECTED_BUILD" "$GITHUB_SHA" > "$RUNNER_TEMP/cancellation-source-diff.txt"
           while IFS= read -r -d '' changed; do
             case "$changed" in
-              docs/*|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|scripts/verify-deployed-checkout-recovery.mjs|.github/workflows/verify-deployed-checkout-recovery.yml|scripts/verify-deployed-cancellation-recovery.mjs|.github/workflows/verify-deployed-cancellation-recovery.yml) ;;
+              docs/*|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|scripts/verify-deployed-checkout-recovery.mjs|.github/workflows/verify-deployed-checkout-recovery.yml|scripts/verify-deployed-cancellation-recovery.mjs|.github/workflows/verify-deployed-cancellation-recovery.yml|tests/cancellation-recovery-harness.test.js) ;;
               *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
             esac
           done < "$RUNNER_TEMP/cancellation-source-diff.txt"
@@ -384,8 +386,8 @@ jobs:
               required = ['verified', 'fixtureInactive', 'recordsRetained', 'targetJournalRetained', 'setupJournalRetained', 'noAdditionalFinancialObjects', 'protectedBillingUnchanged', 'workerScopeUnchanged']
               if scheduled_scenario or reversal_scenario:
                   required.append('preparationJournalRetained')
-                  if type(value.get('scheduleCancellationResponseRecovered')) is not bool:
-                      return False
+              if scheduled_scenario and type(value.get('scheduleCancellationResponseRecovered')) is not bool:
+                  return False
               return flags(value, required) and same_commands(value) and type(value.get('expiryResponseRecovered')) is bool and type(value.get('cancellationResponseRecovered')) is bool
           def schedule_cleanup(value):
               if not scheduled_scenario:
@@ -450,6 +452,8 @@ jobs:
                   required += ['releaseResponseReturned', 'releaseCheckpointCompletedBeforeCancellation', 'releaseCheckpointPreserved']
                   counts.update({'recoveryCancellationPosts': 0, 'recoveryProviderWrites': 0})
               if reversal_scenario:
+                  required.remove('cancelAtPeriodEnd')
+                  denied.append('cancelAtPeriodEnd')
                   required += ['cancellationReversalAccepted', 'preparationJournalRetained', 'preparationRetryStable']
                   counts.update({'preparationCancellationPosts': 1, 'preparationAttempts': 1, 'preparationCompletedSteps': 1, 'preparationRecoveredAudits': 1, 'recoveryProviderWrites': 0})
               if not flags(result, required, denied) or not integers(result, counts) or result.get('currency') != 'usd' or any(kind == 'INSPECT' for kind, _ in records):
