@@ -25,7 +25,7 @@ on:
         required: true
         type: choice
         default: period-end-no-schedule
-        options: [period-end-no-schedule, period-end-release-response-loss]
+        options: [period-end-no-schedule, period-end-release-response-loss, period-end-after-release-response-loss]
       confirmation:
         description: VERIFY-CANCELLATION-RECOVERY, INSPECT-CANCELLATION-RECOVERY or CLEANUP-CANCELLATION-RECOVERY
         required: true
@@ -78,11 +78,11 @@ jobs:
           expected = ast.literal_eval(assignments[0].value)
           harness = Path('scripts/verify-deployed-cancellation-recovery.mjs').read_text()
           actual = [name for call in re.findall(r'\bcheck\(([^;]+)\)', harness) for name in re.findall(r"'([a-z][a-z0-9_-]+)'", call)]
-          assert set(expected) == {'period-end-no-schedule', 'period-end-release-response-loss'}
-          for scenario, count in [('period-end-no-schedule', 16), ('period-end-release-response-loss', 18)]:
+          assert set(expected) == {'period-end-no-schedule', 'period-end-release-response-loss', 'period-end-after-release-response-loss'}
+          for scenario, count in [('period-end-no-schedule', 16), ('period-end-release-response-loss', 18), ('period-end-after-release-response-loss', 19)]:
               assert len(expected[scenario]) == len(set(expected[scenario])) == count
           assert len(actual) == len(set(actual)) and set(actual) == set().union(*map(set, expected.values())), 'Harness and workflow evidence contracts differ'
-          print(f'Validated {checked} shell blocks, live marker sanitizer and both cancellation proof check sets; runtime proof requires each exact scenario order')
+          print(f'Validated {checked} shell blocks, live marker sanitizer and all three cancellation proof check sets; runtime proof requires each exact scenario order')
           PY
   verify:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
@@ -114,7 +114,7 @@ jobs:
             *) echo 'CANCELLATION_RECOVERY_BLOCKED=invalid_mode_confirmation' >&2; exit 1 ;;
           esac
           case "$CANCELLATION_RECOVERY_SCENARIO" in
-            period-end-no-schedule|period-end-release-response-loss) ;;
+            period-end-no-schedule|period-end-release-response-loss|period-end-after-release-response-loss) ;;
             *) echo 'CANCELLATION_RECOVERY_BLOCKED=invalid_scenario' >&2; exit 1 ;;
           esac
           [[ "$CANCELLATION_RECOVERY_OPERATION" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
@@ -189,7 +189,7 @@ jobs:
           scenario = os.environ['CANCELLATION_RECOVERY_SCENARIO']
           uuid = r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}'
           identity_keys = {'operation', 'mode', 'scenario', 'targetCommandId', 'setupCommandId', 'customerId', 'sessionId'}
-          if scenario == 'period-end-release-response-loss':
+          if scenario in ['period-end-release-response-loss', 'period-end-after-release-response-loss']:
               identity_keys.add('preparationCommandId')
           invalid, ready_identity, last_elapsed = False, None, -1
           def pairs(items):
@@ -213,11 +213,11 @@ jobs:
                   assert re.fullmatch(uuid, operation)
                   assert value.get('operation') == operation
                   assert value.get('mode') == mode == 'verify'
-                  assert value.get('scenario') == scenario and scenario in ['period-end-no-schedule', 'period-end-release-response-loss']
+                  assert value.get('scenario') == scenario and scenario in ['period-end-no-schedule', 'period-end-release-response-loss', 'period-end-after-release-response-loss']
                   assert value.get('targetCommandId') == operation
                   assert isinstance(value.get('setupCommandId'), str) and re.fullmatch(uuid, value['setupCommandId'])
                   assert value['setupCommandId'] != operation
-                  if scenario == 'period-end-release-response-loss':
+                  if scenario in ['period-end-release-response-loss', 'period-end-after-release-response-loss']:
                       assert isinstance(value.get('preparationCommandId'), str) and re.fullmatch(uuid, value['preparationCommandId'])
                       assert value['preparationCommandId'] not in [operation, value['setupCommandId']]
                   assert isinstance(value.get('customerId'), str) and re.fullmatch(r'cus_[A-Za-z0-9]+', value['customerId'])
@@ -313,7 +313,7 @@ jobs:
                   assert isinstance(value, dict) and safe(value)
                   assert value.get('operation') == operation
                   assert value.get('mode') == mode
-                  assert value.get('scenario') == scenario and scenario in ['period-end-no-schedule', 'period-end-release-response-loss']
+                  assert value.get('scenario') == scenario and scenario in ['period-end-no-schedule', 'period-end-release-response-loss', 'period-end-after-release-response-loss']
               except (ValueError, AssertionError, TypeError):
                   errors.append('invalid_or_unsafe_marker')
                   continue
@@ -324,7 +324,7 @@ jobs:
               errors.append('live_output_unconfirmed')
           if any(kind in ['FAILED', 'CLEANUP_FAILED'] for kind, _ in records):
               errors.append('harness_failed')
-          if scenario not in ['period-end-no-schedule', 'period-end-release-response-loss']:
+          if scenario not in ['period-end-no-schedule', 'period-end-release-response-loss', 'period-end-after-release-response-loss']:
               errors.append('invalid_scenario')
           selected = {'verify': 'PASS', 'inspect': 'INSPECT', 'cleanup': 'CLEANUP'}.get(mode)
           finals = [value for kind, value in records if kind == selected]
@@ -334,9 +334,11 @@ jobs:
           checks_by_scenario = {
               'period-end-no-schedule': ['protected-baseline', 'fresh-isolated-fixture', 'normal-checkout-setup', 'unique-bound-checkout', 'hosted-payment-completed', 'paid-stock-promoted', 'paid-no-schedule-baseline', 'cancellation-response-lost', 'original-cancellation-intent-preserved', 'naturally-due', 'original-cancellation-recovered', 'exact-operation-retries-stable', 'refresh-retry-stable', 'original-financials-stock-preserved', 'protected-scope-unchanged', 'cleanup-retained'],
               'period-end-release-response-loss': ['protected-baseline', 'fresh-isolated-fixture', 'normal-checkout-setup', 'unique-bound-checkout', 'hosted-payment-completed', 'paid-stock-promoted', 'normal-cessation-preparation', 'preparation-retry-stable', 'paid-scheduled-baseline', 'schedule-release-response-lost', 'original-cancellation-intent-preserved', 'naturally-due', 'original-cancellation-recovered', 'exact-operation-retries-stable', 'refresh-retry-stable', 'original-financials-stock-preserved', 'protected-scope-unchanged', 'cleanup-retained'],
+              'period-end-after-release-response-loss': ['protected-baseline', 'fresh-isolated-fixture', 'normal-checkout-setup', 'unique-bound-checkout', 'hosted-payment-completed', 'paid-stock-promoted', 'normal-cessation-preparation', 'preparation-retry-stable', 'paid-scheduled-baseline', 'release-checkpoint-completed', 'cancellation-response-lost-after-release', 'original-cancellation-intent-preserved', 'naturally-due', 'original-cancellation-recovered', 'exact-operation-retries-stable', 'refresh-retry-stable', 'original-financials-stock-preserved', 'protected-scope-unchanged', 'cleanup-retained'],
           }
           expected_checks = checks_by_scenario.get(scenario, [])
-          release_scenario = scenario == 'period-end-release-response-loss'
+          scheduled_scenario = scenario in ['period-end-release-response-loss', 'period-end-after-release-response-loss']
+          after_release_scenario = scenario == 'period-end-after-release-response-loss'
           def identifier(value, pattern):
               return isinstance(value, str) and re.fullmatch(pattern, value) is not None
           def integers(value, expected):
@@ -345,9 +347,9 @@ jobs:
               return all(value.get(key) is True for key in required) and all(value.get(key) is False for key in denied)
           def bound_ids(value):
               common = identifier(operation, uuid) and value.get('targetCommandId') == operation and identifier(value.get('setupCommandId'), uuid) and value['setupCommandId'] != operation
-              return common and (not release_scenario or (identifier(value.get('preparationCommandId'), uuid) and value['preparationCommandId'] not in [operation, value['setupCommandId']]))
+              return common and (not scheduled_scenario or (identifier(value.get('preparationCommandId'), uuid) and value['preparationCommandId'] not in [operation, value['setupCommandId']]))
           def same_commands(value):
-              return bound_ids(value) and value.get('setupCommandId') == result.get('setupCommandId') and (not release_scenario or value.get('preparationCommandId') == result.get('preparationCommandId'))
+              return bound_ids(value) and value.get('setupCommandId') == result.get('setupCommandId') and (not scheduled_scenario or value.get('preparationCommandId') == result.get('preparationCommandId'))
           if not bound_ids(result):
               errors.append('setup_target_identity_unconfirmed')
           cleanup = [(index, value) for index, (kind, value) in enumerate(records) if kind == 'CLEANUP']
@@ -355,7 +357,7 @@ jobs:
               if not same_commands(value):
                   errors.append('cleanup_command_identity_unconfirmed')
           identity_keys = {'operation', 'mode', 'scenario', 'targetCommandId', 'setupCommandId', 'customerId', 'sessionId'}
-          if release_scenario:
+          if scheduled_scenario:
               identity_keys.add('preparationCommandId')
           def live_marker(kind, value):
               identity = {key: value.get(key) for key in identity_keys}
@@ -372,17 +374,17 @@ jobs:
               errors.append('hosted_wait_marker_unconfirmed')
           def retained_stock(value):
               counts = [value.get(key) for key in ['pendingStockRetained', 'promotedStockRetained']]
-              quantity = 2 if release_scenario else 1
+              quantity = 2 if scheduled_scenario else 1
               return counts if all(type(count) is int and 0 <= count <= quantity for count in counts) else None
           def cleanup_common(value):
               required = ['verified', 'fixtureInactive', 'recordsRetained', 'targetJournalRetained', 'setupJournalRetained', 'noAdditionalFinancialObjects', 'protectedBillingUnchanged', 'workerScopeUnchanged']
-              if release_scenario:
+              if scheduled_scenario:
                   required.append('preparationJournalRetained')
                   if type(value.get('scheduleCancellationResponseRecovered')) is not bool:
                       return False
               return flags(value, required) and same_commands(value) and type(value.get('expiryResponseRecovered')) is bool and type(value.get('cancellationResponseRecovered')) is bool
           def schedule_cleanup(value):
-              if not release_scenario:
+              if not scheduled_scenario:
                   return True
               retained = retained_stock(value)
               if retained is None or value.get('actualProperties') != retained[1] or not integers(value, {'actualUnits': 0}) or type(value.get('actualProperties')) is not int or value['actualProperties'] not in [0, 2]:
@@ -401,10 +403,10 @@ jobs:
           def paid_cleanup(value, maintenance=False):
               retained = retained_stock(value)
               expiration = (integers(value, {'cleanupPosts': 0}) and value.get('expiryResponseRecovered') is False) or (maintenance and integers(value, {'cleanupPosts': 1}) and value.get('expiryResponseRecovered') is True)
-              common = cleanup_common(value) and flags(value, ['sessionCompleted', 'subscriptionCanceled', 'initialInvoicePreserved'], ['noSession', 'sessionExpired', 'noSubscription', 'noInvoice', 'noPayment']) and expiration and type(value.get('cleanupCancellationRequests')) is int and value['cleanupCancellationRequests'] in [0, 1] and retained is not None and sum(retained) == (2 if release_scenario else 1)
+              common = cleanup_common(value) and flags(value, ['sessionCompleted', 'subscriptionCanceled', 'initialInvoicePreserved'], ['noSession', 'sessionExpired', 'noSubscription', 'noInvoice', 'noPayment']) and expiration and type(value.get('cleanupCancellationRequests')) is int and value['cleanupCancellationRequests'] in [0, 1] and retained is not None and sum(retained) == (2 if scheduled_scenario else 1)
               if not common:
                   return False
-              if not release_scenario:
+              if not scheduled_scenario:
                   return value.get('cleanupKind') == 'paid-subscription-canceled'
               if not schedule_cleanup(value) or not identifier(value.get('subscriptionId'), r'sub_[A-Za-z0-9]+'):
                   return False
@@ -422,7 +424,7 @@ jobs:
               retained = retained_stock(value)
               if not cleanup_common(value) or not flags(value, ['noSubscription', 'noInvoice', 'noPayment'], ['sessionCompleted', 'subscriptionCanceled', 'initialInvoicePreserved', 'cancellationResponseRecovered']) or not integers(value, {'cleanupCancellationRequests': 0}) or retained is None or retained[1] != 0:
                   return False
-              if release_scenario and (not schedule_cleanup(value) or value.get('subscriptionId') is not None or value.get('scheduleId') is not None):
+              if scheduled_scenario and (not schedule_cleanup(value) or value.get('subscriptionId') is not None or value.get('scheduleId') is not None):
                   return False
               if value.get('cleanupKind') == 'no-checkout-effect':
                   return flags(value, ['noSession'], ['sessionExpired', 'expiryResponseRecovered']) and integers(value, {'cleanupPosts': 0})
@@ -433,11 +435,14 @@ jobs:
               required = ['passed', 'sandbox', 'normalCheckoutSetup', 'hostedCheckoutCompleted', 'responseDiscarded', 'originalIdempotencyKeyPreserved', 'originalIntentPreserved', 'cancelAtPeriodEnd', 'paidAccessRetained', 'exactCancelRetryStable', 'exactReconcileRetryStable', 'originalRecoveryRetryStable', 'refreshRetryStable', 'stockUnchanged', 'stockPrivate', 'promotedStockRetained', 'initialInvoicePreserved', 'noAdditionalFinancialObjects', 'subscriptionCanceled', 'sessionCompleted', 'fixtureInactive', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged', 'processLocalStagingReadiness']
               denied = ['sessionExpired', 'servingConfigurationChanged', 'automaticWorkerAccepted', 'httpAccepted', 'uiAccepted', 'credentialLoginAccepted', 'liveChargingEnabled', 'wholeProcessCrashAccepted', 'naturalPaidBoundaryAccepted', 'scheduleReleaseAccepted', 'cancellationReversalAccepted']
               counts = {'customerPosts': 1, 'checkoutPosts': 1, 'cancellationPosts': 1, 'recoveryProviderWrites': 0, 'retryProviderWrites': 0, 'refreshProviderWrites': 0, 'cleanupPosts': 0, 'cleanupCancellationRequests': 1, 'setupAttempts': 1, 'setupCompletedSteps': 2, 'targetAttempts': 2, 'targetCompletedSteps': 1, 'targetRecoveredAudits': 1, 'releaseScheduleSteps': 0, 'checkoutSessions': 1, 'subscriptionsCreated': 1, 'invoicesCreated': 1, 'paymentIntentsCreated': 1, 'chargesCreated': 1, 'initialInvoiceAmountMinor': 500, 'billedQuantity': 1, 'actualProperties': 1, 'actualUnits': 0, 'promotionAuditCount': 1}
-              if release_scenario:
+              if scheduled_scenario:
                   denied.remove('scheduleReleaseAccepted')
                   required += ['scheduleReleaseAccepted', 'scheduleRetained', 'scheduleOwnershipConfirmed', 'releasedScheduleRetained', 'preparationJournalRetained', 'cessationControlRetained', 'pendingQuantityCleared', 'preparationRetryStable', 'processLocalCessationReadiness']
                   denied.append('attachedScheduleCanceled')
                   counts.update({'releasePosts': 1, 'recoveryReleasePosts': 0, 'recoveryCancellationPosts': 1, 'recoveryProviderWrites': 1, 'preparationSchedulePosts': 1, 'preparationPhasePosts': 1, 'preparationRetryProviderWrites': 0, 'preparationAttempts': 1, 'preparationCompletedSteps': 2, 'preparationRecoveredAudits': 1, 'targetCompletedSteps': 2, 'releaseScheduleSteps': 1, 'initialInvoiceAmountMinor': 1000, 'billedQuantity': 2, 'actualProperties': 2, 'ceasedProperties': 1, 'cessationControls': 1, 'managedDwellings': 1, 'cleanupScheduleCancellationRequests': 0})
+              if after_release_scenario:
+                  required += ['releaseResponseReturned', 'releaseCheckpointCompletedBeforeCancellation', 'releaseCheckpointPreserved']
+                  counts.update({'recoveryCancellationPosts': 0, 'recoveryProviderWrites': 0})
               if not flags(result, required, denied) or not integers(result, counts) or result.get('currency') != 'usd' or any(kind == 'INSPECT' for kind, _ in records):
                   errors.append('acceptance_contract_unconfirmed')
               if not all(identifier(result.get(key), pattern) for key, pattern in [('customerId', r'cus_[A-Za-z0-9]+'), ('sessionId', r'cs_test_[A-Za-z0-9]+'), ('customerEventId', r'evt_[A-Za-z0-9]+'), ('subscriptionId', r'sub_[A-Za-z0-9]+'), ('initialInvoiceId', r'in_[A-Za-z0-9]+'), ('paymentIntentId', r'pi_[A-Za-z0-9]+'), ('chargeId', r'ch_[A-Za-z0-9]+')]):
@@ -447,7 +452,7 @@ jobs:
               keys = [re.fullmatch(key_pattern + suffix, result.get(name) or '') if isinstance(result.get(name), str) else None for name, suffix in [('originalCustomerKey', ':customer'), ('originalCheckoutKey', ':checkout'), ('originalCancellationKey', '')]]
               if not all(keys) or keys[0].groups() != keys[1].groups() or keys[0][1].lower() != operation or keys[0][2].lower() != result.get('setupCommandId') or keys[2][1] != keys[0][1] or keys[2][2].lower() != operation:
                   errors.append('original_setup_or_unsuffixed_target_key_unconfirmed')
-              if release_scenario:
+              if scheduled_scenario:
                   preparation_keys = [re.fullmatch(key_pattern + suffix, result.get(name) or '') if isinstance(result.get(name), str) else None for name, suffix in [('originalPreparationScheduleKey', ':schedule'), ('originalPreparationPhasesKey', ':phases')]]
                   if not all(keys) or not all(preparation_keys) or preparation_keys[0].groups() != preparation_keys[1].groups() or preparation_keys[0][1] != keys[0][1] or preparation_keys[0][2].lower() != result.get('preparationCommandId') or result.get('originalReleaseKey') != result.get('originalCancellationKey', '') + ':release':
                       errors.append('original_preparation_or_release_key_unconfirmed')
@@ -465,6 +470,18 @@ jobs:
                       pass
               if not boundary_valid or not isinstance(cancellation, dict) or cancellation.get('cancelAtPeriodEnd') is not True or cancellation != {'cancelAtPeriodEnd': True, 'paidThrough': paid_through}:
                   errors.append('saved_cancellation_result_or_paid_boundary_unconfirmed')
+              if after_release_scenario:
+                  before_hash, after_hash = result.get('releaseCheckpointBeforeHash'), result.get('releaseCheckpointAfterHash')
+                  completed_at = result.get('releaseCheckpointCompletedAt')
+                  checkpoint_valid = False
+                  if boundary_valid and identifier(completed_at, r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z'):
+                      try:
+                          completed = datetime.datetime.strptime(completed_at, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=datetime.timezone.utc)
+                          checkpoint_valid = 0 < completed.timestamp() < result['providerPeriodEnd']
+                      except ValueError:
+                          pass
+                  if result.get('responseLossStep') != 'set_cancellation' or not identifier(before_hash, r'[a-f0-9]{64}') or before_hash != after_hash or not checkpoint_valid:
+                      errors.append('completed_release_checkpoint_unconfirmed')
               observed = [value.get('name') for kind, value in records if kind == 'CHECK']
               if result.get('checks') != expected_checks or observed != expected_checks:
                   errors.append('check_sequence_unconfirmed')
@@ -475,8 +492,8 @@ jobs:
               elapsed = [seconds for _, seconds in waiting]
               if len(ready) != 1 or len(before_wait) != 1 or len(after_wait) != 1 or not before_wait[0] < ready[0] < after_wait[0] or any(not ready[0] < index < after_wait[0] for index, _ in waiting) or any(type(seconds) is not int for seconds in elapsed) or elapsed != sorted(set(elapsed)):
                   errors.append('hosted_wait_sequence_unconfirmed')
-              cleanup_counts = {'cleanupCancellationRequests': 1, 'pendingStockRetained': 0, 'promotedStockRetained': 2 if release_scenario else 1}
-              if release_scenario:
+              cleanup_counts = {'cleanupCancellationRequests': 1, 'pendingStockRetained': 0, 'promotedStockRetained': 2 if scheduled_scenario else 1}
+              if scheduled_scenario:
                   cleanup_counts.update({'cleanupScheduleCancellationRequests': 0, 'actualProperties': 2, 'actualUnits': 0, 'cessationControls': 1, 'ceasedProperties': 1})
               if len(cleanup) != 1 or not paid_cleanup(cleanup[0][1]) or not integers(cleanup[0][1], cleanup_counts):
                   errors.append('paid_cleanup_unconfirmed')
@@ -488,7 +505,7 @@ jobs:
           elif mode == 'inspect':
               if not flags(result, ['readOnly', 'recordsRetained', 'protectedBillingUnchanged', 'workerScopeUnchanged']) or not integers(result, {'providerWrites': 0, 'localWrites': 0}) or any(kind in ['PASS', 'CLEANUP', 'CHECK', 'READY', 'WAITING'] for kind, _ in records):
                   errors.append('inspection_contract_unconfirmed')
-              if release_scenario and (not flags(result, ['preparationJournalRetained']) or not integers(result, {'cleanupScheduleCancellationRequests': 0})):
+              if scheduled_scenario and (not flags(result, ['preparationJournalRetained']) or not integers(result, {'cleanupScheduleCancellationRequests': 0})):
                   errors.append('preparation_inspection_unconfirmed')
           elif mode == 'cleanup':
               if not (paid_cleanup(result, maintenance=True) or unpaid_cleanup(result)) or any(kind in ['PASS', 'INSPECT', 'CHECK', 'READY', 'WAITING'] for kind, _ in records):
