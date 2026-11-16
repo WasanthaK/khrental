@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "record_type": "commercial_research_and_proposals",
+  "reviewed_at_utc": "2026-11-16T17:07:03+00:00",
+  "base_sha": "367274cfd800dd64774d7490c7a58d353e74a039",
+  "document": "docs/R5-LK-COMMERCIAL-READINESS-20261116.md",
+  "status": "prepared_for_owner_review_not_commercial_or_launch_acceptance",
+  "scope": [
+    "CM01.3",
+    "CM01.4",
+    "CM01.5",
+    "CM01.6",
+    "CM01.7",
+    "CM02.1",
+    "CM02.2",
+    "CM02.4",
+    "CM02.5"
+  ],
+  "changes": [
+    "Prepared current-source LK commercial, tax and privacy decision record",
+    "Reconciled retained LKR25000/2percent direction with older example wording",
+    "Linked existing commercial records and synchronized canonical CM documentation",
+    "Preserved actual owner approvals, pending decisions, engineering queue and runtime evidence"
+  ],
+  "boundaries": {
+    "new_owner_policy_approval": false,
+    "tax_or_legal_compliance_certification": false,
+    "public_customer_policy_publication": false,
+    "provider_or_runtime_change": false,
+    "live_charging": false,
+    "new_fixture_or_operation_uuid": false,
+    "engineering_ownership_reassigned": false
+  },
+  "validation": {
+    "relative_links_and_anchors_checked": 51,
+    "broken_links": 0,
+    "shared_canonical_queue_sha256": "a905f760d109399a4eeff57a36f6a7502139b6d30f67d7cb206cc846a285223d",
+    "current_status_and_owner_scope_unchanged": true,
+    "engineering_queue_and_self_handoff_next_slice_unchanged": true,
+    "commercial_statuses_unchanged": {
+      "CM01.3 LK calculation/FX/rounding": "YELLOW",
+      "CM01.4 effective price publication": "YELLOW",
+      "CM01.5 reactivation terms": "YELLOW",
+      "CM01.6 exceptional bulk rules": "YELLOW",
+      "CM01.7 refunds/credits/disclosures": "YELLOW",
+      "CM02.1 live merchant/payout": "RED",
+      "CM02.2 tax responsibilities": "YELLOW",
+      "CM02.4 entity/privacy/transfers": "YELLOW",
+      "CM02.5 retention/deletion/requests": "YELLOW"
+    },
+    "changed_scope": "documentation_only",
+    "synthetic_fx_lkr_per_usd": "300",
+    "synthetic_fx_is_not_live_or_approved": true,
+    "calculation_examples": [
+      {
+        "rent_lkr": "20000",
+        "monthly_usd": "5.00"
+      },
+      {
+        "rent_lkr": "25000",
+        "monthly_usd": "5.00"
+      },
+      {
+        "rent_lkr": "25001",
+        "monthly_usd": "5.00"
+      },
+      {
+        "rent_lkr": "25075",
+        "monthly_usd": "5.01"
+      },
+      {
+        "rent_lkr": "50000",
+        "monthly_usd": "6.67"
+      },
+      {
+        "rent_lkr": "100000",
+        "monthly_usd": "10.00"
+      }
+    ],
+    "independent_review": "commercial/source, tax-source and privacy-source reviews; material restoration/overdue-invoice distinction corrected; no professional legal approval claimed"
+  },
+  "sources": [
+    {
+      "url": "https://www.cbsl.gov.lk/en/rates-and-indicators/exchange-rates/daily-indicative-usd-spot-exchange-rates",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.cbsl.gov.lk/en/node/146",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://docs.stripe.com/payments/managed-payments/eligibility",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://docs.stripe.com/payments/managed-payments/tax-compliance",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://docs.stripe.com/tax/supported-countries/asia-pacific/collect-tax?tax-jurisdiction-asia-pacific=sri-lanka",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.ird.gov.lk/en/publications/Value%20Added%20Tax_Acts/VAT_Act_No_14-2026_E.PDF",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.ird.gov.lk/en/publications/Acts_SSCL/SSCL_Act_No_10-2026_E.pdf",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.ird.gov.lk/en/Lists/Latest%20News%20%20Notices/Attachments/799/PN_VAT_2026-03_New_E.pdf",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.ird.gov.lk/en/publications/Gazette_Documents/2026_2500_106_E.pdf",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Value%20Added%20Tax%20%28VAT%29.aspx",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.ird.gov.lk/en/Type%20of%20Taxes/SitePages/Social%20Security%20Contribution%20Levy%20%28SSCL%29.aspx",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.dpa.gov.lk/Gazet/2498-16_E.pdf",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.dpa.gov.lk/privacy-notice",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.dpa.gov.lk/acts/Data%20Protection%20Act%20SL%20-%20English%20%282%29.pdf",
+      "checked_on": "2026-11-16"
+    },
+    {
+      "url": "https://www.dpa.gov.lk/acts/22-2025_E_251104_201549%20%281%29.pdf",
+      "checked_on": "2026-11-16"
+    }
+  ],
+  "documents": [
+    {
+      "path": "docs/EXECUTION-PLAN.md",
+      "sha256": "37f01e779731966a9f49dcbaec55688d3b8e3b7ca789be40fc9af1ff8e274602"
+    },
+    {
+      "path": "docs/R4-R5-DELIVERY.md",
+      "sha256": "fa7ab7843fb2ee51495ed657a83c2fb57e772907f83d66f8e2bbbd61ab36ce58"
+    },
+    {
+      "path": "docs/R5-LIFECYCLE-ACCEPTANCE-20261105.md",
+      "sha256": "d7064612f37334cb44d3b06fd2263ed74d22c3e2d468684801a4d3b0501c0613"
+    },
+    {
+      "path": "docs/R5-SELF-HANDOFF-20261115.md",
+      "sha256": "9d23d05056fe7b3b1c4575ef40715507e1ca4a2f1b5c140edd4927f357d51710"
+    },
+    {
+      "path": "docs/QUIXO-STRIPE-B02-B03-READINESS.md",
+      "sha256": "cda9cd8afe49149dca9f3e648d20181478cc9e3e6be80763eb26eb0f6ea628ed"
+    },
+    {
+      "path": "docs/QUIXO-HOMES-STRIPE-SAAS-BILLING.md",
+      "sha256": "811e583b1619e2f5587cf168163e8e76734cc24907e1a7418bb0fd4dae592f15"
+    },
+    {
+      "path": "docs/R5-LK-COMMERCIAL-READINESS-20261116.md",
+      "sha256": "6ef7e8c8e6cb4d744f03d2c1e569d83e54113be494c64aed2a0792ec27632987"
+    }
+  ]
+}

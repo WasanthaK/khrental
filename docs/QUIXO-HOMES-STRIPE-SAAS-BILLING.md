@@ -1,5 +1,11 @@
 # Quixo.Homes canonical SaaS billing contract
 
+## Commercial readiness update — 16 November 2026
+
+The [16 November commercial readiness record](R5-LK-COMMERCIAL-READINESS-20261116.md) is the current research/proposal pack for CM01.3–CM01.7 and CM02.1/2/4/5. It retains the approved monthly/no-trial inventory policy and LKR 25,000/2% direction, prepares explicit FX/rounding, restoration and refund choices, and records current LK tax/privacy sources and missing merchant facts. Preparation is complete; final decisions, relevant engineering and launch acceptance remain open. No customer policy, provider setting or live charge is changed.
+
+The dated engineering checkpoints below are historical observations. Use the [canonical queue](EXECUTION-PLAN.md#development-progress-and-remaining-acceptance--controlling-queue) and [self-handoff](R5-SELF-HANDOFF-20261115.md) for current engineering status. Live charging and full enforcement remain OFF.
+
 **BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
 
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
@@ -119,7 +125,7 @@ Evidence: [schema rollout](evidence/r5-migration-apply-20261112.json), [worker a
 **Provider-operation recovery — merged and source-verified:** [PR #574](https://github.com/WasanthaK/khrental/pull/574) merged as `8b5d1f30633a83dc548415b957e77c57f31f170d`. Final head `7034d7526ffb42bae47588069f5fd646d268d020` passed [strict lint, 1,257/1,257 tests and production build](https://github.com/WasanthaK/khrental/actions/runs/43169040896), [migration/recovery SQL](https://github.com/WasanthaK/khrental/actions/runs/43169040880) and [two-tenant billing SQL](https://github.com/WasanthaK/khrental/actions/runs/43169040834). This includes 41 process-interruption cases. Customer/Checkout, portal, preview, cessation-provider and pricing-publication recovery are source-complete; do not requeue them. [Operation coverage and evidence boundaries](R5-RECOVERY-IMPLEMENTATION-20261112.md#remaining-provider-operations--pr-574) remain controlling. No deployment, migration apply or activation occurred. Workstream 1 remains yellow for staging/real-provider acceptance. **Historical next step at #574:** subsequently completed through #578–#580; use the controlling queue above.
 
 
-The [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) and [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) supersede historical implementation queues below. Forms #561 are deployed at Ready 0000488. Recovery #564–#568/#570/#572/#574 is merged, source-verified and not deployed; the latest evidence is above; historically, #572 passed 1,230 tests, lint and build in [43151088826](https://github.com/WasanthaK/khrental/actions/runs/43151088826).
+The [canonical plan](EXECUTION-PLAN.md#development-progress-and-remaining-acceptance--controlling-queue) and [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) supersede historical implementation queues below. Forms #561 are deployed at Ready 0000488. Recovery #564–#568/#570/#572/#574 is merged, source-verified and not deployed; the latest evidence is above; historically, #572 passed 1,230 tests, lint and build in [43151088826](https://github.com/WasanthaK/khrental/actions/runs/43151088826).
 
 The [approved discovery corrections/defaults](R5-ENGINEERING-DISCOVERY-20261112.md) authorize engineering of aggregate billing, renewal-only split differences and restoration from restoration time while preserving paid capacity. They do not publish customer terms or resolve remaining merchant, tax, FX, refund or privacy decisions. Restore/split implementation and other cessation states are unfinished. Provider-operation recovery source is complete through #574; staging and genuine provider acceptance remain open. Follow the [completed-work/reopening rule](EXECUTION-PLAN.md#completed-work-and-reopening-rule); do not repeat accepted signing, initial billing or form preparation. Production migrations/readiness and live charging remain off.
 
@@ -215,7 +221,7 @@ This section supersedes the earlier fixed-USD-5/no-app-side-pricing-edit restric
 | Effective date and version | Schedule and identify each pricing rule; retain previous versions |
 | Research rationale | Record the source/date or decision note supporting the market threshold |
 
-The user specifically approved configurability of the **base fee and threshold**. The excess fee/rate, final threshold values, billing currency overrides, FX treatment and rounding are not yet commercially finalized. Rs 25,000, USD 100 and BND 1,200 are discussion examples, not production defaults or researched market findings. No example may activate an unapproved surcharge.
+The owner approved configurability of the **base fee and threshold** on 30 October. The later [10 November commercial record](QUIXO-STRIPE-B02-B03-READINESS.md#controlling-commercial-decision-pack--10-november-2026) retains the **LKR 25,000 threshold and 2% excess direction**. The complete rent basis, FX, rounding, effective price and customer treatment remain unresolved; the percentage calculation is not implemented or approved for publication. USD 100 and BND 1,200 remain discussion examples, not production defaults or researched market findings. See the [current proposals](R5-LK-COMMERCIAL-READINESS-20261116.md#2-commercial-proposals-ready-for-an-owner-decision).
 
 Only a server-verified active **global/platform admin** may create/change these rules. Organization owners, staff, seekers and client-supplied roles/country values must not grant price-edit authority. Validate amounts/currencies, prevent stale concurrent overwrites, record actor/before/after/reason/effective time, and preview the customer price before activation. Unconfigured/incomplete market rules must not silently invent a fee or enable paid checkout.
 
@@ -290,7 +296,7 @@ A single Product and one licensed, per-unit USD 5 recurring monthly Price are th
 | Payment collection and Stripe-side tax accounting | Verified webhook ingestion, durable ID mapping and reconciliation |
 | Eligible merchant-of-record indirect taxes under Managed Payments | Product delivery, customer support outside transaction level, audit and regional policy |
 
-The app stores **identifiers and a verified billing entitlement projection only**, such as organization ID, Stripe Customer ID, Subscription ID, Subscription Item ID, Price ID, billed quantity, billing status, current period, last applied Stripe event, timestamps and reconciliation outcome. This is **not** an editable product, tax or plan catalog.
+The app retains organization/provider identifiers and the verified billing entitlement projection, including billed quantity, billing status, paid period, event/reconciliation history and timestamps. The later 30 October decision additionally authorizes platform-admin commercial drafts, versions and controlled Stripe publication, implemented for the bounded sandbox base-price scope. Stripe remains authoritative for actual payment, subscription and invoice state. Percentage/FX pricing, tax readiness and live publication are not established by those controls.
 
 Implement verified signed Stripe webhooks, deduplicated event IDs, idempotent transitions, out-of-order handling, replay/reconciliation, and server-side entitlement checks. Account for `checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.paid`, `invoice.payment_failed` (and additional events supported by the selected integration). A Checkout success page or a Stripe event alone cannot grant access to an unrelated organization.
 
@@ -318,6 +324,8 @@ References:
 - https://docs.stripe.com/billing/subscriptions/webhooks
 
 ## 6. Ordered delivery gates
+
+**Historical ordering and status labels:** the B05/B06 “not started” entries below predate the accepted sandbox integration and bounded lifecycle evidence. The [current task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) controls remaining work. Later owner decisions resolve final-dwelling cancellation, next-invoice proration and post-expiry read-only management; reactivation, tax and other named commercial exits remain open.
 
 1. **B01 — Commercial decision (CLOSED):** USD 5 per dwelling monthly, no trial, Stripe-only plans, free seekers, subscriptions separate from rental payments.
 2. **B02 — Stripe merchant-of-record feasibility (OPEN):** confirm Quixo, Inc. account acceptance for Managed Payments, tax coverage for initial countries, supported subscription quantity changes, fees and disclosures. Stripe Tax/Billing fallback must be explicitly approved if Managed Payments is unavailable.
