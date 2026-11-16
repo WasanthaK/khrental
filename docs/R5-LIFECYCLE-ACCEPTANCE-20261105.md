@@ -601,7 +601,7 @@ These are existing automated cases reconciled to the handoff; no accepted signin
 
 ### Handoff task-level dispositions
 
-**Reconciled 15 November 2026, 22:15:02 Asia/Colombo, through run 43737055320:** use this task-level table with the controlling queue. Source completion, deployment and live acceptance are separate; rows below retain every unresolved obligation while removing superseded engineering tasks.
+**Reconciled 16 November 2026, 05:42:14 Asia/Colombo, through run 43778351120:** use this task-level table with the controlling queue. Source completion, deployment and live acceptance are separate; rows below retain every unresolved obligation while removing superseded engineering tasks.
 
 Statuses below describe the exact handoff acceptance, not merely helper availability. Yellow = implemented or bounded evidence with a stated gap; red = unfinished engineering, failed acceptance or concrete blocker. This table controls over superseded pending wording in older dated checkpoints.
 
