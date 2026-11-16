@@ -17,7 +17,9 @@ const mode=process.env.CANCELLATION_RECOVERY_MODE;
 const scenario=process.env.CANCELLATION_RECOVERY_SCENARIO;
 const releaseResponseLoss=scenario==='period-end-release-response-loss';
 const afterReleaseResponseLoss=scenario==='period-end-after-release-response-loss';
-const scheduled=releaseResponseLoss||afterReleaseResponseLoss,billedQuantity=scheduled?2:1,invoiceAmountMinor=billedQuantity*500;
+const reversalResponseLoss=scenario==='period-end-cancellation-reversal';
+const scheduled=releaseResponseLoss||afterReleaseResponseLoss,hasPreparationCommand=scheduled||reversalResponseLoss;
+const billedQuantity=scheduled?2:1,invoiceAmountMinor=billedQuantity*500;
 const confirmations={verify:'VERIFY-CANCELLATION-RECOVERY',inspect:'INSPECT-CANCELLATION-RECOVERY',cleanup:'CLEANUP-CANCELLATION-RECOVERY'};
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const protectedIds=['80a4b392-13f8-484d-81fa-a110a6ef75f0','2383f4fc-e107-4ac7-9e13-39db501f40ec'];
@@ -35,6 +37,7 @@ const checks=[];
 let stage='input',fixtureCreated=false,fixtureObserved=false,cleanupVerified=false,cleanupAttempted=false;
 let baseline=null,origin=null,setupCommandId=null,customerId=null,sessionId=null,customerEventId=null;
 let preparationCommandId=null,scheduleId=null,preparationScheduleEventId=null,preparationPhasesEventId=null;
+let preparationCancellationPosts=0,preparationCancellationKey=null;
 let customerKey=null,checkoutKey=null,cancellationKey=null;
 let preparationScheduleKey=null,preparationPhasesKey=null,releaseKey=null;
 let customerPosts=0,checkoutPosts=0,cancellationPosts=0,recoveryProviderWrites=0,retryProviderWrites=0,refreshProviderWrites=0;
@@ -50,13 +53,15 @@ const progress=name=>{
   emit('CANCELLATION_RECOVERY_PROGRESS',{stage,fixtureCreated,setupCommandId,customerId,sessionId,
     customerPosts,checkoutPosts,cancellationPosts,recoveryProviderWrites,retryProviderWrites,refreshProviderWrites,cleanupPosts,cleanupCancellationRequests,
     ...(scheduled?{preparationCommandId,scheduleId,preparationSchedulePosts,preparationPhasePosts,preparationRetryProviderWrites,
-      releasePosts,recoveryReleasePosts,recoveryCancellationPosts,cleanupScheduleCancellationRequests}:{})});
+      releasePosts,recoveryReleasePosts,recoveryCancellationPosts,cleanupScheduleCancellationRequests}:{}),
+    ...(reversalResponseLoss?{preparationCommandId,preparationCancellationPosts}:{})});
 };
 const check=name=>{checks.push(name);emit('CANCELLATION_RECOVERY_CHECK',{name});};
 const fail=code=>Object.assign(new Error(code),{code,status:503});
 const read=(path,params)=>stripe.request('GET',path,params);
 const fixtureStamp=actorId=>scheduled?
   {version:2,scenario,operation,setupCommandId,preparationCommandId,actorId:lower(actorId),stockIds:[operation,preparationCommandId]}:
+  reversalResponseLoss?{version:3,scenario,operation,setupCommandId,preparationCommandId,actorId:lower(actorId),stockId:operation}:
   {version:1,scenario,operation,setupCommandId,actorId:lower(actorId),stockId:operation};
 const stockRecord=(id=operation)=>({kind:'property',payload:{id,name:id===operation?'Private cancellation recovery stock':'Private retained schedule recovery stock',
   propertytype:'house',country_code:'LK',availability:'inactive',rentalvalues:{listingCategory:'residential'}}});
@@ -103,7 +108,7 @@ async function verifyProtected() {
 
 async function preflight() {
   assert.match(operation||'',uuid);assert.ok(Object.hasOwn(confirmations,mode));
-  assert.ok(['period-end-no-schedule','period-end-release-response-loss','period-end-after-release-response-loss'].includes(scenario));
+  assert.ok(['period-end-no-schedule','period-end-release-response-loss','period-end-after-release-response-loss','period-end-cancellation-reversal'].includes(scenario));
   assert.equal(process.env.CANCELLATION_RECOVERY_CONFIRMATION,confirmations[mode]);
   assert.ok(!protectedIds.includes(operation));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY','MANAGEMENT_RECOVERY_WORKER_ENABLED']){
@@ -126,12 +131,12 @@ async function preflight() {
 
 async function createFixture() {
   const actorId=randomUUID();setupCommandId=randomUUID();
-  if(scheduled){preparationCommandId=randomUUID();assert.equal(new Set([operation,setupCommandId,preparationCommandId,actorId]).size,4);}
+  if(hasPreparationCommand){preparationCommandId=randomUUID();assert.equal(new Set([operation,setupCommandId,preparationCommandId,actorId]).size,4);}
   assert.notEqual(setupCommandId,operation);assert.notEqual(actorId,operation);assert.notEqual(actorId,setupCommandId);
   await store.locked('r5-cancellation-recovery-fixtures',async q=>{
     assert.equal((await q('SELECT id FROM dbo.tenants WHERE id=@operation',{operation})).length,0,'Never reuse a fixture UUID');
     assert.equal((await q('SELECT id FROM dbo.management_billing_commands WHERE id IN (@operation,@setup)',{operation,setup:setupCommandId})).length,0);
-    if(scheduled){assert.equal((await q('SELECT id FROM dbo.management_billing_commands WHERE id=@id',{id:preparationCommandId})).length,0);}
+    if(hasPreparationCommand){assert.equal((await q('SELECT id FROM dbo.management_billing_commands WHERE id=@id',{id:preparationCommandId})).length,0);}
     const unresolved=await q(`SELECT t.id FROM dbo.tenants t WHERE t.slug LIKE 'r5-cancellation-recovery-%'
       AND (t.status='active' OR NOT EXISTS(SELECT 1 FROM dbo.management_billing_audit a WHERE a.tenant_id=t.id
         AND a.action=@action AND LOWER(a.resource_id)=LOWER(CONVERT(VARCHAR(36),t.id))))`,{action:cleanupAction});
@@ -151,6 +156,8 @@ async function createFixture() {
     // effect. Even a failure before preparation starts remains maintainable.
     if(scheduled){await store.audit(q,{tenantId:operation,actorId,action:preparationAction,resourceId:preparationCommandId,
       current:fixtureStamp(actorId),reason:'Distinct normal cessation preparation bound to the two-stock cancellation fixture.'});}
+    if(reversalResponseLoss){await store.audit(q,{tenantId:operation,actorId,action:preparationAction,resourceId:preparationCommandId,
+      current:fixtureStamp(actorId),reason:'Distinct normal cancellation preparation bound to the reversal recovery fixture.'});}
   });
   fixtureCreated=true;progress('prepare_private_stock');
   await store.stageStock({tenantId:operation,actorId,records:stockRecords(),reason:scheduled?
@@ -175,8 +182,8 @@ async function loadFixture() {
   const savedSetupId=lower(markers[0].resource_id);assert.match(savedSetupId,uuid);assert.notEqual(savedSetupId,operation);
   if(setupCommandId){assert.equal(setupCommandId,savedSetupId);}else{setupCommandId=savedSetupId;}
   const preparationMarkers=audit.filter(row=>row.action===preparationAction);
-  assert.equal(preparationMarkers.length,scheduled?1:0);
-  if(scheduled){
+  assert.equal(preparationMarkers.length,hasPreparationCommand?1:0);
+  if(hasPreparationCommand){
     const savedPreparationId=lower(preparationMarkers[0].resource_id);assert.match(savedPreparationId,uuid);
     if(preparationCommandId){assert.equal(preparationCommandId,savedPreparationId);}else{preparationCommandId=savedPreparationId;}
     assert.equal(new Set([operation,setupCommandId,preparationCommandId,lower(actor.id)]).size,4);
@@ -224,8 +231,8 @@ async function loadFixture() {
   const controls=scheduled?await store.read('SELECT * FROM dbo.management_inventory_controls WHERE tenant_id=@operation ORDER BY id',{operation}):[];
   assert.ok(controls.length<=1);
   const commands=await store.read('SELECT * FROM dbo.management_billing_commands WHERE tenant_id=@operation ORDER BY id',{operation});
-  assert.ok(commands.length<=(scheduled?3:2));
-  assert.ok(commands.every(row=>[setupCommandId,operation,...(scheduled?[preparationCommandId]:[])].includes(lower(row.id))));
+  assert.ok(commands.length<=(hasPreparationCommand?3:2));
+  assert.ok(commands.every(row=>[setupCommandId,operation,...(hasPreparationCommand?[preparationCommandId]:[])].includes(lower(row.id))));
   const loadOperation=async(id,kind)=>{
     const command=commands.find(row=>lower(row.id)===id)||null;
     const recoveries=await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id});
@@ -237,7 +244,7 @@ async function loadFixture() {
     return {command,recovery,steps,intent};
   };
   const setup=await loadOperation(setupCommandId,'checkout'),target=await loadOperation(operation,'cancellation');
-  const preparation=scheduled?await loadOperation(preparationCommandId,'cessation'):null;
+  const preparation=scheduled?await loadOperation(preparationCommandId,'cessation'):reversalResponseLoss?await loadOperation(preparationCommandId,'cancellation'):null;
   if(setup.command){
     const {command,intent,steps}=setup;assert.equal(stock.length,billedQuantity);
     // Reconstruct the original pending snapshot from every immutable staged
@@ -337,13 +344,36 @@ async function loadFixture() {
     if(account.stripe_schedule_id){assert.ok(preparation.steps.some(step=>step.name==='create_schedule'));assert.match(account.stripe_schedule_id,/^sub_sched_[A-Za-z0-9]+$/);}
     if(target.command?.status==='completed'){assert.equal(account.stripe_schedule_id,null);}
   }
+  if(reversalResponseLoss){
+    if(preparation.command){
+      assert.equal(setup.command?.status,'completed');assert.equal(stock[0]?.status,'promoted');assert.ok(account.stripe_subscription_id);
+      const {command,intent,steps}=preparation;
+      assert.equal(command.payload_hash,hash({cancelAtPeriodEnd:true}));
+      assert.deepEqual(JSON.parse(command.payload_json),{cancelAtPeriodEnd:true,_subscriptionId:account.stripe_subscription_id});
+      assert.deepEqual(intent,{cancelAtPeriodEnd:true,_subscriptionId:account.stripe_subscription_id,customerId:account.stripe_customer_id,scheduleId:null});
+      assert.ok(steps.length<=1);
+      for(const step of steps){
+        assert.equal(step.name,'set_cancellation');assert.equal(step.idempotency_key,'quixo:'+command.tenant_id+':'+command.id);
+        assert.deepEqual(JSON.parse(step.input_json),{subscriptionId:intent._subscriptionId,cancelAtPeriodEnd:true});
+        if(step.completed_at){assert.deepEqual(JSON.parse(step.result_json),{subscriptionId:intent._subscriptionId,cancelAtPeriodEnd:true});}
+        else{assert.equal(step.result_json,null);}
+      }
+      if(command.status==='completed'){
+        assert.equal(preparation.recovery.state,'succeeded');assert.equal(steps.length,1);assert.ok(steps[0].completed_at);
+        const saved=JSON.parse(command.result_json);assert.equal(saved.cancelAtPeriodEnd,true);assert.equal(saved.paidThrough,iso(saved.paidThrough));
+        assert.deepEqual(Object.keys(saved).sort(),['cancelAtPeriodEnd','paidThrough']);
+      }else{assert.equal(command.status,'pending');assert.equal(command.result_json,null);}
+    }
+  }
+  const targetCancelAtPeriodEnd=reversalResponseLoss?false:true;
   if(target.command){
     assert.equal(setup.command?.status,'completed');assert.equal(stock[0]?.status,'promoted');assert.ok(account.stripe_subscription_id);
     const {command,intent,steps}=target;
-    assert.equal(command.payload_hash,hash({cancelAtPeriodEnd:true}));
-    assert.deepEqual(JSON.parse(command.payload_json),{cancelAtPeriodEnd:true,_subscriptionId:account.stripe_subscription_id});
+    assert.equal(command.payload_hash,hash({cancelAtPeriodEnd:targetCancelAtPeriodEnd}));
+    assert.deepEqual(JSON.parse(command.payload_json),{cancelAtPeriodEnd:targetCancelAtPeriodEnd,_subscriptionId:account.stripe_subscription_id});
     if(scheduled){assert.equal(preparation.command?.status,'completed');assert.match(scheduleId||'',/^sub_sched_[A-Za-z0-9]+$/);}
-    assert.deepEqual(intent,{cancelAtPeriodEnd:true,_subscriptionId:account.stripe_subscription_id,customerId:account.stripe_customer_id,scheduleId:scheduled?scheduleId:null});
+    if(reversalResponseLoss){assert.equal(preparation.command?.status,'completed');}
+    assert.deepEqual(intent,{cancelAtPeriodEnd:targetCancelAtPeriodEnd,_subscriptionId:account.stripe_subscription_id,customerId:account.stripe_customer_id,scheduleId:scheduled?scheduleId:null});
     assert.ok(steps.length<=(scheduled?2:1));
     for(const step of steps){
       if(scheduled&&step.name==='release_schedule'){
@@ -353,19 +383,19 @@ async function loadFixture() {
         else{assert.equal(step.result_json,null);}
       }else{
         assert.equal(step.name,'set_cancellation');assert.equal(step.idempotency_key,'quixo:'+command.tenant_id+':'+command.id);
-        assert.deepEqual(JSON.parse(step.input_json),{subscriptionId:intent._subscriptionId,cancelAtPeriodEnd:true});
+        assert.deepEqual(JSON.parse(step.input_json),{subscriptionId:intent._subscriptionId,cancelAtPeriodEnd:targetCancelAtPeriodEnd});
         if(scheduled){assert.ok(steps.find(value=>value.name==='release_schedule')?.completed_at);}
       }
     }
     if(command.status==='completed'){
       assert.equal(target.recovery.state,'succeeded');
       assert.equal(steps.length,scheduled?2:1);assert.ok(steps.every(step=>step.completed_at));
-      assert.deepEqual(JSON.parse(steps.find(step=>step.name==='set_cancellation').result_json),{subscriptionId:intent._subscriptionId,cancelAtPeriodEnd:true});
-      const saved=JSON.parse(command.result_json);assert.equal(saved.cancelAtPeriodEnd,true);assert.equal(saved.paidThrough,iso(saved.paidThrough));
+      assert.deepEqual(JSON.parse(steps.find(step=>step.name==='set_cancellation').result_json),{subscriptionId:intent._subscriptionId,cancelAtPeriodEnd:targetCancelAtPeriodEnd});
+      const saved=JSON.parse(command.result_json);assert.equal(saved.cancelAtPeriodEnd,targetCancelAtPeriodEnd);assert.equal(saved.paidThrough,iso(saved.paidThrough));
       assert.deepEqual(Object.keys(saved).sort(),['cancelAtPeriodEnd','paidThrough']);
     }else{assert.equal(command.status,'pending');assert.equal(command.result_json,null);}
   }
-  return {tenant,actor,memberships,account,audit,stock,properties,units,listings,setup,target,...(scheduled?{preparation,controls}:{})};
+  return {tenant,actor,memberships,account,audit,stock,properties,units,listings,setup,target,...(scheduled?{preparation,controls}:reversalResponseLoss?{preparation}:{})};
 }
 
 async function customerEvents(fixture,step) {
@@ -514,8 +544,8 @@ async function providerState(fixture) {
   assert.equal(objectId(subscription.customer),customer.id);assert.ok(['active','canceled'].includes(subscription.status));
   assert.equal(subscription.collection_method,'charge_automatically');assert.equal(subscription.currency,'usd');
   assert.ok(!subscription.trial_start&&!subscription.trial_end);assert.equal(objectId(subscription.test_clock)||null,null);
-  if(!scheduled){assert.equal(objectId(subscription.schedule)||null,null);}assert.equal(typeof subscription.cancel_at_period_end,'boolean');
-  if(!fixture.target.command&&subscription.status==='active'){assert.equal(subscription.cancel_at_period_end,false);}
+  if(!scheduled&&!reversalResponseLoss){assert.equal(objectId(subscription.schedule)||null,null);}assert.equal(typeof subscription.cancel_at_period_end,'boolean');
+  if(!fixture.target.command&&subscription.status==='active'){assert.equal(subscription.cancel_at_period_end,reversalResponseLoss&&fixture.preparation?.command?.status==='completed'?true:false);}
   assert.equal(subscription.items?.data?.length,1);assert.equal(subscription.items.has_more,false);
   const item=subscription.items.data[0];assert.equal(objectId(item.price),BILLING_PRICE);assert.equal(item.quantity,billedQuantity);
   assert.equal(item.price.currency,'usd');assert.equal(item.price.unit_amount,500);assert.equal(item.price.recurring?.interval,'month');
@@ -595,7 +625,7 @@ function paidFinancialSnapshot(provider) {
 }
 
 const historyCore=fixture=>({stock:fixture.stock,properties:fixture.properties,units:fixture.units,setup:fixture.setup,target:fixture.target,
-  ...(scheduled?{preparation:fixture.preparation,controls:fixture.controls}:{})});
+  ...(scheduled?{preparation:fixture.preparation,controls:fixture.controls}:reversalResponseLoss?{preparation:fixture.preparation}:{})});
 const stockSnapshot=fixture=>({stock:fixture.stock,properties:fixture.properties,units:fixture.units,listings:fixture.listings,
   ...(scheduled?{controls:fixture.controls}:{})});
 const stableAccount=account=>{const value={...account};delete value.version;delete value.updated_at;return value;};
@@ -605,7 +635,7 @@ const accountBusiness=account=>{
 };
 const immutableCommand=command=>{const value={...command};for(const field of ['status','result_json','completed_at']){delete value[field];}return value;};
 
-async function assertAuditRetained(before,after,{promotion=false,preparation=false,cancellation=false,cleanup=false}={}) {
+async function assertAuditRetained(before,after,{promotion=false,preparation=false,cancellation=false,cleanup=false,reversalPreparation=false}={}) {
   const existing=new Map(before.map(row=>[String(row.id),row]));
   for(const row of before){assert.deepEqual(after.find(value=>String(value.id)===String(row.id)),row);}
   for(const row of after.filter(value=>!existing.has(String(value.id)))){
@@ -627,6 +657,7 @@ async function assertAuditRetained(before,after,{promotion=false,preparation=fal
     }else{
       assert.ok((promotion&&row.action==='inventory.promoted'&&lower(row.resource_id)===setupCommandId)||
         (preparation&&scheduled&&['inventory.ceased','sandbox.cessation.recovered'].includes(row.action)&&lower(row.resource_id)===preparationCommandId)||
+        (reversalPreparation&&row.action==='sandbox.cancellation.recovered'&&lower(row.resource_id)===preparationCommandId)||
         (cancellation&&row.action==='sandbox.cancellation.recovered'&&lower(row.resource_id)===operation)||
         (cleanup&&row.action===cleanupAction&&lower(row.resource_id)===operation));
     }
@@ -674,7 +705,7 @@ async function waitForHostedPayment(fixture) {
   assert.notEqual(process.env.MANAGEMENT_INVENTORY_SCHEMA_READY,'true');
   const originalCore=hash(historyCore(fixture)),beforeAudit=fixture.audit,started=Date.now(),deadline=started+600000;
   let session=null,nextHeartbeat=0;hostedWaitStarted=true;progress('await_same_hosted_sandbox_payment');
-  const ids={targetCommandId:operation,setupCommandId,customerId,sessionId,...(scheduled?{preparationCommandId}:{})};
+  const ids={targetCommandId:operation,setupCommandId,customerId,sessionId,...(hasPreparationCommand?{preparationCommandId}:{})};
   emit('CANCELLATION_RECOVERY_READY',{...ids,waitSeconds:600});
   while(Date.now()<deadline){
     session=await read('/v1/checkout/sessions/'+sessionId);
@@ -808,6 +839,46 @@ async function prepareRenewalSchedule(fixture,provider,actorId) {
   check('preparation-retry-stable');return {fixture,provider};
 }
 
+async function prepareReversalCancellation(fixture,provider,actorId) {
+  assert.ok(reversalResponseLoss);assert.equal(fixture.preparation.command,null);assert.equal(fixture.target.command,null);
+  assert.equal(provider.subscription.cancel_at_period_end,false);
+  const financialBefore=paidFinancialSnapshot(provider),setupBefore=hash(fixture.setup),beforeAudit=fixture.audit;
+  let started=false;
+  const client={...stripe,request:async(method,path,body,key)=>{
+    if(method==='GET'){return read(path,body);}assert.ok(started);assert.equal(method,'POST');
+    const command=(await store.read('SELECT id,tenant_id FROM dbo.management_billing_commands WHERE id=@id',{id:preparationCommandId}))[0];
+    assert.ok(command);assert.equal(key,'quixo:'+command.tenant_id+':'+command.id);
+    assert.equal(path,'/v1/subscriptions/'+provider.subscription.id);
+    assert.deepEqual(body,{cancel_at_period_end:true});assert.equal(++preparationCancellationPosts,1);preparationCancellationKey=key;
+    const value=await stripe.request(method,path,body,key);assert.equal(value.id,provider.subscription.id);assert.equal(value.livemode,false);
+    assert.equal(objectId(value.customer),customerId);assert.equal(value.status,'active');assert.equal(value.cancel_at_period_end,true);
+    assert.equal(objectId(value.schedule)||null,null);return value;
+  }};
+  const service=createBillingService({store,stripe:client,env});
+  const args={tenantId:operation,actorId,id:preparationCommandId,cancelAtPeriodEnd:true};
+  started=true;progress('normal_cancellation_preparation');
+  const result=await service.cancel(args);
+  fixture=await loadFixture();provider=await confirmedProvider(fixture);assert.equal(hash(fixture.setup),setupBefore);
+  assert.deepEqual(paidFinancialSnapshot(provider),financialBefore);
+  assert.equal(preparationCancellationPosts,1);
+  assert.equal(fixture.preparation.command.status,'completed');assert.equal(fixture.preparation.recovery.state,'succeeded');
+  assert.equal(fixture.preparation.recovery.attempts,1);assert.equal(fixture.preparation.steps.length,1);
+  assert.ok(fixture.preparation.steps[0].completed_at);assert.deepEqual(JSON.parse(fixture.preparation.command.result_json),result);
+  assert.equal(fixture.preparation.steps[0].idempotency_key,preparationCancellationKey);
+  assert.deepEqual(JSON.parse(fixture.preparation.steps[0].result_json),{subscriptionId:provider.subscription.id,cancelAtPeriodEnd:true});
+  assert.equal(result.cancelAtPeriodEnd,true);assert.equal(provider.subscription.cancel_at_period_end,true);
+  const recoveredAudits=operationAudits(fixture,'cancellation',preparationCommandId);
+  assert.equal(recoveredAudits.length,1);assert.equal(recoveredAudits[0].current_hash,hash(result));
+  await assertAuditRetained(beforeAudit,fixture.audit,{reversalPreparation:true});check('normal-cancellation-preparation');
+  const beforeRetry={core:hash(historyCore(fixture)),account:stableAccount(fixture.account),audit:fixture.audit};
+  assert.deepEqual(await createBillingService({store,stripe:readbackClient('preparation-retry'),env}).cancel(args),result);
+  fixture=await loadFixture();provider=await confirmedProvider(fixture);assert.equal(hash(historyCore(fixture)),beforeRetry.core);
+  assert.deepEqual(stableAccount(fixture.account),beforeRetry.account);
+  assert.deepEqual(paidFinancialSnapshot(provider),financialBefore);await assertAuditRetained(beforeRetry.audit,fixture.audit);
+  assert.equal(preparationRetryProviderWrites,0);assert.equal(preparationCancellationPosts,1);
+  check('preparation-cancellation-retry-stable');return {fixture,provider};
+}
+
 function scheduleProof(fixture,provider) {
   const schedule=provider.schedule||null;
   return {preparationCommandId,subscriptionId:provider.subscription?.id||null,scheduleId:schedule?.id||null,scheduleStatus:schedule?.status||null,
@@ -819,7 +890,7 @@ function scheduleProof(fixture,provider) {
 async function cleanupFixture() {
   cleanupAttempted=true;progress('cleanup_inspect_owned_effects');
   let fixture=await loadFixture();
-  for(const value of [fixture.setup,fixture.target,...(scheduled?[fixture.preparation]:[])]){
+  for(const value of [fixture.setup,fixture.target,...(hasPreparationCommand?[fixture.preparation]:[])]){
     if(value.recovery?.state==='running'||value.recovery?.lease_until){throw fail('CANCELLATION_OPERATION_STILL_RUNNING');}
   }
   const beforeRetained=hash(historyCore(fixture)),beforeAudit=fixture.audit;
@@ -894,8 +965,9 @@ async function cleanupFixture() {
         current:{operation,setupCommandId,scenario,customerId:provider.customer?.id||null,sessionId:provider.session?.id||null,
           sessionExpired:provider.session?.status==='expired',sessionCompleted:provider.session?.status==='complete',
           subscriptionId:provider.subscription?.id||null,subscriptionCanceled:provider.subscription?.status==='canceled',
-          noSession:!provider.session,recordsRetained:true,...(scheduled?scheduleProof(fixture,provider):{})},
+          noSession:!provider.session,recordsRetained:true,...(scheduled?scheduleProof(fixture,provider):{}),...(reversalResponseLoss?{preparationCommandId,preparationJournalRetained:true}:{})},
         reason:scheduled?'Exact owned setup session or schedule/subscription closed without invoice/proration; all three operation histories and private fixture retained.':
+          reversalResponseLoss?'Exact owned setup session or subscription canceled without invoice/proration; all three operation histories and private fixture retained.':
           'Exact owned setup session closed or subscription canceled without invoice/proration; both operation histories and private fixture retained.'});
     }
   });
@@ -917,7 +989,8 @@ async function cleanupFixture() {
     pendingStockRetained:after.stock.filter(row=>row.status==='pending').length,promotedStockRetained:after.stock.filter(row=>row.status==='promoted').length,
     initialInvoicePreserved:Boolean(paidBefore),noAdditionalFinancialObjects:true,protectedBillingUnchanged:true,workerScopeUnchanged:true,
     cleanupPosts,cleanupCancellationRequests,expiryResponseRecovered,cancellationResponseRecovered,
-    ...(scheduled?{...scheduleProof(after,provider),preparationJournalRetained:true,cleanupScheduleCancellationRequests,scheduleCancellationResponseRecovered}:{})});
+    ...(scheduled?{...scheduleProof(after,provider),preparationJournalRetained:true,cleanupScheduleCancellationRequests,scheduleCancellationResponseRecovered}:{}),
+    ...(reversalResponseLoss?{preparationCommandId,preparationJournalRetained:true}:{})});
   return {fixture:after,provider};
 }
 
@@ -950,6 +1023,7 @@ async function verify() {
   let fixture=await loadFixture();assert.equal(fixture.stock.length,billedQuantity);assert.ok(fixture.stock.every(row=>row.status==='pending'));
   assert.equal(fixture.setup.command,null);assert.equal(fixture.target.command,null);assert.deepEqual(await store.inventory(operation),[]);
   if(scheduled){assert.equal(fixture.preparation.command,null);assert.deepEqual(fixture.controls,[]);}
+  if(hasPreparationCommand){assert.equal(fixture.preparation.command,null);}
   const inventory=await store.inventory(operation,undefined,{includePending:true});assert.equal(inventory.length,billedQuantity);
   const setupArgs={tenantId:operation,actorId,id:setupCommandId,inventoryHash:hash(inventory)};
   check('fresh-isolated-fixture');
@@ -995,8 +1069,9 @@ async function verify() {
   ({fixture,provider}=await waitForHostedPayment(fixture));check('hosted-payment-completed');
   ({fixture,provider}=await promotePaidSetup(fixture,provider));check('paid-stock-promoted');
   if(scheduled){({fixture,provider}=await prepareRenewalSchedule(fixture,provider,actorId));}
+  if(reversalResponseLoss){({fixture,provider}=await prepareReversalCancellation(fixture,provider,actorId));}
   const boundary=paidBoundary(provider),originalFinancials=paidFinancialSnapshot(provider),setupHistory=hash(fixture.setup);
-  const originalStock=hash(stockSnapshot(fixture)),preparationHistory=scheduled?hash(fixture.preparation):null;
+  const originalStock=hash(stockSnapshot(fixture)),preparationHistory=hasPreparationCommand?hash(fixture.preparation):null;
   const originalSchedulePlan=scheduled?scheduleFingerprint(provider.schedule):null;
   const originalAccount=accountBusiness(fixture.account),beforeTargetAudit=fixture.audit;
   assertPaidAccess(fixture,provider,boundary,{ending:false});
@@ -1007,7 +1082,7 @@ async function verify() {
   if(scheduled){assert.equal(provider.schedule.status,'active');assert.equal(fixture.account.pending_quantity,1);assert.equal((await store.inventory(operation)).length,1);}
   check(scheduled?'paid-scheduled-baseline':'paid-no-schedule-baseline');
 
-  const args={tenantId:operation,actorId,id:operation,cancelAtPeriodEnd:true};
+  const args={tenantId:operation,actorId,id:operation,cancelAtPeriodEnd:reversalResponseLoss?false:true};
   const lossCode=afterReleaseResponseLoss?'CANCELLATION_AFTER_RELEASE_RESPONSE_LOST':
     releaseResponseLoss?'CANCELLATION_RELEASE_RESPONSE_LOST':'CANCELLATION_ACCEPTANCE_RESPONSE_LOST';
   let releaseResponseReturned=false,releaseCheckpointBefore=null;
@@ -1040,13 +1115,13 @@ async function verify() {
       assert.ok(new Date(releaseCheckpointBefore.completed_at).getTime()<Date.parse(boundary.paidThrough));
       check('release-checkpoint-completed');
     }
-    assert.deepEqual(body,{cancel_at_period_end:true});assert.equal(++cancellationPosts,1);cancellationKey=key;
+    assert.deepEqual(body,{cancel_at_period_end:reversalResponseLoss?false:true});assert.equal(++cancellationPosts,1);cancellationKey=key;
     const result=await stripe.request(method,path,body,key);
     assert.equal(result.id,provider.subscription.id);assert.equal(result.livemode,false);assert.equal(objectId(result.customer),customerId);
-    assert.equal(result.status,'active');assert.equal(result.cancel_at_period_end,true);assert.equal(objectId(result.schedule)||null,null);
-    responseDiscarded=true;progress(afterReleaseResponseLoss?'cancellation_response_discarded_after_release_checkpoint':'cancellation_response_discarded');throw fail(lossCode);
+    assert.equal(result.status,'active');assert.equal(result.cancel_at_period_end,reversalResponseLoss?false:true);assert.equal(objectId(result.schedule)||null,null);
+    responseDiscarded=true;progress(reversalResponseLoss?'cancel_reversal_with_response_loss':afterReleaseResponseLoss?'cancellation_response_discarded_after_release_checkpoint':'cancellation_response_discarded');throw fail(lossCode);
   }};
-  progress(afterReleaseResponseLoss?'cancel_with_response_loss_after_completed_release':
+  progress(reversalResponseLoss?'cancel_reversal_at_period_end_false_with_response_loss':afterReleaseResponseLoss?'cancel_with_response_loss_after_completed_release':
     releaseResponseLoss?'cancel_with_schedule_release_response_loss':'cancel_at_period_end_with_response_loss');
   await assert.rejects(createBillingService({store,stripe:interrupted,env}).cancel(args),error=>error.code===lossCode);
   assert.equal(responseDiscarded,true);assert.equal(cancellationPosts,releaseResponseLoss?0:1);fixture=await loadFixture();
@@ -1059,7 +1134,7 @@ async function verify() {
   assert.ok(interruptedStep);assert.equal(interruptedStep.completed_at,null);assert.equal(interruptedStep.result_json,null);
   if(afterReleaseResponseLoss){assertReleaseCheckpointPreserved(fixture,releaseCheckpointBefore);}
   assert.equal(operationAudits(fixture,'cancellation',operation).length,0);
-  check(afterReleaseResponseLoss?'cancellation-response-lost-after-release':releaseResponseLoss?'schedule-release-response-lost':'cancellation-response-lost');
+  check(reversalResponseLoss?'reversal-response-lost':afterReleaseResponseLoss?'cancellation-response-lost-after-release':releaseResponseLoss?'schedule-release-response-lost':'cancellation-response-lost');
   const originalKey='quixo:'+fixture.target.command.tenant_id+':'+fixture.target.command.id;
   if(scheduled){
     assert.equal(releasePosts,1);assert.equal(releaseKey,originalKey+':release');assert.equal(fixture.target.steps[0].idempotency_key,releaseKey);
@@ -1071,21 +1146,22 @@ async function verify() {
     }
   }else{
     assert.equal(cancellationKey,originalKey);assert.equal(fixture.target.steps[0].idempotency_key,cancellationKey);
-    assert.deepEqual(JSON.parse(fixture.target.steps[0].input_json),{subscriptionId:provider.subscription.id,cancelAtPeriodEnd:true});
+    assert.deepEqual(JSON.parse(fixture.target.steps[0].input_json),{subscriptionId:provider.subscription.id,cancelAtPeriodEnd:reversalResponseLoss?false:true});
+    if(reversalResponseLoss){assert.equal(hash(fixture.preparation),preparationHistory);}
   }
   assert.equal(fixture.target.intent.scheduleId,scheduled?scheduleId:null);assert.equal(hash(fixture.setup),setupHistory);
   await assertAuditRetained(beforeTargetAudit,fixture.audit);
   const pendingTarget=fixture.target,pendingAudit=fixture.audit;
-  provider=await confirmedProvider(fixture);assert.equal(provider.subscription.cancel_at_period_end,!releaseResponseLoss);
+  provider=await confirmedProvider(fixture);assert.equal(provider.subscription.cancel_at_period_end,reversalResponseLoss?false:!releaseResponseLoss);
   if(scheduled){
     assert.equal(provider.schedule.status,'released');assert.equal(objectId(provider.schedule.released_subscription),provider.subscription.id);
     assert.equal(objectId(provider.subscription.schedule)||null,null);assert.equal(scheduleFingerprint(provider.schedule),originalSchedulePlan);
     assert.equal(fixture.account.pending_quantity,1);assert.equal(cancellationPosts,afterReleaseResponseLoss?1:0);
   }
-  assertPaidAccess(fixture,provider,boundary);assert.deepEqual(paidFinancialSnapshot(provider),originalFinancials);
+  assertPaidAccess(fixture,provider,boundary,{ending:reversalResponseLoss?false:undefined});assert.deepEqual(paidFinancialSnapshot(provider),originalFinancials);
   assert.deepEqual(accountBusiness(fixture.account),originalAccount);
   assert.equal(hash(stockSnapshot(fixture)),originalStock);
-  check('original-cancellation-intent-preserved');
+  check(reversalResponseLoss?'original-reversal-intent-preserved':'original-cancellation-intent-preserved');
   progress('wait_for_natural_sql_retry_due');let due=false;
   for(let attempt=0;attempt<36;attempt++){
     const state=(await store.read(`SELECT state,attempts,CASE WHEN next_attempt_at<=SYSUTCDATETIME()
@@ -1094,7 +1170,7 @@ async function verify() {
     if(state.due===1){due=true;break;}await delay(2500);
   }
   assert.ok(due);fixture=await loadFixture();assert.deepEqual(fixture.target,pendingTarget);assert.equal(hash(fixture.setup),setupHistory);
-  if(scheduled){assert.equal(hash(fixture.preparation),preparationHistory);}
+  if(hasPreparationCommand){assert.equal(hash(fixture.preparation),preparationHistory);}
   if(afterReleaseResponseLoss){assertReleaseCheckpointPreserved(fixture,releaseCheckpointBefore);}
   await assertAuditRetained(pendingAudit,fixture.audit);check('naturally-due');
   const beforeRecoveryAudit=fixture.audit;
@@ -1119,7 +1195,7 @@ async function verify() {
     assert.equal(objectId(value.schedule)||null,null);return value;
   }}:readbackClient('recovery');
   const result=await createBillingService({store,stripe:recoveryClient,env}).recoverOperation({tenantId:operation,id:operation});
-  assert.deepEqual(result,{cancelAtPeriodEnd:true,paidThrough:boundary.paidThrough});assert.equal(recoveryProviderWrites,releaseResponseLoss?1:0);
+  assert.deepEqual(result,{cancelAtPeriodEnd:reversalResponseLoss?false:true,paidThrough:boundary.paidThrough});assert.equal(recoveryProviderWrites,releaseResponseLoss?1:0);
   fixture=await loadFixture();assert.equal(fixture.target.command.status,'completed');assert.ok(fixture.target.command.completed_at);
   assert.deepEqual(immutableCommand(fixture.target.command),immutableCommand(pendingTarget.command));
   assert.deepEqual(JSON.parse(fixture.target.command.result_json),result);
@@ -1132,7 +1208,7 @@ async function verify() {
     const setting=fixture.target.steps.find(step=>step.name==='set_cancellation');
     assert.deepEqual({...setting,result_json:null,completed_at:null},interruptedStep);
   }else{assert.deepEqual({...completedStep,result_json:null,completed_at:null},pendingTarget.steps[0]);}
-  assert.deepEqual(JSON.parse(completedStep.result_json),scheduled?{scheduleId,released:true}:{subscriptionId:provider.subscription.id,cancelAtPeriodEnd:true});
+  assert.deepEqual(JSON.parse(completedStep.result_json),scheduled?{scheduleId,released:true}:{subscriptionId:provider.subscription.id,cancelAtPeriodEnd:reversalResponseLoss?false:true});
   if(scheduled){
     const setting=fixture.target.steps.find(step=>step.name==='set_cancellation');assert.ok(setting.completed_at);
     assert.equal(setting.idempotency_key,cancellationKey);assert.equal(cancellationKey,originalKey);
@@ -1141,9 +1217,10 @@ async function verify() {
     assert.equal(hash(fixture.preparation),preparationHistory);assert.equal(recoveryReleasePosts,0);
     assert.equal(recoveryCancellationPosts,releaseResponseLoss?1:0);assert.equal(releasePosts,1);
   }
+  if(reversalResponseLoss){assert.equal(hash(fixture.preparation),preparationHistory);assert.equal(operationAudits(fixture,'cancellation',preparationCommandId).length,1);}
   const recoveredAudits=operationAudits(fixture,'cancellation',operation);assert.equal(recoveredAudits.length,1);assert.equal(recoveredAudits[0].current_hash,hash(result));
   assert.equal(hash(fixture.setup),setupHistory);await assertAuditRetained(beforeRecoveryAudit,fixture.audit,{cancellation:true});
-  provider=await confirmedProvider(fixture);assertPaidAccess(fixture,provider,boundary,{ending:true});check('original-cancellation-recovered');
+  provider=await confirmedProvider(fixture);assertPaidAccess(fixture,provider,boundary,{ending:reversalResponseLoss?false:true});check(reversalResponseLoss?'original-reversal-recovered':'original-cancellation-recovered');
 
   const completedHistory=hash(historyCore(fixture)),completedAudit=fixture.audit;
   const retryService=createBillingService({store,stripe:readbackClient('retry'),env});progress('exact_completed_cancellation_retries');
@@ -1152,19 +1229,19 @@ async function verify() {
   assert.deepEqual(await retryService.recoverOperation({tenantId:operation,id:operation}),result);
   fixture=await loadFixture();assert.equal(hash(historyCore(fixture)),completedHistory);await assertAuditRetained(completedAudit,fixture.audit);
   if(afterReleaseResponseLoss){assertReleaseCheckpointPreserved(fixture,releaseCheckpointBefore);}
-  provider=await confirmedProvider(fixture);assertPaidAccess(fixture,provider,boundary,{ending:true});
+  provider=await confirmedProvider(fixture);assertPaidAccess(fixture,provider,boundary,{ending:reversalResponseLoss?false:true});
   assert.deepEqual(paidFinancialSnapshot(provider),originalFinancials);assert.equal(retryProviderWrites,0);assert.equal(cancellationPosts,1);
   check('exact-operation-retries-stable');
   const beforeRefresh={account:stableAccount(fixture.account),audit:fixture.audit};
-  const refreshService=createBillingService({store,stripe:readbackClient('refresh'),env});progress('refresh_and_retry_confirmed_ending_subscription');
+  const refreshService=createBillingService({store,stripe:readbackClient('refresh'),env});progress(reversalResponseLoss?'refresh_and_retry_confirmed_active_subscription':'refresh_and_retry_confirmed_ending_subscription');
   const refreshed=await refreshService.refresh(operation),refreshRetry=await refreshService.refresh(operation);
-  assert.deepEqual(refreshRetry,refreshed);assert.equal(refreshed.entitlement.state,'ending');assert.equal(refreshed.entitlement.management,true);
-  assert.equal(refreshed.cancelAtPeriodEnd,true);assert.equal(iso(refreshed.paidThrough),boundary.paidThrough);
+  assert.deepEqual(refreshRetry,refreshed);assert.equal(refreshed.entitlement.state,reversalResponseLoss?'active':'ending');assert.equal(refreshed.entitlement.management,true);
+  assert.equal(refreshed.cancelAtPeriodEnd,reversalResponseLoss?false:true);assert.equal(iso(refreshed.paidThrough),boundary.paidThrough);
   assert.equal(refreshed.billedQuantity,billedQuantity);assert.equal(refreshed.inventoryQuantity,1);assert.deepEqual(refreshed.pendingStock,[]);assert.equal(refreshed.pendingOperation,null);
   fixture=await loadFixture();assert.equal(hash(historyCore(fixture)),completedHistory);assert.deepEqual(stableAccount(fixture.account),beforeRefresh.account);
   if(afterReleaseResponseLoss){assertReleaseCheckpointPreserved(fixture,releaseCheckpointBefore);}
   await assertAuditRetained(beforeRefresh.audit,fixture.audit);provider=await confirmedProvider(fixture);
-  assertPaidAccess(fixture,provider,boundary,{ending:true});assert.equal(refreshProviderWrites,0);check('refresh-retry-stable');
+  assertPaidAccess(fixture,provider,boundary,{ending:reversalResponseLoss?false:true});assert.equal(refreshProviderWrites,0);check('refresh-retry-stable');
   assert.deepEqual(paidFinancialSnapshot(provider),originalFinancials);assert.deepEqual(accountBusiness(fixture.account),originalAccount);
   assert.equal(hash(stockSnapshot(fixture)),originalStock);
   assert.equal(hash(fixture.setup),setupHistory);assert.equal(operationAudits(fixture,'checkout',setupCommandId).length,1);
@@ -1174,6 +1251,9 @@ async function verify() {
     assert.equal(fixture.controls.length,1);assert.equal((await store.inventory(operation)).length,1);
     assert.equal(provider.schedule.status,'released');assert.equal(scheduleFingerprint(provider.schedule),originalSchedulePlan);
     assert.equal(fixture.account.pending_quantity,null);assert.equal(fixture.account.stripe_schedule_id,null);
+  }
+  if(reversalResponseLoss){
+    assert.equal(hash(fixture.preparation),preparationHistory);assert.equal(operationAudits(fixture,'cancellation',preparationCommandId).length,1);
   }
   for(const table of ['invoices','payments']){assert.equal((await store.read('SELECT id FROM dbo.'+table+' WHERE tenant_id=@operation',{operation})).length,0);}
   check('original-financials-stock-preserved');await verifyProtected();check('protected-scope-unchanged');
@@ -1193,7 +1273,7 @@ async function verify() {
     customerPosts,checkoutPosts,cancellationPosts,recoveryProviderWrites,retryProviderWrites,refreshProviderWrites,cleanupPosts,cleanupCancellationRequests,
     normalCheckoutSetup:true,hostedCheckoutCompleted:true,responseDiscarded,originalIdempotencyKeyPreserved:true,originalIntentPreserved:true,
     setupAttempts:1,setupCompletedSteps:2,targetAttempts:2,targetCompletedSteps:scheduled?2:1,targetRecoveredAudits:1,releaseScheduleSteps:scheduled?1:0,
-    cancellationResult:result,paidThrough:boundary.paidThrough,providerPeriodEnd:boundary.providerPeriodEnd,cancelAtPeriodEnd:true,paidAccessRetained:true,
+    cancellationResult:result,paidThrough:boundary.paidThrough,providerPeriodEnd:boundary.providerPeriodEnd,cancelAtPeriodEnd:reversalResponseLoss?false:true,paidAccessRetained:true,
     exactCancelRetryStable:true,exactReconcileRetryStable:true,originalRecoveryRetryStable:true,refreshRetryStable:true,
     checkoutSessions:1,subscriptionsCreated:1,invoicesCreated:1,paymentIntentsCreated:1,chargesCreated:1,
     subscriptionId:provider.subscription.id,initialInvoiceId:provider.invoice.id,paymentIntentId:provider.paymentIntent.id,chargeId:provider.charge.id,
@@ -1202,13 +1282,16 @@ async function verify() {
     subscriptionCanceled:true,sessionCompleted:true,sessionExpired:false,fixtureInactive:true,recordsRetained:true,
     protectedBillingUnchanged:true,workerScopeUnchanged:true,processLocalStagingReadiness:true,servingConfigurationChanged:false,
     automaticWorkerAccepted:false,httpAccepted:false,uiAccepted:false,credentialLoginAccepted:false,liveChargingEnabled:false,
-    wholeProcessCrashAccepted:false,naturalPaidBoundaryAccepted:false,scheduleReleaseAccepted:scheduled,cancellationReversalAccepted:false,
+    wholeProcessCrashAccepted:false,naturalPaidBoundaryAccepted:false,scheduleReleaseAccepted:scheduled,cancellationReversalAccepted:reversalResponseLoss,
     ...(scheduled?{...scheduleProof(cleaned.fixture,cleaned.provider),originalPreparationScheduleKey:preparationScheduleKey,
       originalPreparationPhasesKey:preparationPhasesKey,originalReleaseKey:releaseKey,preparationScheduleEventId,preparationPhasesEventId,
       preparationSchedulePosts,preparationPhasePosts,preparationRetryProviderWrites,releasePosts,recoveryReleasePosts,recoveryCancellationPosts,
       cleanupScheduleCancellationRequests,preparationAttempts:1,preparationCompletedSteps:2,preparationRecoveredAudits:1,
       preparationRetryStable:true,preparationJournalRetained:true,cessationControlRetained:true,ceasedPropertyId:operation,
       remainingPropertyId:preparationCommandId,managedDwellings:1,pendingQuantityCleared:true,processLocalCessationReadiness:true}:{}),
+    ...(reversalResponseLoss?{preparationCommandId,originalPreparationCancellationKey:preparationCancellationKey,
+      preparationCancellationPosts,preparationAttempts:1,preparationCompletedSteps:1,preparationRecoveredAudits:1,
+      preparationRetryStable:true,preparationJournalRetained:true}:{}),
     ...(afterReleaseResponseLoss?{responseLossStep:'set_cancellation',releaseResponseReturned,releaseCheckpointCompletedBeforeCancellation:true,
       releaseCheckpointPreserved:true,releaseCheckpointBeforeHash:hash(releaseCheckpointBefore),
       releaseCheckpointAfterHash:hash(cleaned.fixture.target.steps.find(step=>step.name==='release_schedule')),
@@ -1248,7 +1331,13 @@ async function inspect() {
       releaseScheduleSteps:fixture.target.steps.filter(step=>step.name==='release_schedule').length,
       originalPreparationScheduleKey:fixture.preparation.steps.find(step=>step.name==='create_schedule')?.idempotency_key||null,
       originalPreparationPhasesKey:fixture.preparation.steps.find(step=>step.name==='set_schedule_phases')?.idempotency_key||null,
-      originalReleaseKey:fixture.target.steps.find(step=>step.name==='release_schedule')?.idempotency_key||null}:{})});
+      originalReleaseKey:fixture.target.steps.find(step=>step.name==='release_schedule')?.idempotency_key||null}:{}),
+    ...(reversalResponseLoss?{preparationCommandId,preparationJournalRetained:Boolean(fixture.preparation.command),
+      preparationCommandStatus:fixture.preparation.command?.status||null,preparationRecoveryState:fixture.preparation.recovery?.state||null,
+      preparationAttempts:fixture.preparation.recovery?.attempts||0,preparationStepCount:fixture.preparation.steps.length,
+      preparationCompletedSteps:fixture.preparation.steps.filter(step=>step.completed_at).length,
+      preparationRecoveredAudits:operationAudits(fixture,'cancellation',preparationCommandId).length,
+      originalPreparationCancellationKey:fixture.preparation.steps.find(step=>step.name==='set_cancellation')?.idempotency_key||null}:{})});
 }
 
 try{
@@ -1272,7 +1361,8 @@ try{
     customerPosts,checkoutPosts,cancellationPosts,recoveryProviderWrites,retryProviderWrites,refreshProviderWrites,cleanupPosts,cleanupCancellationRequests,
     expiryResponseRecovered,cancellationResponseRecovered,replayAllowed:false,acceptance:false,
     ...(scheduled?{preparationCommandId,scheduleId,preparationSchedulePosts,preparationPhasePosts,preparationRetryProviderWrites,
-      releasePosts,recoveryReleasePosts,recoveryCancellationPosts,cleanupScheduleCancellationRequests,scheduleCancellationResponseRecovered}:{})});
+      releasePosts,recoveryReleasePosts,recoveryCancellationPosts,cleanupScheduleCancellationRequests,scheduleCancellationResponseRecovered}:{}),
+    ...(reversalResponseLoss?{preparationCommandId,preparationCancellationPosts}:{})});
   process.exitCode=1;
 }finally{await closeMssqlPool();}
 
