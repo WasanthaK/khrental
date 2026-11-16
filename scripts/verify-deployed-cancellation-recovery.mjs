@@ -842,7 +842,7 @@ async function prepareRenewalSchedule(fixture,provider,actorId) {
 async function prepareReversalCancellation(fixture,provider,actorId) {
   assert.ok(reversalResponseLoss);assert.equal(fixture.preparation.command,null);assert.equal(fixture.target.command,null);
   assert.equal(provider.subscription.cancel_at_period_end,false);
-  const boundary=paidBoundary(provider),financialBefore=paidFinancialSnapshot(provider),setupBefore=hash(fixture.setup),beforeAudit=fixture.audit;
+  const financialBefore=paidFinancialSnapshot(provider),setupBefore=hash(fixture.setup),beforeAudit=fixture.audit;
   let started=false;
   const client={...stripe,request:async(method,path,body,key)=>{
     if(method==='GET'){return read(path,body);}assert.ok(started);assert.equal(method,'POST');
