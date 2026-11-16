@@ -1,0 +1,2263 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-16",
+  "scenario": "cancellation-period-end-response-loss-no-schedule",
+  "taskIds": [
+    "BL08.11"
+  ],
+  "result": "passed within bounded genuine sandbox provider and deployed service/SQL scope",
+  "operationId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+  "operationStatus": "used; never replay verification",
+  "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+  "setupOperationStatus": "used normal Checkout setup; never replay verification",
+  "failedAcceptanceAttempts": [],
+  "run": {
+    "id": 43778351120,
+    "url": "https://github.com/WasanthaK/khrental/actions/runs/43778351120",
+    "attempt": 1,
+    "event": "workflow_dispatch",
+    "headBranch": "main",
+    "sourceSha": "60d23a89dd091ca5c30bf097f14b2996d210911e",
+    "status": "completed",
+    "conclusion": "success",
+    "createdAt": "2026-11-16T00:05:59Z",
+    "verifyJobId": 133009696541,
+    "verifyJobUrl": "https://github.com/WasanthaK/khrental/actions/runs/43778351120/job/133009696541",
+    "updatedAt": "2026-11-16T00:12:18Z"
+  },
+  "harness": {
+    "pr": 682,
+    "prUrl": "https://github.com/WasanthaK/khrental/pull/682",
+    "sourceSha": "60d23a89dd091ca5c30bf097f14b2996d210911e",
+    "script": "scripts/verify-deployed-cancellation-recovery.mjs",
+    "scriptGitBlobSha": "6478313cebf82b3e824474e41b96b9af8028d2e1",
+    "scriptSha256": "d72bf496a04bca8b319d33951c0018d06adb5b6791f614b51c11749e98daa388",
+    "workflow": ".github/workflows/verify-deployed-cancellation-recovery.yml",
+    "workflowGitBlobSha": "afb05f9e562be88b3807d45ed05248fc2b727949",
+    "workflowSha256": "4436624dba4f04b437a49a7361e5d39cf9bb9b6d8eff3dcf96158dec5ee459f1",
+    "applicationCodeChanged": false,
+    "validation": {
+      "prHeadSha": "97924598c0b8164897b136952d532f577c2e6e9c",
+      "prMergeCommitTested": "b91878f25a46420661577c2a7c6328da70d37c34",
+      "prCiRun": 43777988620,
+      "prCiJob": 133008551675,
+      "workflowValidationRun": 43777988672,
+      "workflowValidationJob": 133008552135,
+      "postMergeCiRun": 43778149437,
+      "postMergeCiJob": 133009062996,
+      "testsPassed": 1405,
+      "testsFailed": 0,
+      "lintPassed": true,
+      "buildPassed": true,
+      "postMergeDeploy": "skipped",
+      "focusedExistingRecoveryAndProcessTestsPassed": 106,
+      "focusedWorkflowCasesPassed": 237,
+      "focusedWorkflowCases": {
+        "finalProof": 177,
+        "liveSanitizer": 34,
+        "actualPtyPipeline": 3,
+        "preflightAndSourceAllowlist": 23
+      },
+      "independentExtractedHarnessCasesPassed": 49,
+      "independentSourceReview": "no blocking findings"
+    }
+  },
+  "serving": {
+    "buildSha": "e0f7e821b8e511898836f71df86fde2fa8399463",
+    "revision": "khrental-app--0000523",
+    "configurationChanged": false,
+    "replicas": {
+      "min": 1,
+      "max": 1
+    },
+    "workerScopeChanged": false,
+    "workerTenantIds": [
+      "80a4b392-13f8-484d-81fa-a110a6ef75f0"
+    ],
+    "processLocalStagingReadiness": true,
+    "servingStagingReadiness": false,
+    "liveChargingEnabled": false,
+    "fullWriteEnforcementEnabled": false
+  },
+  "provenance": {
+    "source": "GitHub workflow job logs, run/jobs API, independently downloaded artifact ZIP, genuine hosted sandbox Checkout observation and selected independent Stripe GET readbacks",
+    "liveReadyLoggedAt": "2026-11-16T00:06:52.7200960Z",
+    "scenarioMarkersLoggedAt": "2026-11-16T00:12:10.4993006Z",
+    "scenarioTiming": "LIVE_READY and LIVE_WAITING were streamed during execution. The final proof step reprinted collected scenario markers after execution; those final marker timestamps are not individual payment, cancellation, recovery or cleanup action timestamps.",
+    "artifactContentsIndependentlyDownloaded": true,
+    "artifactZipDigestIndependentlyRecomputed": true,
+    "artifactScenarioMarkersMatchedToJobLog": 43,
+    "retainedJobJsonMarkersIncludingLiveProofAndConfiguration": 54,
+    "liveJobMarkers": 9,
+    "executionExitCode": 0,
+    "liveOutputExitCode": 0,
+    "artifactSummaryProofMatchedToJobLog": true,
+    "retainedEvidence": "Complete sanitized scenario markers, JSON job markers and proof/configuration/health outputs are retained here. Independent provider readbacks contain only identifiers, status, money, period and fixture-metadata fields. Raw SQL/provider snapshots, hosted URLs, credentials, contact/payment details and full application configuration are excluded.",
+    "assertionScope": "Journal states, saved intent/key/step identity, stock retention and exhaustive unchanged-state claims are enforced assertions in the pinned harness that passed against the deployed service/SQL implementation. They are not independently exported row-level SQL/provider snapshots. The artifact, its markers and source identities were independently verified; the separate selected Stripe GET readbacks corroborate the provider facts explicitly listed."
+  },
+  "acceptedChecks": [
+    "protected-baseline",
+    "fresh-isolated-fixture",
+    "normal-checkout-setup",
+    "unique-bound-checkout",
+    "hosted-payment-completed",
+    "paid-stock-promoted",
+    "paid-no-schedule-baseline",
+    "cancellation-response-lost",
+    "original-cancellation-intent-preserved",
+    "naturally-due",
+    "original-cancellation-recovered",
+    "exact-operation-retries-stable",
+    "refresh-retry-stable",
+    "original-financials-stock-preserved",
+    "protected-scope-unchanged",
+    "cleanup-retained"
+  ],
+  "pass": {
+    "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+    "mode": "verify",
+    "scenario": "period-end-no-schedule",
+    "passed": true,
+    "sandbox": true,
+    "checks": [
+      "protected-baseline",
+      "fresh-isolated-fixture",
+      "normal-checkout-setup",
+      "unique-bound-checkout",
+      "hosted-payment-completed",
+      "paid-stock-promoted",
+      "paid-no-schedule-baseline",
+      "cancellation-response-lost",
+      "original-cancellation-intent-preserved",
+      "naturally-due",
+      "original-cancellation-recovered",
+      "exact-operation-retries-stable",
+      "refresh-retry-stable",
+      "original-financials-stock-preserved",
+      "protected-scope-unchanged",
+      "cleanup-retained"
+    ],
+    "scope": "genuine sandbox provider + deployed service/SQL",
+    "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+    "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+    "customerId": "cus_VdUQ67P4YWtqoT",
+    "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+    "customerEventId": "evt_1UcDRaQ4sARuLNQaRGJIsyEm",
+    "originalCustomerKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:customer",
+    "originalCheckoutKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:checkout",
+    "originalCancellationKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:BA311BA6-BF43-4892-9AAC-9601F830318D",
+    "customerPosts": 1,
+    "checkoutPosts": 1,
+    "cancellationPosts": 1,
+    "recoveryProviderWrites": 0,
+    "retryProviderWrites": 0,
+    "refreshProviderWrites": 0,
+    "cleanupPosts": 0,
+    "cleanupCancellationRequests": 1,
+    "normalCheckoutSetup": true,
+    "hostedCheckoutCompleted": true,
+    "responseDiscarded": true,
+    "originalIdempotencyKeyPreserved": true,
+    "originalIntentPreserved": true,
+    "setupAttempts": 1,
+    "setupCompletedSteps": 2,
+    "targetAttempts": 2,
+    "targetCompletedSteps": 1,
+    "targetRecoveredAudits": 1,
+    "releaseScheduleSteps": 0,
+    "cancellationResult": {
+      "cancelAtPeriodEnd": true,
+      "paidThrough": "2026-12-16T00:10:51.000Z"
+    },
+    "paidThrough": "2026-12-16T00:10:51.000Z",
+    "providerPeriodEnd": 1797379851,
+    "cancelAtPeriodEnd": true,
+    "paidAccessRetained": true,
+    "exactCancelRetryStable": true,
+    "exactReconcileRetryStable": true,
+    "originalRecoveryRetryStable": true,
+    "refreshRetryStable": true,
+    "checkoutSessions": 1,
+    "subscriptionsCreated": 1,
+    "invoicesCreated": 1,
+    "paymentIntentsCreated": 1,
+    "chargesCreated": 1,
+    "subscriptionId": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+    "initialInvoiceId": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+    "paymentIntentId": "pi_3UcDVXQ4sARuLNQa1VVvVNki",
+    "chargeId": "ch_3UcDVXQ4sARuLNQa1NVhWmex",
+    "initialInvoiceAmountMinor": 500,
+    "currency": "usd",
+    "billedQuantity": 1,
+    "actualProperties": 1,
+    "actualUnits": 0,
+    "promotionAuditCount": 1,
+    "stockUnchanged": true,
+    "stockPrivate": true,
+    "promotedStockRetained": true,
+    "initialInvoicePreserved": true,
+    "noAdditionalFinancialObjects": true,
+    "subscriptionCanceled": true,
+    "sessionCompleted": true,
+    "sessionExpired": false,
+    "fixtureInactive": true,
+    "recordsRetained": true,
+    "protectedBillingUnchanged": true,
+    "workerScopeUnchanged": true,
+    "processLocalStagingReadiness": true,
+    "servingConfigurationChanged": false,
+    "automaticWorkerAccepted": false,
+    "httpAccepted": false,
+    "uiAccepted": false,
+    "credentialLoginAccepted": false,
+    "liveChargingEnabled": false,
+    "wholeProcessCrashAccepted": false,
+    "naturalPaidBoundaryAccepted": false,
+    "scheduleReleaseAccepted": false,
+    "cancellationReversalAccepted": false
+  },
+  "cleanup": {
+    "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+    "mode": "verify",
+    "scenario": "period-end-no-schedule",
+    "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+    "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+    "verified": true,
+    "fixtureInactive": true,
+    "sessionExpired": false,
+    "sessionCompleted": true,
+    "subscriptionCanceled": true,
+    "cleanupKind": "paid-subscription-canceled",
+    "noSession": false,
+    "noSubscription": false,
+    "noInvoice": false,
+    "noPayment": false,
+    "recordsRetained": true,
+    "targetJournalRetained": true,
+    "setupJournalRetained": true,
+    "pendingStockRetained": 0,
+    "promotedStockRetained": 1,
+    "initialInvoicePreserved": true,
+    "noAdditionalFinancialObjects": true,
+    "protectedBillingUnchanged": true,
+    "workerScopeUnchanged": true,
+    "cleanupPosts": 0,
+    "cleanupCancellationRequests": 1,
+    "expiryResponseRecovered": false,
+    "cancellationResponseRecovered": false
+  },
+  "workflowProof": {
+    "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+    "mode": "verify",
+    "scenario": "period-end-no-schedule",
+    "sourceSha": "60d23a89dd091ca5c30bf097f14b2996d210911e",
+    "servingBuild": "e0f7e821b8e511898836f71df86fde2fa8399463",
+    "servingRevision": "khrental-app--0000523",
+    "runId": "43778351120",
+    "runAttempt": "1",
+    "workflowProofValid": true,
+    "remoteExitCode": 0,
+    "liveOutputExitCode": 0,
+    "errors": [],
+    "proof": {
+      "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+      "mode": "verify",
+      "scenario": "period-end-no-schedule",
+      "passed": true,
+      "sandbox": true,
+      "checks": [
+        "protected-baseline",
+        "fresh-isolated-fixture",
+        "normal-checkout-setup",
+        "unique-bound-checkout",
+        "hosted-payment-completed",
+        "paid-stock-promoted",
+        "paid-no-schedule-baseline",
+        "cancellation-response-lost",
+        "original-cancellation-intent-preserved",
+        "naturally-due",
+        "original-cancellation-recovered",
+        "exact-operation-retries-stable",
+        "refresh-retry-stable",
+        "original-financials-stock-preserved",
+        "protected-scope-unchanged",
+        "cleanup-retained"
+      ],
+      "scope": "genuine sandbox provider + deployed service/SQL",
+      "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+      "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+      "customerId": "cus_VdUQ67P4YWtqoT",
+      "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+      "customerEventId": "evt_1UcDRaQ4sARuLNQaRGJIsyEm",
+      "originalCustomerKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:customer",
+      "originalCheckoutKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:checkout",
+      "originalCancellationKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:BA311BA6-BF43-4892-9AAC-9601F830318D",
+      "customerPosts": 1,
+      "checkoutPosts": 1,
+      "cancellationPosts": 1,
+      "recoveryProviderWrites": 0,
+      "retryProviderWrites": 0,
+      "refreshProviderWrites": 0,
+      "cleanupPosts": 0,
+      "cleanupCancellationRequests": 1,
+      "normalCheckoutSetup": true,
+      "hostedCheckoutCompleted": true,
+      "responseDiscarded": true,
+      "originalIdempotencyKeyPreserved": true,
+      "originalIntentPreserved": true,
+      "setupAttempts": 1,
+      "setupCompletedSteps": 2,
+      "targetAttempts": 2,
+      "targetCompletedSteps": 1,
+      "targetRecoveredAudits": 1,
+      "releaseScheduleSteps": 0,
+      "cancellationResult": {
+        "cancelAtPeriodEnd": true,
+        "paidThrough": "2026-12-16T00:10:51.000Z"
+      },
+      "paidThrough": "2026-12-16T00:10:51.000Z",
+      "providerPeriodEnd": 1797379851,
+      "cancelAtPeriodEnd": true,
+      "paidAccessRetained": true,
+      "exactCancelRetryStable": true,
+      "exactReconcileRetryStable": true,
+      "originalRecoveryRetryStable": true,
+      "refreshRetryStable": true,
+      "checkoutSessions": 1,
+      "subscriptionsCreated": 1,
+      "invoicesCreated": 1,
+      "paymentIntentsCreated": 1,
+      "chargesCreated": 1,
+      "subscriptionId": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+      "initialInvoiceId": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+      "paymentIntentId": "pi_3UcDVXQ4sARuLNQa1VVvVNki",
+      "chargeId": "ch_3UcDVXQ4sARuLNQa1NVhWmex",
+      "initialInvoiceAmountMinor": 500,
+      "currency": "usd",
+      "billedQuantity": 1,
+      "actualProperties": 1,
+      "actualUnits": 0,
+      "promotionAuditCount": 1,
+      "stockUnchanged": true,
+      "stockPrivate": true,
+      "promotedStockRetained": true,
+      "initialInvoicePreserved": true,
+      "noAdditionalFinancialObjects": true,
+      "subscriptionCanceled": true,
+      "sessionCompleted": true,
+      "sessionExpired": false,
+      "fixtureInactive": true,
+      "recordsRetained": true,
+      "protectedBillingUnchanged": true,
+      "workerScopeUnchanged": true,
+      "processLocalStagingReadiness": true,
+      "servingConfigurationChanged": false,
+      "automaticWorkerAccepted": false,
+      "httpAccepted": false,
+      "uiAccepted": false,
+      "credentialLoginAccepted": false,
+      "liveChargingEnabled": false,
+      "wholeProcessCrashAccepted": false,
+      "naturalPaidBoundaryAccepted": false,
+      "scheduleReleaseAccepted": false,
+      "cancellationReversalAccepted": false
+    }
+  },
+  "configurationComparison": {
+    "equal": true,
+    "differentPaths": []
+  },
+  "publicHealth": {
+    "buildVerified": true,
+    "sqlHealthy": true,
+    "verifiedAt": "2026-11-16T00:12:14Z"
+  },
+  "artifact": {
+    "id": 14187885028,
+    "name": "cancellation-operation-recovery-period-end-no-schedule-verify",
+    "sizeInBytes": 4312,
+    "digest": "sha256:57a8c7569a05070f58bb171e3c035d7200844bdcb5a54605af33669d836a2e92",
+    "createdAt": "2026-11-16T00:12:14Z",
+    "expiresAt": "2026-12-16T00:12:14Z",
+    "downloadedZipSha256": "57a8c7569a05070f58bb171e3c035d7200844bdcb5a54605af33669d836a2e92",
+    "digestMatched": true,
+    "expectedFiles": [
+      {
+        "path": "cancellation-config-comparison.json",
+        "bytes": 38,
+        "sha256": "f74b76d245e49decdc9f373fd141598c31c72fcba81087f851556a351265842e"
+      },
+      {
+        "path": "cancellation-public-health.json",
+        "bytes": 90,
+        "sha256": "862fe190d747f5e8e19f3c8461448a9cb622c3aadfb090a78492f7419cdb445d"
+      },
+      {
+        "path": "cancellation-recovery-summary.json",
+        "bytes": 4212,
+        "sha256": "98e145f44a2f8feb3ed0d501c4f649e3c9569edb17e432a9a5cd988971617672"
+      },
+      {
+        "path": "cancellation-recovery.txt",
+        "bytes": 18605,
+        "sha256": "ce3996471f957c317504041dce756de03a96bfb5f7eb04a13a20cbf43c664046"
+      }
+    ]
+  },
+  "independentProviderReadbacks": {
+    "afterHostedPayment": {
+      "observedAt": "2026-11-16 00:10:56 UTC",
+      "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+      "status": "complete",
+      "paymentStatus": "paid",
+      "amountMinor": 500,
+      "currency": "usd",
+      "customerId": "cus_VdUQ67P4YWtqoT",
+      "subscriptionId": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+      "invoiceId": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+      "livemode": false,
+      "metadata": {
+        "inventory_hash": "2de97d63d37a33c4896bb71c5cb1c77b6a08f04a09394bb8df0daae4c4b1cdfd",
+        "quixo_operation": "82A6DA52-BEDB-4145-8681-9549B6452DE6",
+        "quixo_tenant": "BA311BA6-BF43-4892-9AAC-9601F830318D"
+      }
+    },
+    "paidCancellationBeforeCleanup": {
+      "observedAt": "2026-11-16T00:11:41Z",
+      "subscription": {
+        "id": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "customer": "cus_VdUQ67P4YWtqoT",
+        "livemode": false,
+        "status": "active",
+        "cancelAtPeriodEnd": true,
+        "schedule": null,
+        "latestInvoice": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "items": [
+          {
+            "id": "si_VdUUzuebwD9cW7",
+            "quantity": 1,
+            "price": "price_1UTkOuQ4sARuLNQaJnbZ03Hs",
+            "currentPeriodStart": 1794787851,
+            "currentPeriodEnd": 1797379851
+          }
+        ]
+      },
+      "invoice": {
+        "id": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "customer": "cus_VdUQ67P4YWtqoT",
+        "livemode": false,
+        "status": "paid",
+        "currency": "usd",
+        "total": 500,
+        "amountPaid": 500,
+        "amountRemaining": 0,
+        "subscription": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "lines": [
+          {
+            "id": "il_1UcDVXQ4sARuLNQaEJLScUka",
+            "amount": 500,
+            "quantity": 1,
+            "period": {
+              "end": 1797379851,
+              "start": 1794787851
+            },
+            "subscription": "sub_1UcDVYQ4sARuLNQazUABnSiy"
+          }
+        ]
+      }
+    },
+    "afterCleanup": {
+      "observedAt": "2026-11-16 00:14:09 UTC",
+      "session": {
+        "id": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customer": "cus_VdUQ67P4YWtqoT",
+        "subscription": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "invoice": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "status": "complete",
+        "paymentStatus": "paid",
+        "amountTotal": 500,
+        "currency": "usd",
+        "livemode": false,
+        "hostedUrlAbsent": true
+      },
+      "subscription": {
+        "id": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "customer": "cus_VdUQ67P4YWtqoT",
+        "status": "canceled",
+        "livemode": false,
+        "cancelAtPeriodEnd": false,
+        "schedule": null,
+        "latestInvoice": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "items": [
+          {
+            "id": "si_VdUUzuebwD9cW7",
+            "price": "price_1UTkOuQ4sARuLNQaJnbZ03Hs",
+            "quantity": 1
+          }
+        ],
+        "canceledAt": 1794787864,
+        "endedAt": 1794787916
+      },
+      "invoice": {
+        "id": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "customer": "cus_VdUQ67P4YWtqoT",
+        "subscription": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "status": "paid",
+        "livemode": false,
+        "currency": "usd",
+        "total": 500,
+        "amountPaid": 500,
+        "amountRemaining": 0,
+        "prePaymentCreditNotesAmount": 0,
+        "postPaymentCreditNotesAmount": 0,
+        "lines": [
+          {
+            "id": "il_1UcDVXQ4sARuLNQaEJLScUka",
+            "amount": 500,
+            "quantity": 1,
+            "period": {
+              "end": 1797379851,
+              "start": 1794787851
+            }
+          }
+        ]
+      }
+    }
+  },
+  "hostedPayment": {
+    "submittedOnce": true,
+    "merchantSuccessObserved": true,
+    "sandbox": true,
+    "currency": "usd",
+    "amountMinor": 500,
+    "quantity": 1,
+    "linkOptIn": false,
+    "syntheticTestDetails": true,
+    "checkoutReportingCompleted": true,
+    "role": "Normal genuine hosted Checkout setup under a distinct completed command; no Checkout response loss was injected in this case."
+  },
+  "outcome": {
+    "setup": "One normal customer creation and one normal Checkout creation; both setup steps completed on attempt one under the distinct setup UUID. Payment of that exact session then promoted exactly one private inactive whole-property dwelling.",
+    "interruption": "One genuine cancel_at_period_end:true subscription POST succeeded at Stripe, then its response was deliberately discarded before the target set_cancellation checkpoint. The original target remained pending on attempt one with its saved intent and exact unsuffixed SQL-cased key.",
+    "recovery": "After ordinary SQL retry eligibility, provider GETs confirmed the existing cancellation effect. Attempt two completed the original command and its one step, with exactly one recovered audit and the durable cancelAtPeriodEnd:true result and independently verified paidThrough.",
+    "retries": "Exact cancel, reconcileCancellation and recoverOperation retries returned the same result without a provider write, new step, new attempt or duplicate recovery audit. Two separate GET-only refreshes preserved stable billing fields, stock and the original financial chain.",
+    "paidBoundary": "The active ending state retained current management access before cleanup; paidThrough matched the paid initial invoice line and subscription item period end. The actual future boundary was not reached or advanced.",
+    "cleanup": "One exact owned subscription DELETE with invoice_now:false and prorate:false canceled the sandbox subscription. The complete paid Checkout, original USD 5 invoice, payment/charge chain, both command histories and promoted private stock were retained; tenant, actor and membership were deactivated.",
+    "phaseDistinction": "The saved target result correctly retains cancelAtPeriodEnd:true. Post-cleanup provider state is canceled with cancel_at_period_end:false because cleanup ended the disposable subscription immediately. These represent separate verified phases."
+  },
+  "scopeAccepted": [
+    "Normal genuine hosted sandbox Checkout setup on one fresh non-login fixture, USD 5 monthly and quantity one.",
+    "One cancellation response lost after the actual period-end cancellation effect, without an existing schedule.",
+    "Original cancellation intent/key/step recovery through the deployed service and MSSQL journal after natural SQL retry eligibility.",
+    "Current paid access and independently verified paid-through boundary before cleanup.",
+    "Exact original-operation retries, separate read-only refresh retries, one retained stock promotion and unchanged original financial graph.",
+    "Owned sandbox cleanup, retained histories, unchanged protected accounts/clocks, exact worker scope, complete serving configuration and public build/SQL health."
+  ],
+  "notAccepted": [
+    "Application HTTP/UI or credential-login acceptance; the hosted Stripe payment UI is only genuine setup evidence.",
+    "Automatic-worker recovery, a whole-process crash/outage, provider idempotency-key age exhaustion or natural Checkout expiry.",
+    "Natural paid-boundary execution or actual renewal, including the future 2026-12-16 boundary.",
+    "Existing-schedule release recovery, cancellation reversal, zero-stock or other subscription-operation recovery.",
+    "Broader authority/resource/isolation and missing/conflicting-provider-evidence cases.",
+    "Cleanup failure branches such as timeout/payment races or ambiguous DELETE responses; these were reviewed offline but were not exercised in this successful run.",
+    "Remaining cessation states and races under inventory item 1; natural seven-day grace and Evia audit remain outside R5 by owner decision."
+  ],
+  "nextExecutableSlice": {
+    "status": "prospective; not executed or accepted by this evidence",
+    "name": "Cancellation recovery after a lost schedule-release response",
+    "fixture": "Fresh genuine hosted USD 10 quantity-two subscription with two private inactive dwellings; separate normal governed cessation leaves one managed dwelling and creates a real 2-to-1 renewal schedule. Checkout, schedule preparation and target cancellation command UUIDs distinct and durable.",
+    "before": "Active paid subscription, current quantity 2, pending quantity 1, exact active schedule/customer/subscription/price/phase and independent paid boundary; no prior cancellation, trial or test clock.",
+    "interruption": "Discard the single successful release response before checkpointing. Target attempt 1 pending; one incomplete release_schedule step; no set_cancellation step. Exact schedule released, subscription attachment absent and cancellation still false.",
+    "recovery": "After natural SQL eligibility, GET-confirm original release without another release POST, then allow exactly one first-time set_cancellation POST using original unsuffixed key. Attempt 2 succeeds with two completed steps, one target recovery audit, correct durable cancellation result and cleared pending_quantity.",
+    "preservation": "Original invoice/payment graph, stock and ceased-history records unchanged; saved intent scheduleId remains immutable even if webhook projection clears current account binding; exact-operation and separate GET-only refresh retries stable.",
+    "cleanup": "Prove all setup/cessation/target ownership, cancel only exact owned sandbox subscription without invoice/proration, retain released schedule and all three command histories/stock/financial records; no target replay in cleanup.",
+    "limitations": "This next recovery includes one new intended provider write. Lost set_cancellation response after acknowledged schedule release remains a later separate case. No natural renewal, clock advance, reversal, automatic-worker, HTTP/UI or whole-process crash inference.",
+    "sources": [
+      "src/api/managementBilling/recoveryCancellation.js",
+      "src/api/managementBilling/recovery.js",
+      "src/api/managementBilling/service.js",
+      "src/api/managementBilling/store.js",
+      "scripts/verify-deployed-paid-inventory.mjs"
+    ],
+    "setupCalls": [
+      "service.checkout",
+      "genuine hosted sandbox payment USD 10 quantity 2",
+      "GET-only service.refresh",
+      "service.cessationPreview then service.ceaseStock once with fresh preparation ID and exact reviewed inventory hash",
+      "stable exact preparation retry"
+    ],
+    "scheduleInvariant": "Active, end_behavior release, current phase quantity 2, next phase quantity 1 at verified original period end; initial USD 10 invoice unchanged; current billed quantity 2, one managed dwelling and retained ceased-property history.",
+    "cleanupReadiness": "Future implementation must verify cleanup behavior for an attached active schedule and an unfinished schedule-preparation command before any run. Current no-schedule cleanup cannot be assumed sufficient. Retain exact released schedule with original released_subscription binding, both properties, cessation control and all three journals."
+  },
+  "scenarioMarkers": [
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "preflight",
+        "fixtureCreated": false,
+        "setupCommandId": null,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "protected-baseline"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "create_fresh_fixture",
+        "fixtureCreated": false,
+        "setupCommandId": null,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "prepare_private_stock",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "fresh-isolated-fixture"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "normal_checkout_setup",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "customer_created_wait_for_normal_checkpoint",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": null,
+        "customerPosts": 1,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "normal-checkout-setup"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "unique-bound-checkout"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "await_same_hosted_sandbox_payment",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_READY",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "waitSeconds": 600
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 31
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 63
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 94
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 126
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 157
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 188
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 220
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "hosted-payment-completed"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "refresh_paid_setup_and_promote_private_stock",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "paid-stock-promoted"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "paid-no-schedule-baseline"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cancel_at_period_end_with_response_loss",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cancellation_response_discarded",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "cancellation-response-lost"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "original-cancellation-intent-preserved"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "wait_for_natural_sql_retry_due",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "naturally-due"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "recover_original_cancellation_using_get_only",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "original-cancellation-recovered"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "exact_completed_cancellation_retries",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "exact-operation-retries-stable"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "refresh_and_retry_confirmed_ending_subscription",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "refresh-retry-stable"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "original-financials-stock-preserved"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "protected-scope-unchanged"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cleanup_inspect_owned_effects",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cancel_exact_owned_subscription",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "deactivate_owned_fixture_preserving_history",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CLEANUP",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "verified": true,
+        "fixtureInactive": true,
+        "sessionExpired": false,
+        "sessionCompleted": true,
+        "subscriptionCanceled": true,
+        "cleanupKind": "paid-subscription-canceled",
+        "noSession": false,
+        "noSubscription": false,
+        "noInvoice": false,
+        "noPayment": false,
+        "recordsRetained": true,
+        "targetJournalRetained": true,
+        "setupJournalRetained": true,
+        "pendingStockRetained": 0,
+        "promotedStockRetained": 1,
+        "initialInvoicePreserved": true,
+        "noAdditionalFinancialObjects": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1,
+        "expiryResponseRecovered": false,
+        "cancellationResponseRecovered": false
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "cleanup-retained"
+      }
+    },
+    {
+      "marker": "CANCELLATION_RECOVERY_PASS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "passed": true,
+        "sandbox": true,
+        "checks": [
+          "protected-baseline",
+          "fresh-isolated-fixture",
+          "normal-checkout-setup",
+          "unique-bound-checkout",
+          "hosted-payment-completed",
+          "paid-stock-promoted",
+          "paid-no-schedule-baseline",
+          "cancellation-response-lost",
+          "original-cancellation-intent-preserved",
+          "naturally-due",
+          "original-cancellation-recovered",
+          "exact-operation-retries-stable",
+          "refresh-retry-stable",
+          "original-financials-stock-preserved",
+          "protected-scope-unchanged",
+          "cleanup-retained"
+        ],
+        "scope": "genuine sandbox provider + deployed service/SQL",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerEventId": "evt_1UcDRaQ4sARuLNQaRGJIsyEm",
+        "originalCustomerKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:customer",
+        "originalCheckoutKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:checkout",
+        "originalCancellationKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:BA311BA6-BF43-4892-9AAC-9601F830318D",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1,
+        "normalCheckoutSetup": true,
+        "hostedCheckoutCompleted": true,
+        "responseDiscarded": true,
+        "originalIdempotencyKeyPreserved": true,
+        "originalIntentPreserved": true,
+        "setupAttempts": 1,
+        "setupCompletedSteps": 2,
+        "targetAttempts": 2,
+        "targetCompletedSteps": 1,
+        "targetRecoveredAudits": 1,
+        "releaseScheduleSteps": 0,
+        "cancellationResult": {
+          "cancelAtPeriodEnd": true,
+          "paidThrough": "2026-12-16T00:10:51.000Z"
+        },
+        "paidThrough": "2026-12-16T00:10:51.000Z",
+        "providerPeriodEnd": 1797379851,
+        "cancelAtPeriodEnd": true,
+        "paidAccessRetained": true,
+        "exactCancelRetryStable": true,
+        "exactReconcileRetryStable": true,
+        "originalRecoveryRetryStable": true,
+        "refreshRetryStable": true,
+        "checkoutSessions": 1,
+        "subscriptionsCreated": 1,
+        "invoicesCreated": 1,
+        "paymentIntentsCreated": 1,
+        "chargesCreated": 1,
+        "subscriptionId": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "initialInvoiceId": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "paymentIntentId": "pi_3UcDVXQ4sARuLNQa1VVvVNki",
+        "chargeId": "ch_3UcDVXQ4sARuLNQa1NVhWmex",
+        "initialInvoiceAmountMinor": 500,
+        "currency": "usd",
+        "billedQuantity": 1,
+        "actualProperties": 1,
+        "actualUnits": 0,
+        "promotionAuditCount": 1,
+        "stockUnchanged": true,
+        "stockPrivate": true,
+        "promotedStockRetained": true,
+        "initialInvoicePreserved": true,
+        "noAdditionalFinancialObjects": true,
+        "subscriptionCanceled": true,
+        "sessionCompleted": true,
+        "sessionExpired": false,
+        "fixtureInactive": true,
+        "recordsRetained": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "processLocalStagingReadiness": true,
+        "servingConfigurationChanged": false,
+        "automaticWorkerAccepted": false,
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "liveChargingEnabled": false,
+        "wholeProcessCrashAccepted": false,
+        "naturalPaidBoundaryAccepted": false,
+        "scheduleReleaseAccepted": false,
+        "cancellationReversalAccepted": false
+      }
+    }
+  ],
+  "jobMarkers": [
+    {
+      "timestamp": "2026-11-16T00:06:52.7200960Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_READY",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "waitSeconds": 600
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:06:52.9231751Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:07:24.3943445Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 31
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:07:55.9024311Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 63
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:08:27.3138067Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 94
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:08:58.7914346Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 126
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:09:30.2600047Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 157
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:10:01.6898332Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 188
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:10:33.1217423Z",
+      "marker": "CANCELLATION_RECOVERY_LIVE_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 220
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4830121Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "preflight",
+        "fixtureCreated": false,
+        "setupCommandId": null,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4834550Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "protected-baseline"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4839077Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "create_fresh_fixture",
+        "fixtureCreated": false,
+        "setupCommandId": null,
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4845563Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "prepare_private_stock",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4849951Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "fresh-isolated-fixture"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4854947Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "normal_checkout_setup",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": null,
+        "sessionId": null,
+        "customerPosts": 0,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4862543Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "customer_created_wait_for_normal_checkpoint",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": null,
+        "customerPosts": 1,
+        "checkoutPosts": 0,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4867140Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "normal-checkout-setup"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4869614Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "unique-bound-checkout"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4875195Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "await_same_hosted_sandbox_payment",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4880325Z",
+      "marker": "CANCELLATION_RECOVERY_READY",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "waitSeconds": 600
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4883867Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4887151Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 31
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4890458Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 63
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4893453Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 94
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4896652Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 126
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4900072Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 157
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4903118Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 188
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4906123Z",
+      "marker": "CANCELLATION_RECOVERY_WAITING",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "elapsedSeconds": 220
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4908161Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "hosted-payment-completed"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4911457Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "refresh_paid_setup_and_promote_private_stock",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4914132Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "paid-stock-promoted"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4915419Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "paid-no-schedule-baseline"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4918882Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cancel_at_period_end_with_response_loss",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 0,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4923883Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cancellation_response_discarded",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4926825Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "cancellation-response-lost"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4928206Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "original-cancellation-intent-preserved"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4931721Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "wait_for_natural_sql_retry_due",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4934328Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "naturally-due"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4937374Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "recover_original_cancellation_using_get_only",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4940332Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "original-cancellation-recovered"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4943415Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "exact_completed_cancellation_retries",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4946112Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "exact-operation-retries-stable"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4949443Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "refresh_and_retry_confirmed_ending_subscription",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4952283Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "refresh-retry-stable"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4953615Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "original-financials-stock-preserved"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4954945Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "protected-scope-unchanged"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4957967Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cleanup_inspect_owned_effects",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4962838Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "cancel_exact_owned_subscription",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 0
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4967369Z",
+      "marker": "CANCELLATION_RECOVERY_PROGRESS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "stage": "deactivate_owned_fixture_preserving_history",
+        "fixtureCreated": true,
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4973418Z",
+      "marker": "CANCELLATION_RECOVERY_CLEANUP",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "verified": true,
+        "fixtureInactive": true,
+        "sessionExpired": false,
+        "sessionCompleted": true,
+        "subscriptionCanceled": true,
+        "cleanupKind": "paid-subscription-canceled",
+        "noSession": false,
+        "noSubscription": false,
+        "noInvoice": false,
+        "noPayment": false,
+        "recordsRetained": true,
+        "targetJournalRetained": true,
+        "setupJournalRetained": true,
+        "pendingStockRetained": 0,
+        "promotedStockRetained": 1,
+        "initialInvoicePreserved": true,
+        "noAdditionalFinancialObjects": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1,
+        "expiryResponseRecovered": false,
+        "cancellationResponseRecovered": false
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4977524Z",
+      "marker": "CANCELLATION_RECOVERY_CHECK",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "name": "cleanup-retained"
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.4993006Z",
+      "marker": "CANCELLATION_RECOVERY_PASS",
+      "value": {
+        "operation": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "mode": "verify",
+        "scenario": "period-end-no-schedule",
+        "passed": true,
+        "sandbox": true,
+        "checks": [
+          "protected-baseline",
+          "fresh-isolated-fixture",
+          "normal-checkout-setup",
+          "unique-bound-checkout",
+          "hosted-payment-completed",
+          "paid-stock-promoted",
+          "paid-no-schedule-baseline",
+          "cancellation-response-lost",
+          "original-cancellation-intent-preserved",
+          "naturally-due",
+          "original-cancellation-recovered",
+          "exact-operation-retries-stable",
+          "refresh-retry-stable",
+          "original-financials-stock-preserved",
+          "protected-scope-unchanged",
+          "cleanup-retained"
+        ],
+        "scope": "genuine sandbox provider + deployed service/SQL",
+        "targetCommandId": "ba311ba6-bf43-4892-9aac-9601f830318d",
+        "setupCommandId": "82a6da52-bedb-4145-8681-9549b6452de6",
+        "customerId": "cus_VdUQ67P4YWtqoT",
+        "sessionId": "cs_test_a0LzVlENsfutetiXDO8pA7WopL4a1FrwgKDqGdp8lexBJFk5Ih3fh9b0sT",
+        "customerEventId": "evt_1UcDRaQ4sARuLNQaRGJIsyEm",
+        "originalCustomerKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:customer",
+        "originalCheckoutKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:82A6DA52-BEDB-4145-8681-9549B6452DE6:checkout",
+        "originalCancellationKey": "quixo:BA311BA6-BF43-4892-9AAC-9601F830318D:BA311BA6-BF43-4892-9AAC-9601F830318D",
+        "customerPosts": 1,
+        "checkoutPosts": 1,
+        "cancellationPosts": 1,
+        "recoveryProviderWrites": 0,
+        "retryProviderWrites": 0,
+        "refreshProviderWrites": 0,
+        "cleanupPosts": 0,
+        "cleanupCancellationRequests": 1,
+        "normalCheckoutSetup": true,
+        "hostedCheckoutCompleted": true,
+        "responseDiscarded": true,
+        "originalIdempotencyKeyPreserved": true,
+        "originalIntentPreserved": true,
+        "setupAttempts": 1,
+        "setupCompletedSteps": 2,
+        "targetAttempts": 2,
+        "targetCompletedSteps": 1,
+        "targetRecoveredAudits": 1,
+        "releaseScheduleSteps": 0,
+        "cancellationResult": {
+          "cancelAtPeriodEnd": true,
+          "paidThrough": "2026-12-16T00:10:51.000Z"
+        },
+        "paidThrough": "2026-12-16T00:10:51.000Z",
+        "providerPeriodEnd": 1797379851,
+        "cancelAtPeriodEnd": true,
+        "paidAccessRetained": true,
+        "exactCancelRetryStable": true,
+        "exactReconcileRetryStable": true,
+        "originalRecoveryRetryStable": true,
+        "refreshRetryStable": true,
+        "checkoutSessions": 1,
+        "subscriptionsCreated": 1,
+        "invoicesCreated": 1,
+        "paymentIntentsCreated": 1,
+        "chargesCreated": 1,
+        "subscriptionId": "sub_1UcDVYQ4sARuLNQazUABnSiy",
+        "initialInvoiceId": "in_1UcDVXQ4sARuLNQapeQu3qLf",
+        "paymentIntentId": "pi_3UcDVXQ4sARuLNQa1VVvVNki",
+        "chargeId": "ch_3UcDVXQ4sARuLNQa1NVhWmex",
+        "initialInvoiceAmountMinor": 500,
+        "currency": "usd",
+        "billedQuantity": 1,
+        "actualProperties": 1,
+        "actualUnits": 0,
+        "promotionAuditCount": 1,
+        "stockUnchanged": true,
+        "stockPrivate": true,
+        "promotedStockRetained": true,
+        "initialInvoicePreserved": true,
+        "noAdditionalFinancialObjects": true,
+        "subscriptionCanceled": true,
+        "sessionCompleted": true,
+        "sessionExpired": false,
+        "fixtureInactive": true,
+        "recordsRetained": true,
+        "protectedBillingUnchanged": true,
+        "workerScopeUnchanged": true,
+        "processLocalStagingReadiness": true,
+        "servingConfigurationChanged": false,
+        "automaticWorkerAccepted": false,
+        "httpAccepted": false,
+        "uiAccepted": false,
+        "credentialLoginAccepted": false,
+        "liveChargingEnabled": false,
+        "wholeProcessCrashAccepted": false,
+        "naturalPaidBoundaryAccepted": false,
+        "scheduleReleaseAccepted": false,
+        "cancellationReversalAccepted": false
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:10.5005142Z",
+      "marker": "CANCELLATION_RECOVERY_PROOF",
+      "value": {
+        "valid": true,
+        "errors": []
+      }
+    },
+    {
+      "timestamp": "2026-11-16T00:12:12.6892065Z",
+      "marker": "CANCELLATION_RECOVERY_CONFIG_COMPARISON",
+      "value": {
+        "equal": true,
+        "differentPaths": []
+      }
+    }
+  ],
+  "exitStatusMarkers": [
+    {
+      "kind": "EXEC_EXIT_CODE",
+      "value": 0
+    },
+    {
+      "kind": "STREAM_EXIT_CODE",
+      "value": 0
+    }
+  ]
+}
