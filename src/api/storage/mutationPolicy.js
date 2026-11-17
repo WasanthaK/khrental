@@ -35,6 +35,16 @@ export const storageUploadPolicy = ({req,bucket,path,proof}) => {
   return {path:`${prefix}${folder}/${req.user.id}/${name}`,createOnly:true,contentType};
 };
 
+// Every new object is management data except a renter's own identity copies,
+// which belong to the renter profile that stays correctable after expiry
+// (owner-approved access policy). Unknown buckets/folders fail closed.
+const ENTITLEMENT_EXEMPT_UPLOADS = new Set(['images/id-copies', 'files/id-copies']);
+export const uploadRequiresManagementEntitlement = ({ bucket, path }) => {
+  const parts = String(path || '').split('/');
+  const folder = parts[0] === 'tenants' ? parts[2] : undefined;
+  return !(folder && parts.length > 3 && ENTITLEMENT_EXEMPT_UPLOADS.has(`${String(bucket).toLowerCase()}/${folder}`));
+};
+
 export const requireTenantStorageAdmin = (req,_res,next) => {
   if (!isTenantStorageAdmin(req)) {return next(denied());}
   next();
