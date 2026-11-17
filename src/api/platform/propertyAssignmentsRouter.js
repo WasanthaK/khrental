@@ -3,7 +3,7 @@ import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS } from './permissionEngine.js';
-import { activatesAccess, assertAccessExpansionAllowed } from '../managementBilling/accessAdministration.js';
+import { activatesAccess, withAccessExpansion } from '../managementBilling/accessAdministration.js';
 
 const STAFF_ROLES = new Set([
   'staff',
@@ -164,7 +164,7 @@ const requireStaffMembership = async (tenantId, staffUserId) => {
   return membership;
 };
 
-export const createPropertyAssignmentsRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
+export const createPropertyAssignmentsRouter = ({ runAccessExpansion = withAccessExpansion } = {}) => {
   const router = express.Router();
 
   router.use(createTenantContextMiddleware({
@@ -217,54 +217,54 @@ export const createPropertyAssignmentsRouter = ({ assertAccessExpansion = assert
 
       await requireProperty(req.tenantId, propertyId);
       await requireStaffMembership(req.tenantId, staffUserId);
-      // Creating or reactivating an assignment grants property access.
-      await assertAccessExpansion({ tenantId: req.tenantId });
-
-      const existing = await runSingleQuery(
-        `SELECT TOP 1 *
-         FROM staff_property_assignments
-         WHERE tenant_id = @tenantId
-           AND propertyid = @propertyId
-           AND staff_user_id = @staffUserId`,
-        { tenantId: req.tenantId, propertyId, staffUserId }
-      );
-
-      let assignment;
-      if (existing) {
-        assignment = await runSingleQuery(
-          `UPDATE staff_property_assignments
-           SET status = 'active',
-               endedat = NULL,
-               notes = @notes,
-               assigned_by = @assignedBy,
-               assignedat = SYSUTCDATETIME(),
-               updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.*
-           WHERE id = @id
-             AND tenant_id = @tenantId`,
-          {
-            id: existing.id,
-            tenantId: req.tenantId,
-            notes,
-            assignedBy: req.user.id
-          }
+      // Creating or reactivating an assignment grants property access, so the
+      // lookup and write run while the entitlement lock is held.
+      let existing = null;
+      const assignment = await runAccessExpansion({ tenantId: req.tenantId, action: async () => {
+        existing = await runSingleQuery(
+          `SELECT TOP 1 *
+           FROM staff_property_assignments
+           WHERE tenant_id = @tenantId
+             AND propertyid = @propertyId
+             AND staff_user_id = @staffUserId`,
+          { tenantId: req.tenantId, propertyId, staffUserId }
         );
-      } else {
-        assignment = await runSingleQuery(
-          `INSERT INTO staff_property_assignments
-             (tenant_id, propertyid, staff_user_id, status, assigned_by, notes)
-           OUTPUT INSERTED.*
-           VALUES
-             (@tenantId, @propertyId, @staffUserId, 'active', @assignedBy, @notes)`,
-          {
-            tenantId: req.tenantId,
-            propertyId,
-            staffUserId,
-            assignedBy: req.user.id,
-            notes
-          }
-        );
-      }
+
+        if (existing) {
+          return runSingleQuery(
+            `UPDATE staff_property_assignments
+             SET status = 'active',
+                 endedat = NULL,
+                 notes = @notes,
+                 assigned_by = @assignedBy,
+                 assignedat = SYSUTCDATETIME(),
+                 updatedat = SYSUTCDATETIME()
+             OUTPUT INSERTED.*
+             WHERE id = @id
+               AND tenant_id = @tenantId`,
+            {
+              id: existing.id,
+              tenantId: req.tenantId,
+              notes,
+              assignedBy: req.user.id
+            }
+          );
+        }
+        return runSingleQuery(
+            `INSERT INTO staff_property_assignments
+               (tenant_id, propertyid, staff_user_id, status, assigned_by, notes)
+             OUTPUT INSERTED.*
+             VALUES
+               (@tenantId, @propertyId, @staffUserId, 'active', @assignedBy, @notes)`,
+            {
+              tenantId: req.tenantId,
+              propertyId,
+              staffUserId,
+              assignedBy: req.user.id,
+              notes
+            }
+          );
+      } });
 
       res.status(existing ? 200 : 201).json({ data: assignment, error: null });
     } catch (error) {
@@ -289,18 +289,18 @@ export const createPropertyAssignmentsRouter = ({ assertAccessExpansion = assert
       }
 
       // Ending an assignment or editing notes stays available after expiry;
-      // reactivating an inactive assignment grants access again.
+      // reactivating an inactive assignment grants access again and is
+      // written while the entitlement lock is held.
+      let reactivates = false;
       if (status === 'active') {
         const current = await runSingleQuery(
           'SELECT TOP 1 status FROM staff_property_assignments WHERE id = @assignmentId AND tenant_id = @tenantId',
           { assignmentId, tenantId: req.tenantId }
         );
-        if (current && activatesAccess(current.status, status)) {
-          await assertAccessExpansion({ tenantId: req.tenantId });
-        }
+        reactivates = Boolean(current && activatesAccess(current.status, status));
       }
 
-      const assignment = await runSingleQuery(
+      const writeAssignment = () => runSingleQuery(
         `UPDATE staff_property_assignments
          SET status = COALESCE(@status, status),
              notes = CASE WHEN @notesProvided = 1 THEN @notes ELSE notes END,
@@ -321,6 +321,9 @@ export const createPropertyAssignmentsRouter = ({ assertAccessExpansion = assert
           notesProvided: notesProvided ? 1 : 0
         }
       );
+      const assignment = reactivates
+        ? await runAccessExpansion({ tenantId: req.tenantId, action: writeAssignment })
+        : await writeAssignment();
 
       if (!assignment) {
         throw createRequestError(404, 'Property assignment not found.', 'PROPERTY_ASSIGNMENT_NOT_FOUND');

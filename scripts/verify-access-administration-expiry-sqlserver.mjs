@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
+import sql from 'mssql';
 
 /**
  * Owner-approved expired-organization access policy (17 November 2026),
@@ -59,6 +60,8 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
   const adminA = await A.person('admin', {login:true});
   const adminB = await B.person('admin', {login:true});
   const staff = await A.person('staff', {bundle:'maintenance'});
+  // Active staff reserved for the concurrency proof.
+  const raceStaff = await A.person('staff', {bundle:'read_only'});
   const renter = await A.person('rentee', {associations:JSON.stringify([{propertyId:p1, unitId:null}])});
   const inactiveRenter = await A.person('rentee', {membershipStatus:'inactive'});
   const unlinked = await A.person('staff', {bundle:'read_only'});
@@ -89,7 +92,11 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
     MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS:A.tenantId, MANAGEMENT_BILLING_SCHEMA_READY:'true'});
 
   let invitationsSent = 0;
+  // Optional in-process stall: lets the concurrency proof hold an expansion
+  // in flight (inside the entitlement lock) until the test releases it.
+  let invitationStall = null;
   const sendInvitation = async ({appUserId}) => {
+    if (invitationStall) {invitationStall.entered(); await invitationStall.release;}
     invitationsSent += 1;
     return {expiresAt:'2030-01-01T00:00:00Z', delivery:{accepted:true},
       target:{appUserId, email:'fixture@example.invalid', name:'Fixture', intendedRole:'rentee', userType:'rentee'}};
@@ -238,6 +245,63 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
     const unenrolled = await call('POST', '/api/mssql/rentees', fresh('Unenrolled renter'), adminB, B.tenantId);
     assert.equal(unenrolled.status, 201, JSON.stringify(unenrolled.json));
     console.log('PASS: cross-organization access administration stays denied; an unenrolled organization is unaffected');
+
+    // Atomicity: entitlement decision and access expansion cannot interleave
+    // with a billing-state change. Billing changes UPDATE the account row that
+    // the decision locks (UPDLOCK, HOLDLOCK) until the expansion settles.
+    const billingUpdate = statement => `UPDATE dbo.management_billing_accounts SET ${statement} WHERE tenant_id=@tenantId`;
+    const lockTimeoutCode = async promise => {
+      try {await promise; return null;} catch (error) {return error.number ?? error.originalError?.info?.number ?? error.code;}
+    };
+    // (1) Expansion in flight: a revocation cannot commit until it settles.
+    await setState('active');
+    let entered;
+    let release;
+    invitationStall = {entered:null, release:new Promise(resolve => {release = resolve;})};
+    const inside = new Promise(resolve => {invitationStall.entered = resolve;});
+    const inFlight = call('POST', '/api/platform/auth/invitations', {appUserId:renter.id});
+    await inside;
+    entered = true;
+    const blocked = await lockTimeoutCode(pool.request().input('tenantId', sql.UniqueIdentifier, A.tenantId)
+      .query(`SET LOCK_TIMEOUT 1500; ${billingUpdate("comp_type=NULL,subscription_status='pending',initial_payment_verified=0,paid_through=NULL")}`));
+    assert.equal(blocked, 1222, 'revocation waits for the in-flight expansion (lock request timeout)');
+    release();
+    const admitted = await inFlight;
+    invitationStall = null;
+    assert.ok(entered);
+    assert.equal(admitted.status, 201, `in-flight expansion admitted before revocation completes: ${JSON.stringify(admitted.json)}`);
+    await setState('revoked');
+    const afterRevocation = await call('POST', '/api/platform/auth/invitations', {appUserId:renter.id});
+    assert.equal(afterRevocation.status, 403);
+    assert.equal(afterRevocation.json.code, 'MANAGEMENT_READ_ONLY');
+
+    // (2) Revocation in flight: expansions wait for it, then are denied with
+    // no writes, for multi-statement repositories and direct SQL writers.
+    await setState('active');
+    const beforeRace = await snapshot();
+    const revocation = new sql.Transaction(pool);
+    await revocation.begin();
+    await new sql.Request(revocation).input('tenantId', sql.UniqueIdentifier, A.tenantId)
+      .query(billingUpdate("paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME())"));
+    const racing = [
+      ['add renter', call('POST', '/api/mssql/rentees', fresh('Racing renter'))],
+      ['add team member', call('POST', '/api/mssql/team-members', {...fresh('Racing staff'), permission_bundle:'read_only'})],
+      ['create property assignment', call('POST', '/api/property-assignments', {propertyId:p3, staffUserId:raceStaff.id})],
+      ['legacy add app user', call('POST', '/api/mssql/app-users', {...fresh('Racing legacy'), role:'staff', user_type:'staff'})]
+    ];
+    const settled = await Promise.race([
+      Promise.all(racing.map(([, request]) => request)).then(() => 'settled'),
+      new Promise(resolve => setTimeout(() => resolve('waiting'), 1200))
+    ]);
+    assert.equal(settled, 'waiting', 'expansions wait while the revocation holds the account row');
+    await revocation.commit();
+    for (const [label, request] of racing) {
+      const result = await request;
+      assert.equal(result.status, 403, `${label} after the concurrent expiry: ${JSON.stringify(result.json)}`);
+      assert.equal(result.json.code, 'MANAGEMENT_READ_ONLY', label);
+    }
+    assert.deepEqual(await snapshot(), beforeRace, 'no expansion was written around the concurrent expiry');
+    console.log('PASS: access expansion and billing revocation are serialized: an in-flight expansion blocks revocation (lock timeout 1222) and commits first; expansions racing a committed expiry wait and are denied with no writes');
   } finally {
     server.closeAllConnections?.();
     await new Promise(resolve => server.close(resolve));

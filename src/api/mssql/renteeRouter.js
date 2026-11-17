@@ -5,7 +5,7 @@ import { PERMISSIONS, hasPermission, isAdminRole } from '../platform/permissionE
 import { getAppUserInvitationStatus } from './repositories.js';
 import {
   activatesAccess,
-  assertAccessExpansionAllowed,
+  withAccessExpansion,
   renteeUpdateExpandsAccess
 } from '../managementBilling/accessAdministration.js';
 import {
@@ -46,16 +46,14 @@ const canReadRentee = (req, renteeId) => (
   || hasPermission({ user: req.user, membership: req.membership }, PERMISSIONS.RENTEES_READ)
 );
 
-export const createRenteeRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
+export const createRenteeRouter = ({ runAccessExpansion = withAccessExpansion } = {}) => {
   const router = express.Router();
   // Expired organizations keep renter reads and revocation, but cannot add
-  // renters, reactivate them or extend their property access.
-  const guardRenteeUpdate = async (req) => {
-    const current = await getTenantRenteeById(req.tenantId, req.params.id);
-    if (current && renteeUpdateExpandsAccess(current, req.body || {})) {
-      await assertAccessExpansion({ tenantId: req.tenantId });
-    }
-  };
+  // renters, reactivate them or extend their property access. An expanding
+  // write runs while the entitlement lock is held; others run directly.
+  const accessWrite = (req, expands, write) => (expands
+    ? runAccessExpansion({ tenantId: req.tenantId, action: write })
+    : write());
   const requireScopedTenant = createTenantContextMiddleware({
     requireUser: true,
     requireTenant: true,
@@ -107,8 +105,7 @@ export const createRenteeRouter = ({ assertAccessExpansion = assertAccessExpansi
 
   router.post('/rentees', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
-    await assertAccessExpansion({ tenantId: req.tenantId });
-    const result = await createOrAttachTenantRentee(req.tenantId, req.body || {});
+    const result = await accessWrite(req, true, () => createOrAttachTenantRentee(req.tenantId, req.body || {}));
     res.status(result.created ? 201 : 200).json({
       data: result.data,
       meta: {
@@ -121,8 +118,9 @@ export const createRenteeRouter = ({ assertAccessExpansion = assertAccessExpansi
 
   router.put('/rentees/:id', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
-    await guardRenteeUpdate(req);
-    const rentee = await updateTenantRentee(req.tenantId, req.params.id, req.body || {});
+    const current = await getTenantRenteeById(req.tenantId, req.params.id);
+    const rentee = await accessWrite(req, Boolean(current && renteeUpdateExpandsAccess(current, req.body || {})),
+      () => updateTenantRentee(req.tenantId, req.params.id, req.body || {}));
     if (!rentee) {
       res.status(404).json({ error: 'Renter not found in the active organization.', code: 'RENTEE_NOT_FOUND' });
       return;
@@ -133,14 +131,8 @@ export const createRenteeRouter = ({ assertAccessExpansion = assertAccessExpansi
   router.patch('/rentees/:id/membership-status', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
     const current = await getTenantRenteeById(req.tenantId, req.params.id);
-    if (current && activatesAccess(current.status, req.body?.status)) {
-      await assertAccessExpansion({ tenantId: req.tenantId });
-    }
-    const result = await updateTenantRenteeMembershipStatus(
-      req.tenantId,
-      req.params.id,
-      req.body?.status
-    );
+    const result = await accessWrite(req, Boolean(current && activatesAccess(current.status, req.body?.status)),
+      () => updateTenantRenteeMembershipStatus(req.tenantId, req.params.id, req.body?.status));
     if (!result) {
       res.status(404).json({ error: 'Renter not found in the active organization.', code: 'RENTEE_NOT_FOUND' });
       return;
@@ -188,10 +180,8 @@ export const createRenteeRouter = ({ assertAccessExpansion = assertAccessExpansi
     }
 
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
-    if (renteeUpdateExpandsAccess(rentee, req.body || {})) {
-      await assertAccessExpansion({ tenantId: req.tenantId });
-    }
-    const updated = await updateTenantRentee(req.tenantId, req.params.id, req.body || {});
+    const updated = await accessWrite(req, renteeUpdateExpandsAccess(rentee, req.body || {}),
+      () => updateTenantRentee(req.tenantId, req.params.id, req.body || {}));
     res.json({ data: updated });
   }));
 
