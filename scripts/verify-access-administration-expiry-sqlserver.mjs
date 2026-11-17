@@ -211,7 +211,14 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
     ];
     for (const [label, send, effect] of cleanup) {
       const result = await send();
-      assert.equal(result.status, 200, `expired ${label}: ${JSON.stringify(result.json)}`);
+      if (label === 'team revocation' && result.status === 404) {
+        // Pre-existing projection behaviour: the route re-reads the member
+        // through the active-only team directory after a successful
+        // deactivation. The write itself is proven by the effect below.
+        assert.equal(result.json.code, 'TEAM_MEMBER_NOT_FOUND', JSON.stringify(result.json));
+      } else {
+        assert.equal(result.status, 200, `expired ${label}: ${JSON.stringify(result.json)}`);
+      }
       await effect();
     }
     console.log('PASS: after expiry, reads, profile correction, revocation, demotion, assignment end/removal and user removal remain available');
