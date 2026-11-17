@@ -3,6 +3,7 @@ import { runQuery, runSingleQuery } from '../mssql/query.js';
 import { createTenantContextMiddleware } from '../tenant/context.js';
 import { authorizePermission } from './authorization.js';
 import { PERMISSIONS } from './permissionEngine.js';
+import { activatesAccess, assertAccessExpansionAllowed } from '../managementBilling/accessAdministration.js';
 
 const STAFF_ROLES = new Set([
   'staff',
@@ -163,7 +164,7 @@ const requireStaffMembership = async (tenantId, staffUserId) => {
   return membership;
 };
 
-export const createPropertyAssignmentsRouter = () => {
+export const createPropertyAssignmentsRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
   const router = express.Router();
 
   router.use(createTenantContextMiddleware({
@@ -216,6 +217,8 @@ export const createPropertyAssignmentsRouter = () => {
 
       await requireProperty(req.tenantId, propertyId);
       await requireStaffMembership(req.tenantId, staffUserId);
+      // Creating or reactivating an assignment grants property access.
+      await assertAccessExpansion({ tenantId: req.tenantId });
 
       const existing = await runSingleQuery(
         `SELECT TOP 1 *
@@ -283,6 +286,18 @@ export const createPropertyAssignmentsRouter = () => {
 
       if (!status && !notesProvided) {
         throw createRequestError(400, 'Provide status and/or notes to update.', 'ASSIGNMENT_UPDATE_REQUIRED');
+      }
+
+      // Ending an assignment or editing notes stays available after expiry;
+      // reactivating an inactive assignment grants access again.
+      if (status === 'active') {
+        const current = await runSingleQuery(
+          'SELECT TOP 1 status FROM staff_property_assignments WHERE id = @assignmentId AND tenant_id = @tenantId',
+          { assignmentId, tenantId: req.tenantId }
+        );
+        if (current && activatesAccess(current.status, status)) {
+          await assertAccessExpansion({ tenantId: req.tenantId });
+        }
       }
 
       const assignment = await runSingleQuery(
