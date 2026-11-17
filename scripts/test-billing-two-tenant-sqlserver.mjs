@@ -1696,8 +1696,9 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         ['manager property photo upload',()=>uploadAs(token,'images',`properties/${crypto.randomUUID()}.png`,pngBytes('P')),403,'MANAGEMENT_READ_ONLY'],
         ['manager unclassified upload (fail closed)',()=>uploadAs(token,'files',`misc/${crypto.randomUUID()}.png`,pngBytes('X')),403,'MANAGEMENT_READ_ONLY'],
         ['renter utility-reading image upload',()=>uploadAs(renterToken,'images',`utility-readings/${crypto.randomUUID()}.png`,pngBytes('U')),403,'MANAGEMENT_READ_ONLY'],
+        // Relative to the session organization, as the renter client sends it.
         ['renter payment-proof upload',()=>uploadAs(renterToken,'invoices',
-          `tenants/${scoped.tenantId}/payment_proofs/${guid(proofInvoice.id)}/${crypto.randomUUID()}.png`,pngBytes('R')),403,'MANAGEMENT_READ_ONLY'],
+          `payment_proofs/${guid(proofInvoice.id)}/${crypto.randomUUID()}.png`,pngBytes('R')),403,'MANAGEMENT_READ_ONLY'],
         ['renter path spoofing into another organization',()=>uploadAs(renterToken,'images',
           `tenants/${unscoped.tenantId}/maintenance/${crypto.randomUUID()}.png`,pngBytes('S')),403,'TENANT_STORAGE_OVERRIDE_BLOCKED'],
         ['renter foreign-organization session',()=>uploadAs(renterToken,'images',`maintenance/${crypto.randomUUID()}.png`,pngBytes('F'),unscoped.tenantId),403,null],
