@@ -228,6 +228,92 @@ try {
   await q("UPDATE dbo.management_billing_accounts SET comp_type=NULL WHERE tenant_id=@tenantId",{tenantId:a.tenantId});
   assert.equal((await call('/onboarding')).status,200,'historical onboarding survives revocation');
   assert.equal((await exitCall('',null,a.renter)).status,200,'renter retained exit history survives revocation');
+
+  // Remaining enforced tenancy writers: renewal draft, settlement-item review
+  // and onboarding manual signature. Each uses a fresh disposable tenancy in
+  // the enforced organization so the lifecycle above is not perturbed. For
+  // each: foreign organization/session and renter are denied without writes,
+  // expiry denies an otherwise valid request without writes, the same request
+  // succeeds under an active entitlement, and reads survive a later expiry.
+  const restoreEntitlement=()=>q("UPDATE dbo.management_billing_accounts SET comp_type='ongoing',comp_expires_at=NULL WHERE tenant_id=@tenantId",{tenantId:a.tenantId});
+  await restoreEntitlement();
+  const tenancyFixture=async(label,status,signatureStatus)=>{
+    const property=await one("INSERT properties(tenant_id,name,status,checklistitems) OUTPUT INSERTED.id VALUES(@tenantId,@label,@propertyStatus,'[]')",
+      {tenantId:a.tenantId,label,propertyStatus:status==='active'?'rented':'available'});
+    const agreement=await one(`INSERT agreements(tenant_id,renteeid,propertyid,status,startdate,enddate,rentamount,depositamount,title,signature_status)
+      OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,@status,'2026-01-01','2026-12-31',150000,125000,@label,@signatureStatus)`,
+      {tenantId:a.tenantId,renteeId:a.renter.id,propertyId:property.id,status,label,signatureStatus});
+    return agreement.id;
+  };
+  const request=async(path,body,who=a.owner,tenantId=a.tenantId,method=body?'POST':'GET')=>{
+    const response=await fetch(`${origin}${path}`,{method,headers:{Authorization:`Bearer ${who.token}`,'x-tenant-id':tenantId,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
+    return {status:response.status,json:await response.json()};
+  };
+  const exitAt=(agreementId,suffix,...rest)=>request(`/api/tenancy-exit/agreements/${agreementId}${suffix}`,...rest);
+  const onboardingAt=(agreementId,suffix,...rest)=>request(`/api/tenancies/${agreementId}${suffix}`,...rest);
+  const deniedWithoutWrites=async(label,expected,operation)=>{
+    const before=await domainSnapshot();
+    const result=await operation();
+    assert.equal(result.status,expected,`${label}: ${JSON.stringify(result.json)}`);
+    assert.deepEqual(await domainSnapshot(),before,`${label}: no writes`);
+  };
+  const deniedForOthers=async(label,send)=>{
+    await deniedWithoutWrites(`cross-organization ${label}`,404,()=>send(b.owner,b.tenantId));
+    await deniedWithoutWrites(`foreign-session ${label}`,403,()=>send(b.owner,a.tenantId));
+    await deniedWithoutWrites(`renter ${label}`,403,()=>send(a.renter,a.tenantId));
+  };
+  const expireEntitlement=()=>q("UPDATE dbo.management_billing_accounts SET comp_type='fixed',comp_expires_at=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId",{tenantId:a.tenantId});
+
+  // 1. Renewal draft after a real accepted renewal offer.
+  const renewalId=await tenancyFixture('r5-renewal','active','completed');
+  const offer=await exitAt(renewalId,'/notices',{noticeType:'renewal_offer',noticeDate:'2026-11-01',effectiveDate:'2027-01-01',content:'DISPOSABLE DEMO renewal offer.'});
+  assert.equal(offer.status,201,JSON.stringify(offer.json));
+  assert.equal((await request(`/api/tenancy-exit/notices/${offer.json.data.id}/respond`,{response:'accepted'},a.renter)).status,200);
+  const renewalBody={startDate:'2027-01-01',endDate:'2027-12-31',rentAmount:155000,notes:'DISPOSABLE DEMO renewal draft'};
+  await deniedForOthers('renewal draft',(who,tenantId)=>exitAt(renewalId,'/renewal-draft',renewalBody,who,tenantId));
+  await denyExpired('renewal draft',()=>exitAt(renewalId,'/renewal-draft',renewalBody));
+  const renewed=await exitAt(renewalId,'/renewal-draft',renewalBody);
+  assert.equal(renewed.status,201,JSON.stringify(renewed.json));
+  assert.equal(renewed.json.data.status,'draft');assert.equal(renewed.json.data.renewed_from_agreement_id,renewalId);
+  assert.equal(Number(renewed.json.data.rentamount),155000);
+  assert.equal((await q('SELECT id FROM agreements WHERE tenant_id=@tenantId AND renewed_from_agreement_id=@id',{tenantId:a.tenantId,id:renewalId})).length,1);
+
+  // 2. Settlement-item review of a real proposed deduction.
+  const settlementId=await tenancyFixture('r5-settlement-item','active','completed');
+  const proposed=await exitAt(settlementId,'/settlement/items',{amount:2500,description:'Disposable cleaning deduction'});
+  assert.equal(proposed.status,201,JSON.stringify(proposed.json));assert.equal(proposed.json.data.status,'proposed');
+  const itemPath=`/settlement/items/${proposed.json.data.id}`;
+  await deniedForOthers('settlement item review',(who,tenantId)=>exitAt(settlementId,itemPath,{status:'approved'},who,tenantId,'PATCH'));
+  await denyExpired('settlement item review',()=>exitAt(settlementId,itemPath,{status:'approved'},a.owner,a.tenantId,'PATCH'));
+  const reviewed=await exitAt(settlementId,itemPath,{status:'approved'},a.owner,a.tenantId,'PATCH');
+  assert.equal(reviewed.status,200,JSON.stringify(reviewed.json));
+  assert.equal(reviewed.json.data.status,'approved');assert.equal(reviewed.json.data.reviewed_by,a.owner.id);
+
+  // 3. Manual signature recorded during onboarding of an unsigned tenancy.
+  const signingId=await tenancyFixture('r5-manual-signature','pending',null);
+  await deniedForOthers('manual signature',(who,tenantId)=>onboardingAt(signingId,'/manual-signature',{},who,tenantId));
+  await denyExpired('onboarding manual signature',()=>onboardingAt(signingId,'/manual-signature',{}));
+  const signed=await onboardingAt(signingId,'/manual-signature',{});
+  assert.equal(signed.status,200,JSON.stringify(signed.json));
+  const signedRow=await one('SELECT signature_status,signature_completed_at FROM agreements WHERE id=@id',{id:signingId});
+  assert.equal(signedRow.signature_status,'manual_signed');assert.ok(signedRow.signature_completed_at);
+  const signatureEvents="SELECT id FROM tenancy_lifecycle_events WHERE agreement_id=@id AND event_type='manual_signature_recorded'";
+  assert.equal((await q(signatureEvents,{id:signingId})).length,1);
+  assert.equal((await onboardingAt(signingId,'/manual-signature',{})).status,200,'signed replay is idempotent');
+  assert.equal((await q(signatureEvents,{id:signingId})).length,1,'replay adds no audit event');
+
+  // Historical reads remain available to managers and the renter after expiry.
+  await expireEntitlement();
+  try {
+    const renewalHistory=await exitAt(renewalId,'');
+    assert.equal(renewalHistory.status,200);assert.equal(renewalHistory.json.data.notices[0].status,'accepted');
+    assert.equal((await exitAt(renewalId,'',null,a.renter)).status,200,'renter renewal history survives expiry');
+    const settlementHistory=await exitAt(settlementId,'');
+    assert.equal(settlementHistory.status,200);assert.equal(settlementHistory.json.data.settlement.items[0].status,'approved');
+    const signingHistory=await onboardingAt(signingId,'/onboarding');
+    assert.equal(signingHistory.status,200);assert.equal(signingHistory.json.data.readiness.checks.agreementSigned,true);
+  } finally { await restoreEntitlement(); }
+  console.log('R5_TENANCY_WRITER_EXPIRY_SQL=PASS renewal_draft settlement_item_review manual_signature cross_org_404 foreign_session_403 renter_403 expired_403_no_writes active_success signature_replay retained_reads');
   console.log('R5_MANAGEMENT_WRITES_SQL=PASS database_expiry tenancy_mutation_matrix no_partial_writes billing_day_audit_rollback retained_reads scoped_complimentary');
   console.log('R5_EXIT_SQL=PASS notice_ack isolation inspection settlement refund_reference closure_race stock_release history renter_readback');
   console.log('R5_ONBOARDING_SQL=PASS empty_denial repair concurrency deposits replay conflict rollback isolation activation readback retained_inspection renter_access');
