@@ -185,7 +185,9 @@ export const draftExcessPriceQuote = input => {
       {throw draftProblem('BILLING_DRAFT_CURRENCY_INVALID', 'Every dwelling rent must be stated in LKR.');}
     if (!DRAFT_RENT_BASES.includes(dwelling.rentBasis))
       {throw draftProblem('BILLING_DRAFT_RENT_BASIS_INVALID', 'Choose an explicit monthly rent basis for every dwelling.');}
-    const rentMinor = draftInteger(dwelling.monthlyRentMinor, 1, MAX_RENT_MINOR, 'BILLING_DRAFT_RENT_INVALID', 'Monthly rent in minor units');
+    // An explicitly supplied zero is a real rent (base charge only); an absent,
+    // null, negative or non-integer rent is refused rather than treated as zero.
+    const rentMinor = draftInteger(dwelling.monthlyRentMinor, 0, MAX_RENT_MINOR, 'BILLING_DRAFT_RENT_INVALID', 'Monthly rent in minor units');
     const excessRentMinor = rentMinor > thresholdMinor ? rentMinor - thresholdMinor : 0n;
     // adjustment cents = excess × rate% × scale ÷ fx, held as one exact fraction.
     const adjustmentNumerator = excessRentMinor * excessRate.numerator * scaleNumerator * fxRate.denominator;
