@@ -1579,6 +1579,44 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         {...scoped,adminId:admin.id});
       await deniedCommand(`billing-adjustments/${voidable.id}/void`,'POST',{reason:'Denied void must not persist'});
       await query(pool,'DELETE FROM tenancy_billing_adjustments WHERE id=@id',{id:voidable.id});
+      // Renter payment proof. Fixture: a dedicated issued invoice in a period no
+      // monthly run reaches, the fixture renter's own session, and a synthetic
+      // PNG (signature + marker bytes, no real document) stored through the
+      // local storage driver at the governed tenant/invoice key. No external
+      // storage or credentials are involved.
+      const proofInvoice = await first(pool,`INSERT invoices(tenant_id,renteeid,propertyid,agreementid,status,totalamount,billingperiod)
+        OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,@agreementId,'pending',100,'2099-11')`,scoped);
+      await query(pool,`INSERT invoice_components(tenant_id,invoice_id,component_type,description,amount)
+        VALUES(@tenantId,@invoiceId,'rent','Disposable payment-proof rent',100)`,{...scoped,invoiceId:proofInvoice.id});
+      const renterAuthId = crypto.randomUUID();
+      await query(pool,'UPDATE app_users SET auth_id=@authId WHERE id=@renteeId AND tenant_id=@tenantId',{...scoped,authId:renterAuthId});
+      const renterToken = (await issueAuthSession(await createAuthRecord({authId:renterAuthId,appUserId:scoped.renteeId,
+        email:scoped.email,role:'rentee',password:crypto.randomBytes(24).toString('base64url')}))).accessToken;
+      const {getStorageDriver} = await import('../src/api/storage/index.js');
+      const proofKey = `tenants/${scoped.tenantId}/payment_proofs/${guid(proofInvoice.id)}/${crypto.randomUUID()}.png`;
+      await getStorageDriver().upload('invoices',proofKey,
+        Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.from('SYNTHETIC-R5-PROOF-FIXTURE')]),'image/png');
+      const submitProof = (who=renterToken, tenantId=scoped.tenantId) => fetch(
+        `http://127.0.0.1:${server.address().port}/api/billing/invoices/${proofInvoice.id}/payment-proof`,{
+          method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${who}`,'x-tenant-id':tenantId},
+          body:JSON.stringify({proofUrl:`/storage/invoices/${proofKey}`,amount:100,paymentMethod:'SIMULATED TEST',
+            tenantId:unscoped.tenantId,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
+      const proofPayments = () => query(pool,'SELECT id,status,amount,proofurl FROM payments WHERE invoiceid=@id',{id:proofInvoice.id});
+      for (const [label, send, status, code] of [
+        ['expired renter payment proof',()=>submitProof(),403,'MANAGEMENT_READ_ONLY'],
+        ['staff payment proof',()=>submitProof(token),403,'TENANT_PORTAL_REQUIRED'],
+        ['foreign-organization renter session',()=>submitProof(renterToken,unscoped.tenantId),403,null]
+      ]) {
+        const before = await writerSnapshot();
+        const response = await send();
+        const data = await response.json();
+        assert.equal(response.status,status,JSON.stringify({label,data}));
+        if (code) {assert.equal(data.code,code,label);}
+        assert.deepEqual(await writerSnapshot(),before,`${label} writes nothing`);
+        assert.deepEqual(await proofPayments(),[],`${label} records no payment`);
+        assert.equal(emails,0);
+      }
+      console.log('PASS: expired management denies renter payment proof against a stored synthetic proof; staff and foreign sessions denied; no payment, event or email');
       console.log('PASS: expired management denies invoice delivery retry, resend, legacy reference supplementation and adjustment void without events, email or references');
       const maintenance = await first(pool, `INSERT INTO maintenance_requests(tenant_id,propertyid,title,description,status,assignedto)
         OUTPUT INSERTED.id VALUES(@tenantId,@propertyId,'Disposable access check','Enforcement fixture','pending',@adminId)`,
@@ -1760,6 +1798,20 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       const paidImport = await platformCommand({action:'insert',table:'agreement_templates',payload:[{name:'Permitted atomic import A'},{name:'Permitted atomic import B'}]});
       assert.equal(paidImport.status,200,JSON.stringify(await paidImport.json()));
       assert.equal((await writerSnapshot()).templates,beforeBulk.templates+2);
+      // The identical renter payment proof succeeds under the active entitlement,
+      // and the renter's account history remains readable after a later expiry.
+      const acceptedProof = await submitProof();
+      assert.equal(acceptedProof.status,201,JSON.stringify(await acceptedProof.clone().json()));
+      const proofRows = await proofPayments();
+      assert.equal(proofRows.length,1);assert.equal(proofRows[0].status,'pending');assert.equal(Number(proofRows[0].amount),100);
+      assert.equal(proofRows[0].proofurl,`/storage/invoices/${proofKey}`);
+      assert.equal(guid((await first(pool,'SELECT tenant_id FROM payments WHERE id=@id',{id:proofRows[0].id})).tenant_id),scoped.tenantId,
+        'Body tenantId override is ignored');
+      await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
+      const proofAccount = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/invoices/${proofInvoice.id}/account`,{
+        headers:{Authorization:`Bearer ${renterToken}`,'x-tenant-id':scoped.tenantId}});
+      assert.equal(proofAccount.status,200,'renter payment history survives expiry');
+      console.log('PASS: identical renter payment proof succeeds with active entitlement; renter account read retained after expiry');
       await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
       console.log('PASS: generic/import/RPC and direct repository management expiry, ignored caller overrides, atomic failed bulk insert/upsert and authorized bulk success');
       // Both reads and SaaS payment recovery remain outside these rental guards.
