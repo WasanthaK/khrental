@@ -1640,6 +1640,38 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         assert.equal(result.code,'MANAGEMENT_READ_ONLY');
         assert.deepEqual(await writerSnapshot(),before,'Denied maintenance cannot partially write domain/events/notifications');
       }
+      // Image attachment and renter-initiated creation. A synthetic PNG
+      // (signature + marker bytes, no real photo) is stored through the local
+      // storage driver at the governed maintenance key before the denial, so
+      // the request is otherwise valid; a denial must add no image row or
+      // event and must neither create nor remove stored objects.
+      await query(pool,"UPDATE maintenance_requests SET status='pending' WHERE id=@id",{id:maintenance.id});
+      const maintenanceImageKey = `tenants/${scoped.tenantId}/maintenance/${crypto.randomUUID()}.png`;
+      await getStorageDriver().upload('images',maintenanceImageKey,
+        Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.from('SYNTHETIC-R5-MAINTENANCE-FIXTURE')]),'image/png');
+      const maintenanceObjects = () => {
+        try {return fs.readdirSync(path.resolve('public/storage/images',`tenants/${scoped.tenantId}/maintenance`),{recursive:true}).sort();}
+        catch {return [];}
+      };
+      const maintenanceAs = (who, method, suffix, body) => fetch(`http://127.0.0.1:${server.address().port}/api/maintenance-lifecycle/${suffix}`,{
+        method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${who}`,'x-tenant-id':scoped.tenantId},
+        ...(body ? {body:JSON.stringify({...body,tenantId:unscoped.tenantId,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})} : {})});
+      const imageBody = {imageUrl:`/storage/images/${maintenanceImageKey}`,imageType:'additional',description:'Synthetic fixture'};
+      const renterRequestBody = {propertyId:scoped.propertyId,title:'Renter leak report',description:'Synthetic renter request'};
+      for (const [label, send] of [
+        ['manager maintenance image attachment',()=>maintenanceAs(token,'POST',`requests/${maintenance.id}/images`,imageBody)],
+        ['renter maintenance request creation',()=>maintenanceAs(renterToken,'POST','requests',renterRequestBody)]
+      ]) {
+        const before = await writerSnapshot();
+        const objects = maintenanceObjects();
+        const response = await send();
+        const result = await response.json();
+        assert.equal(response.status,403,JSON.stringify({label,result}));
+        assert.equal(result.code,'MANAGEMENT_READ_ONLY',label);
+        assert.deepEqual(await writerSnapshot(),before,`${label}: no request, image, event or notification`);
+        assert.deepEqual(maintenanceObjects(),objects,`${label}: stored objects unchanged`);
+      }
+      console.log('PASS: expired management denies maintenance image attachment and renter request creation with a stored synthetic image; no rows, events, notifications or file changes');
       const templateId = crypto.randomUUID();
       await query(pool,"INSERT agreement_templates(id,tenant_id,name,language,content,version) VALUES(@id,@tenantId,'Original import template','English','Fixture','1')",{id:templateId,tenantId:scoped.tenantId});
       const platformCommand = async (body, rpc = null) => fetch(`http://127.0.0.1:${server.address().port}/api/platform/${rpc ? 'rpc/'+rpc : 'query'}`,{
@@ -1798,6 +1830,30 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       const paidImport = await platformCommand({action:'insert',table:'agreement_templates',payload:[{name:'Permitted atomic import A'},{name:'Permitted atomic import B'}]});
       assert.equal(paidImport.status,200,JSON.stringify(await paidImport.json()));
       assert.equal((await writerSnapshot()).templates,beforeBulk.templates+2);
+      // The identical maintenance creation and image attachment succeed under
+      // the active entitlement, and the records stay readable after expiry.
+      const activeCreate = await maintenanceAs(token,'POST','requests',{propertyId:scoped.propertyId,title:'Active manager request',description:'Synthetic'});
+      assert.equal(activeCreate.status,201,JSON.stringify(await activeCreate.clone().json()));
+      const activeRequestId = (await activeCreate.json()).data.id;
+      assert.equal((await first(pool,"SELECT COUNT(*) AS n FROM maintenance_lifecycle_events WHERE maintenance_request_id=@id AND event_type='request_created'",
+        {id:activeRequestId})).n,1);
+      const renterCreate = await maintenanceAs(renterToken,'POST','requests',renterRequestBody);
+      assert.equal(renterCreate.status,201,JSON.stringify(await renterCreate.clone().json()));
+      const renterRequestId = (await renterCreate.json()).data.id;
+      const activeImage = await maintenanceAs(token,'POST',`requests/${maintenance.id}/images`,imageBody);
+      assert.equal(activeImage.status,201,JSON.stringify(await activeImage.clone().json()));
+      assert.equal((await activeImage.json()).data.image_url,`/storage/images/${maintenanceImageKey}`);
+      assert.equal(guid((await first(pool,'SELECT tenant_id FROM maintenance_requests WHERE id=@id',{id:activeRequestId})).tenant_id),scoped.tenantId,
+        'Body tenantId override is ignored');
+      await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
+      const managerDetail = await maintenanceAs(token,'GET',`requests/${maintenance.id}`);
+      assert.equal(managerDetail.status,200,'manager maintenance detail survives expiry');
+      assert.ok((await managerDetail.json()).data.images.some(image=>image.image_url===`/storage/images/${maintenanceImageKey}`),
+        'attached image remains visible after expiry');
+      assert.equal((await maintenanceAs(token,'GET','requests')).status,200,'manager maintenance list survives expiry');
+      assert.equal((await maintenanceAs(renterToken,'GET',`requests/${renterRequestId}`)).status,200,'renter request survives expiry');
+      await setState('');
+      console.log('PASS: identical maintenance creation (manager and renter) and image attachment succeed while active; manager and renter reads retained after expiry');
       // The identical renter payment proof succeeds under the active entitlement,
       // and the renter's account history remains readable after a later expiry.
       const acceptedProof = await submitProof();
