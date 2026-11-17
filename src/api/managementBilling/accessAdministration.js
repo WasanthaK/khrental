@@ -14,6 +14,7 @@
 // revocation and schema readiness follow the same server-owned rules and no
 // request field can influence it.
 import { getPermissions } from '../../utils/accessPolicy.js';
+import { assertManagementEntitlement } from './entitlementGate.js';
 
 const normalize = value => String(value ?? '').trim().toLowerCase();
 const provided = value => value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
@@ -97,17 +98,6 @@ export const genericAppUserWriteExpandsAccess = ({ table, action, payload }) => 
 
 // --- Enforcement ------------------------------------------------------------
 
-// Locks and evaluates the organization's management entitlement and throws
-// 403 MANAGEMENT_READ_ONLY when access may not be expanded. Not enrolled
-// organizations pass, exactly as for every other management write. The store
-// is loaded lazily so the classifiers above stay dependency-free.
-export const assertAccessExpansionAllowed = async ({ tenantId, guard, env = process.env }) => {
-  if (!guard) {
-    // Same first step as assertManagementWrite: organizations outside the
-    // server-configured enforcement scope are unaffected and need no lock.
-    const { managementWriteEnforced } = await import('./contract.js');
-    if (!managementWriteEnforced(tenantId, env)) {return undefined;}
-  }
-  const run = guard || (await import('./store.js')).withManagementWrite;
-  return run({ tenantId, action: async () => undefined });
-};
+// Throws 403 MANAGEMENT_READ_ONLY when access may not be expanded; the
+// decision is the shared management-entitlement gate.
+export const assertAccessExpansionAllowed = args => assertManagementEntitlement(args);

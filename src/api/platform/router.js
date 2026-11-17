@@ -1,6 +1,6 @@
 import { assertGenericAgreementWriteSafe, assertGenericAgreementRecordMutable } from '../mssql/agreementWritePolicy.js';
 import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRouter.js';
-import {storageUploadPolicy,requireTenantStorageAdmin} from '../storage/mutationPolicy.js';
+import {storageUploadPolicy,requireTenantStorageAdmin,uploadRequiresManagementEntitlement} from '../storage/mutationPolicy.js';
 import {createCredentialThrottle} from '../auth/credentialThrottle.js';
 import { withManagementWrite } from '../managementBilling/store.js';
 import { assertAccessExpansionAllowed, genericAppUserWriteExpandsAccess } from '../managementBilling/accessAdministration.js';
@@ -36,6 +36,7 @@ import {
 import { getStorageDriver as defaultStorageDriver, normalizeStoragePath, ensureBucketName, requireCanonicalStoragePath, assertStorageObjectDeletionAllowed } from '../storage/index.js';
 import { assertGenericInvoiceArchiveMutationAllowed } from '../storage/invoiceArchiveStoragePolicy.js';
 import { assertEviaGenericDocumentUploadAllowed } from '../storage/eviaEvidenceRetention.js';
+import { assertManagementEntitlement } from '../managementBilling/entitlementGate.js';
 import { authorizePaymentProofAccess } from './paymentProofAccess.js';
 import { authorizePlatformQuery, authorizePlatformRpc } from './authorization.js';
 import { requireNotificationTenantRecipient } from './notificationAccess.js';
@@ -1369,6 +1370,12 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
       assertGenericInvoiceArchiveMutationAllowed(bucket, relativePath);
       const proof=await authorizeProofObject(req, bucket, relativePath, 'upload');
       const policy=storageUploadPolicy({req,bucket,path:relativePath,proof});
+      // Tenant, path, ownership and proof checks above reject foreign and
+      // cross-resource actors; management uploads then need entitlement
+      // before any byte is persisted, so a later 403 cannot leave an orphan.
+      if (uploadRequiresManagementEntitlement({bucket,path:policy.path})) {
+        await assertManagementEntitlement({tenantId:req.tenantId});
+      }
       const data = await getStorageDriver().upload(
         bucket,
         policy.path,
