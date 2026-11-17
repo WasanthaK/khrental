@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import sql from 'mssql';
 import express from 'express';
@@ -1672,6 +1673,70 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         assert.deepEqual(maintenanceObjects(),objects,`${label}: stored objects unchanged`);
       }
       console.log('PASS: expired management denies maintenance image attachment and renter request creation with a stored synthetic image; no rows, events, notifications or file changes');
+      // Storage uploads (POST /api/platform/storage/upload). Management-purpose
+      // uploads need entitlement before any byte is persisted; tenant, path and
+      // ownership violations are refused earlier; a renter identity copy is
+      // exempt (renter profile). Synthetic PNG bytes only.
+      const pngBytes = marker => Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),Buffer.from(`SYNTHETIC-R5-UPLOAD-${marker}`)]);
+      const storageTree = () => ['images','files','invoices'].flatMap(bucket => {
+        try {return fs.readdirSync(path.resolve('public/storage',bucket),{recursive:true}).map(entry => `${bucket}/${entry}`);}
+        catch {return [];}
+      }).sort();
+      const uploadAs = (who, bucket, relativePath, body, tenantId = scoped.tenantId) => fetch(
+        `http://127.0.0.1:${server.address().port}/api/platform/storage/upload?bucket=${bucket}&path=${encodeURIComponent(relativePath)}`
+          + '&MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=false&tenantId=' + unscoped.tenantId,
+        {method:'POST',body,headers:{Authorization:`Bearer ${who}`,'x-tenant-id':tenantId,'Content-Type':'image/png',
+          'x-management-billing-write-enforcement-enabled':'false'}});
+      const staleToken = (await issueAuthSession(await createAuthRecord({authId:crypto.randomUUID(),appUserId:scoped.renteeId,
+        email:`stale-${crypto.randomBytes(5).toString('hex')}@example.invalid`,role:'rentee',password:crypto.randomBytes(24).toString('base64url')}))).accessToken;
+      const {revokeAccessToken} = await import('../src/api/auth/index.js');
+      await revokeAccessToken(staleToken);
+      for (const [label, send, status, code] of [
+        ['manager maintenance image upload',()=>uploadAs(token,'images',`maintenance/${crypto.randomUUID()}.png`,pngBytes('M')),403,'MANAGEMENT_READ_ONLY'],
+        ['manager property photo upload',()=>uploadAs(token,'images',`properties/${crypto.randomUUID()}.png`,pngBytes('P')),403,'MANAGEMENT_READ_ONLY'],
+        ['manager unclassified upload (fail closed)',()=>uploadAs(token,'files',`misc/${crypto.randomUUID()}.png`,pngBytes('X')),403,'MANAGEMENT_READ_ONLY'],
+        ['renter utility-reading image upload',()=>uploadAs(renterToken,'images',`utility-readings/${crypto.randomUUID()}.png`,pngBytes('U')),403,'MANAGEMENT_READ_ONLY'],
+        ['renter payment-proof upload',()=>uploadAs(renterToken,'invoices',
+          `tenants/${scoped.tenantId}/payment_proofs/${guid(proofInvoice.id)}/${crypto.randomUUID()}.png`,pngBytes('R')),403,'MANAGEMENT_READ_ONLY'],
+        ['renter path spoofing into another organization',()=>uploadAs(renterToken,'images',
+          `tenants/${unscoped.tenantId}/maintenance/${crypto.randomUUID()}.png`,pngBytes('S')),403,'TENANT_STORAGE_OVERRIDE_BLOCKED'],
+        ['renter foreign-organization session',()=>uploadAs(renterToken,'images',`maintenance/${crypto.randomUUID()}.png`,pngBytes('F'),unscoped.tenantId),403,null],
+        ['revoked (stale) session',()=>uploadAs(staleToken,'images',`maintenance/${crypto.randomUUID()}.png`,pngBytes('T')),401,'INVALID_SESSION']
+      ]) {
+        const before = await writerSnapshot();
+        const objects = storageTree();
+        const response = await send();
+        const text = await response.text();
+        assert.equal(response.status,status,`${label}: ${text}`);
+        if (code) {assert.equal(JSON.parse(text).code,code,label);}
+        assert.doesNotMatch(text,/\/storage\/|tenants\/|https?:\/\//,`${label}: no storage path or provider URL disclosed`);
+        assert.deepEqual(storageTree(),objects,`${label}: no object written`);
+        assert.deepEqual(await writerSnapshot(),before,`${label}: no row, event or notification`);
+        assert.equal(emails,0,`${label}: no email`);
+      }
+      // An interrupted upload never reaches the storage driver.
+      const interruptedBefore = storageTree();
+      await new Promise(resolve => {
+        const request = http.request({host:'127.0.0.1',port:server.address().port,method:'POST',
+          path:`/api/platform/storage/upload?bucket=images&path=${encodeURIComponent(`maintenance/${crypto.randomUUID()}.png`)}`,
+          headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId,'Content-Type':'image/png','Content-Length':4096}});
+        request.on('error',() => resolve());
+        request.on('response',response => {response.resume(); resolve();});
+        request.write(pngBytes('I'));
+        setTimeout(() => {request.destroy(); setTimeout(resolve,300);},100);
+      });
+      assert.deepEqual(storageTree(),interruptedBefore,'interrupted upload leaves no object');
+      // The exempt renter identity copy and authorized listing remain available.
+      const identityName = `${crypto.randomUUID()}.png`;
+      const identity = await uploadAs(renterToken,'images',`id-copies/${identityName}`,pngBytes('ID'));
+      assert.equal(identity.status,201,await identity.clone().text());
+      const identityEntry = storageTree().find(entry => entry.endsWith(`/id-copies/${identityName}`) || entry.endsWith(identityName));
+      assert.ok(identityEntry && /\/id-copies\//.test(identityEntry),'renter identity copy stored under the renter id-copies namespace');
+      fs.rmSync(path.resolve('public/storage',identityEntry));
+      const listing = await fetch(`http://127.0.0.1:${server.address().port}/api/platform/storage/list?bucket=images&path=maintenance`,
+        {headers:{Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId}});
+      assert.equal(listing.status,200,'authorized storage listing survives expiry');
+      console.log('PASS: expired management denies management-purpose storage uploads before persisting bytes (maintenance, property, unclassified, utility, payment proof); spoofed path, foreign and revoked sessions refused; interrupted upload leaves nothing; forged flags ignored; renter identity copy and listing retained');
       const templateId = crypto.randomUUID();
       await query(pool,"INSERT agreement_templates(id,tenant_id,name,language,content,version) VALUES(@id,@tenantId,'Original import template','English','Fixture','1')",{id:templateId,tenantId:scoped.tenantId});
       const platformCommand = async (body, rpc = null) => fetch(`http://127.0.0.1:${server.address().port}/api/platform/${rpc ? 'rpc/'+rpc : 'query'}`,{
@@ -1854,6 +1919,21 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       assert.equal((await maintenanceAs(renterToken,'GET',`requests/${renterRequestId}`)).status,200,'renter request survives expiry');
       await setState('');
       console.log('PASS: identical maintenance creation (manager and renter) and image attachment succeed while active; manager and renter reads retained after expiry');
+      // The identical management uploads succeed while active and complimentary.
+      for (const [state, statement] of [['active',''],['complimentary',
+        "UPDATE dbo.management_billing_accounts SET subscription_status='pending',initial_payment_verified=0,paid_through=NULL,comp_type='ongoing' WHERE tenant_id=@tenantId"]]) {
+        await setState(statement);
+        for (const [who, bucket, folder] of [[token,'images','maintenance'],[renterToken,'images','utility-readings']]) {
+          const name = `${crypto.randomUUID()}.png`;
+          const accepted = await uploadAs(who,bucket,`${folder}/${name}`,pngBytes(state));
+          assert.equal(accepted.status,201,`${state} ${folder}: ${await accepted.clone().text()}`);
+          const stored = (await accepted.json()).data;
+          assert.ok(storageTree().some(entry => entry.endsWith(name)),`${state} ${folder} object stored`);
+          assert.ok(stored,`${state} ${folder} returns the stored object`);
+        }
+      }
+      await setState('');
+      console.log('PASS: identical management-purpose uploads succeed under active and complimentary entitlement');
       // The identical renter payment proof succeeds under the active entitlement,
       // and the renter's account history remains readable after a later expiry.
       const acceptedProof = await submitProof();
