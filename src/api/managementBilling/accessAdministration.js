@@ -14,7 +14,7 @@
 // revocation and schema readiness follow the same server-owned rules and no
 // request field can influence it.
 import { getPermissions } from '../../utils/accessPolicy.js';
-import { assertManagementEntitlement } from './entitlementGate.js';
+import { assertManagementEntitlement, withManagementEntitlement } from './entitlementGate.js';
 
 const normalize = value => String(value ?? '').trim().toLowerCase();
 const provided = value => value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
@@ -101,3 +101,8 @@ export const genericAppUserWriteExpandsAccess = ({ table, action, payload }) => 
 // Throws 403 MANAGEMENT_READ_ONLY when access may not be expanded; the
 // decision is the shared management-entitlement gate.
 export const assertAccessExpansionAllowed = args => assertManagementEntitlement(args);
+
+// Performs an access-expanding write while the entitlement lock is held, so
+// expiry or revocation cannot commit between the decision and the expansion.
+export const withAccessExpansion = ({ tenantId, action, guard, env }) =>
+  withManagementEntitlement({ tenantId, action, guard, env });

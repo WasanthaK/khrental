@@ -8,7 +8,7 @@ import {
   listTenantTeamMembers,
   updateTenantTeamMember
 } from './teamMemberRepository.js';
-import { assertAccessExpansionAllowed, teamMemberUpdateExpandsAccess } from '../managementBilling/accessAdministration.js';
+import { teamMemberUpdateExpandsAccess, withAccessExpansion } from '../managementBilling/accessAdministration.js';
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -23,7 +23,7 @@ const requirePermission = (req, permission) => authorizePermission(
   permission
 );
 
-export const createTeamMemberRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
+export const createTeamMemberRouter = ({ runAccessExpansion = withAccessExpansion } = {}) => {
   const router = express.Router();
   const requireScopedTenant = createTenantContextMiddleware({
     requireUser: true,
@@ -53,9 +53,10 @@ export const createTeamMemberRouter = ({ assertAccessExpansion = assertAccessExp
 
   router.post('/team-members', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.MEMBERSHIPS_MANAGE);
-    // Expired organizations cannot add or attach team members.
-    await assertAccessExpansion({ tenantId: req.tenantId });
-    const result = await createOrAttachTenantTeamMember(req.tenantId, req.body || {});
+    // Expired organizations cannot add or attach team members; the write runs
+    // while the entitlement lock is held.
+    const result = await runAccessExpansion({ tenantId: req.tenantId,
+      action: () => createOrAttachTenantTeamMember(req.tenantId, req.body || {}) });
     res.status(result.created ? 201 : 200).json({
       data: result.data,
       meta: {
@@ -71,10 +72,10 @@ export const createTeamMemberRouter = ({ assertAccessExpansion = assertAccessExp
     // Demotion and deactivation stay available; wider permissions or
     // reactivation need an active management entitlement.
     const current = await getTenantTeamMemberById(req.tenantId, req.params.id);
-    if (current && teamMemberUpdateExpandsAccess(current, req.body || {})) {
-      await assertAccessExpansion({ tenantId: req.tenantId });
-    }
-    const member = await updateTenantTeamMember(req.tenantId, req.params.id, req.body || {});
+    const write = () => updateTenantTeamMember(req.tenantId, req.params.id, req.body || {});
+    const member = current && teamMemberUpdateExpandsAccess(current, req.body || {})
+      ? await runAccessExpansion({ tenantId: req.tenantId, action: write })
+      : await write();
     if (!member) {
       res.status(404).json({ error: 'Team member not found in the active organization.', code: 'TEAM_MEMBER_NOT_FOUND' });
       return;

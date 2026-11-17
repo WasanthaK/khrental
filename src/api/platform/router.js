@@ -3,7 +3,7 @@ import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRou
 import {storageUploadPolicy,requireTenantStorageAdmin,uploadRequiresManagementEntitlement} from '../storage/mutationPolicy.js';
 import {createCredentialThrottle} from '../auth/credentialThrottle.js';
 import { withManagementWrite } from '../managementBilling/store.js';
-import { assertAccessExpansionAllowed, genericAppUserWriteExpandsAccess } from '../managementBilling/accessAdministration.js';
+import { genericAppUserWriteExpandsAccess, withAccessExpansion } from '../managementBilling/accessAdministration.js';
 import { assertInventoryMutation } from '../managementBilling/contract.js';
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
 import { normalizePropertyCountry } from '../../utils/constants.js';
@@ -1305,15 +1305,17 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.post('/auth/invite', requireAuthenticated, requireAdmin, requireBusinessTenant, async (req, res, next) => {
     try {
-      // Shadowed by the canonical invitation router; guarded for defence in depth.
-      await assertAccessExpansionAllowed({ tenantId: req.tenantId });
+      // Shadowed by the canonical invitation router; guarded for defence in
+      // depth, with the write under the entitlement lock.
       const { email, options = {} } = req.body || {};
       const requestedRole = String(options?.data?.role || 'rentee').trim().toLowerCase();
       const role = requestedRole === 'staff' ? 'staff' : 'rentee';
       const metadata = { ...(options?.data || {}), role, user_type: role, invited: true };
       // Legacy admin invite path only. This is not public registration; the
       // canonical secure invitation route is mounted ahead of this route.
-      const { record } = await ensureAuthRecord({ email, password: crypto.randomUUID(), role, metadata: { ...metadata, invited: true }, allowExistingAppUser: true });
+      const { record } = await withAccessExpansion({ tenantId: req.tenantId, action: () => ensureAuthRecord({
+        email, password: crypto.randomUUID(), role, metadata: { ...metadata, invited: true }, allowExistingAppUser: true
+      }) });
       res.json({ data: { user: buildAuthUser(record) } });
     } catch (error) {
       next(error);

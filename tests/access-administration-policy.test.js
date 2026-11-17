@@ -115,14 +115,14 @@ test('every tenant-scoped access writer is wired to the policy and no revocation
   };
   const expectGuarded = (file, signatures) => {
     const text = source(file);
-    for (const signature of signatures) {assert.match(route(text, signature), /assertAccessExpansion\(/, `${file} ${signature}`);}
+    for (const signature of signatures) {assert.match(route(text, signature), /runAccessExpansion\(|accessWrite\(req, /, `${file} ${signature}`);}
   };
   const expectUnguarded = (file, signatures) => {
     const text = source(file);
-    for (const signature of signatures) {assert.doesNotMatch(route(text, signature), /assertAccessExpansion/, `${file} ${signature}`);}
+    for (const signature of signatures) {assert.doesNotMatch(route(text, signature), /AccessExpansion|accessWrite/, `${file} ${signature}`);}
   };
   expectGuarded('mssql/renteeRouter.js', ["router.post('/rentees'", "router.patch('/rentees/:id/membership-status'", "router.put('/app-users/:id'"]);
-  assert.match(route(source('mssql/renteeRouter.js'), "router.put('/rentees/:id'"), /guardRenteeUpdate\(req\)/);
+  assert.match(route(source('mssql/renteeRouter.js'), "router.put('/rentees/:id'"), /accessWrite\(req, Boolean\(current && renteeUpdateExpandsAccess/);
   expectGuarded('mssql/teamMemberRouter.js', ["router.post('/team-members'", "router.put('/team-members/:id'"]);
   expectGuarded('platform/propertyAssignmentsRouter.js', ["router.post('/'", "router.patch('/:assignmentId'"]);
   expectUnguarded('platform/propertyAssignmentsRouter.js', ["router.delete('/:assignmentId'"]);
@@ -131,7 +131,7 @@ test('every tenant-scoped access writer is wired to the policy and no revocation
   expectGuarded('mssql/router.js', ["router.post('/app-users'", "router.put('/app-users/:id'", "router.post('/app-users/:id/link'"]);
   expectUnguarded('mssql/router.js', ["router.delete('/app-users/:id'"]);
   assert.match(source('platform/router.js'), /MANAGEMENT_TABLES\.has\(authorized\.table\) \|\| genericAppUserWriteExpandsAccess\(authorized\)/);
-  assert.match(route(source('platform/router.js'), "router.post('/auth/invite'"), /assertAccessExpansionAllowed\(\{ tenantId: req\.tenantId \}\)/);
+  assert.match(route(source('platform/router.js'), "router.post('/auth/invite'"), /withAccessExpansion\(\{ tenantId: req\.tenantId, action: \(\) => ensureAuthRecord\(/);
   for (const file of ['mssql/platformAdminRouter.js', 'mssql/membershipAdminRouter.js', 'managementBilling/router.js']) {
     assert.doesNotMatch(source(file), /accessAdministration|assertAccessExpansion/, `${file} keeps platform authority and billing recovery`);
   }

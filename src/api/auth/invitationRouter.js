@@ -14,7 +14,7 @@ import {
   validateUserInvitation
 } from './invitations.js';
 import { normalizeInvitationEmail } from './invitationTokens.js';
-import { assertAccessExpansionAllowed } from '../managementBilling/accessAdministration.js';
+import { withAccessExpansion } from '../managementBilling/accessAdministration.js';
 
 const buildAuthUser = (record) => ({
   id: record.authId,
@@ -49,7 +49,7 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(),assertAccessExpansion=assertAccessExpansionAllowed}={}) => {
+export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(),runAccessExpansion=withAccessExpansion}={}) => {
   const router = express.Router();
   const requireAdminTenant = createTenantContextMiddleware({
     requireUser: true,
@@ -103,23 +103,25 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
         return;
       }
 
-      // Expired organizations cannot invite. Redemption of an invitation that
-      // was already issued is identity/credential setup and is unchanged.
-      await assertAccessExpansion({ tenantId: req.tenantId });
-      const target = await findAppUserByEmail(email);
-      if (!target) {
+      // Expired organizations cannot invite; issuing runs while the
+      // entitlement lock is held. Redemption of an invitation that was
+      // already issued is identity/credential setup and is unchanged.
+      const issued = await runAccessExpansion({ tenantId: req.tenantId, action: async () => {
+        const recipient = await findAppUserByEmail(email);
+        return recipient ? { target: recipient, invitation: await sendInvitation({
+          tenantId: req.tenantId,
+          appUserId: recipient.id,
+          createdBy: req.user?.id || null
+        }) } : null;
+      } });
+      if (!issued) {
         res.status(404).json({
           error: 'Create or attach the user to the active organization before sending an invitation.',
           code: 'INVITATION_TARGET_NOT_FOUND'
         });
         return;
       }
-
-      const invitation = await sendInvitation({
-        tenantId: req.tenantId,
-        appUserId: target.id,
-        createdBy: req.user?.id || null
-      });
+      const { target, invitation } = issued;
 
       res.status(201).json({
         data: {
@@ -145,12 +147,11 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
   router.post('/invitations', requireAdminTenant, requireAdmin, async (req, res, next) => {
     try {
       const appUserId = req.body?.appUserId || req.body?.app_user_id;
-      await assertAccessExpansion({ tenantId: req.tenantId });
-      const invitation = await sendInvitation({
+      const invitation = await runAccessExpansion({ tenantId: req.tenantId, action: () => sendInvitation({
         tenantId: req.tenantId,
         appUserId,
         createdBy: req.user?.id || null
-      });
+      }) });
 
       res.status(201).json({
         data: {
