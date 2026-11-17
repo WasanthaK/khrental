@@ -60,6 +60,7 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
   const adminA = await A.person('admin', {login:true});
   const adminB = await B.person('admin', {login:true});
   const staff = await A.person('staff', {bundle:'maintenance'});
+  const secondStaff = await A.person('staff', {bundle:'maintenance'});
   // Active staff reserved for the concurrency proof.
   const raceStaff = await A.person('staff', {bundle:'read_only'});
   const renter = await A.person('rentee', {associations:JSON.stringify([{propertyId:p1, unitId:null}])});
@@ -218,17 +219,42 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
     ];
     for (const [label, send, effect] of cleanup) {
       const result = await send();
-      if (label === 'team revocation' && result.status === 404) {
-        // Pre-existing projection behaviour: the route re-reads the member
-        // through the active-only team directory after a successful
-        // deactivation. The write itself is proven by the effect below.
-        assert.equal(result.json.code, 'TEAM_MEMBER_NOT_FOUND', JSON.stringify(result.json));
-      } else {
-        assert.equal(result.status, 200, `expired ${label}: ${JSON.stringify(result.json)}`);
+      assert.equal(result.status, 200, `expired ${label}: ${JSON.stringify(result.json)}`);
+      if (label === 'team revocation') {
+        // Truthful reply from the scoped readback, not a directory 404.
+        assert.equal(id(result.json.data.id), staff.id);
+        assert.equal(result.json.data.tenant_membership_status, 'inactive');
+        assert.equal(result.json.data.active, false);
       }
       await effect();
     }
     console.log('PASS: after expiry, reads, profile correction, revocation, demotion, assignment end/removal and user removal remain available');
+
+    // Team-member deactivation reply: repeat is an idempotent truthful no-op;
+    // an inactive member cannot be reopened or edited through this route and
+    // stays out of the directory; a rejected update leaves no partial write;
+    // another organization cannot address the member.
+    const teamCall = (memberId, body, who = adminA, tenantId = A.tenantId) =>
+      call('PUT', `/api/mssql/team-members/${memberId}`, body, who, tenantId);
+    for (const [label, send, status, code] of [
+      ['repeat team revocation', () => teamCall(staff.id, {membership_status:'inactive'}), 200, null],
+      ['inactive member reactivation', () => teamCall(staff.id, {membership_status:'active'}), 404, 'TEAM_MEMBER_NOT_FOUND'],
+      ['inactive member permission grant', () => teamCall(staff.id, {permission_bundle:'finance'}), 404, 'TEAM_MEMBER_NOT_FOUND'],
+      ['inactive member different revocation status', () => teamCall(staff.id, {membership_status:'suspended'}), 404, 'TEAM_MEMBER_NOT_FOUND'],
+      ['foreign organization team revocation', () => teamCall(secondStaff.id, {membership_status:'inactive'}, adminB, B.tenantId), 404, 'TEAM_MEMBER_NOT_FOUND']
+    ]) {
+      const before = await snapshot();
+      const result = await send();
+      assert.equal(result.status, status, `${label}: ${JSON.stringify(result.json)}`);
+      if (code) {assert.equal(result.json.code, code, label);}
+      if (status === 200) {assert.equal(result.json.data.tenant_membership_status, 'inactive', label);}
+      assert.deepEqual(await snapshot(), before, `${label}: no write`);
+    }
+    const directory = await call('GET', '/api/mssql/team-members');
+    assert.equal(directory.status, 200);
+    assert.ok(!directory.json.data.some(member => id(member.id) === staff.id), 'deactivated member stays out of the team directory');
+    assert.ok(directory.json.data.some(member => id(member.id) === secondStaff.id), 'active member remains listed');
+    console.log('PASS: team deactivation replies truthfully; repeat is idempotent; inactive members cannot be reopened or edited; foreign and rejected updates write nothing');
 
     // Cross-organization isolation and scope: B cannot act on A, and B (not
     // enrolled) keeps expanding its own access while A is expired.
@@ -246,6 +272,19 @@ export async function verifyAccessAdministrationExpiryAgainstDisposableSql({ poo
     assert.equal(unenrolled.status, 201, JSON.stringify(unenrolled.json));
     console.log('PASS: cross-organization access administration stays denied; an unenrolled organization is unaffected');
 
+    await setState('active');
+    // Validation precedes every write: a rejected update changes nothing.
+    const beforeRejected = await snapshot();
+    const rejected = await call('PUT', `/api/mssql/team-members/${secondStaff.id}`, {name:'Must not persist', permission_bundle:'not-a-bundle'});
+    assert.equal(rejected.status, 400, JSON.stringify(rejected.json));
+    assert.equal(rejected.json.code, 'TEAM_PERMISSION_BUNDLE_INVALID');
+    assert.deepEqual(await snapshot(), beforeRejected, 'rejected team update leaves no partial profile write');
+    const activeDeactivation = await call('PUT', `/api/mssql/team-members/${secondStaff.id}`, {membership_status:'inactive'});
+    assert.equal(activeDeactivation.status, 200, JSON.stringify(activeDeactivation.json));
+    assert.equal(activeDeactivation.json.data.tenant_membership_status, 'inactive');
+    assert.equal((await first(pool, 'SELECT status FROM tenant_memberships WHERE tenant_id=@t AND app_user_id=@u',
+      {t:A.tenantId, u:secondStaff.id})).status, 'inactive');
+    console.log('PASS: rejected team update writes nothing; team deactivation under an active entitlement replies 200 with the inactive membership');
     // Atomicity: entitlement decision and access expansion cannot interleave
     // with a billing-state change. Billing changes UPDATE the account row that
     // the decision locks (UPDLOCK, HOLDLOCK) until the expansion settles.

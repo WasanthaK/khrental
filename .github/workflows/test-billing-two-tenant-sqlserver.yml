@@ -91,6 +91,7 @@ on:
       - 'scripts/verify-access-administration-expiry-sqlserver.mjs'
       - 'src/api/mssql/renteeRouter.js'
       - 'src/api/mssql/teamMemberRouter.js'
+      - 'src/api/mssql/teamMemberRepository.js'
       - 'src/api/platform/propertyAssignmentsRouter.js'
       - 'src/api/platform/router.js'
       - '.github/workflows/test-billing-two-tenant-sqlserver.yml'
