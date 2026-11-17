@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import express from 'express';
-import {BILLING_ACCOUNT,parsePricing,pricingPreview,dwellingInventory,stagedStock,assertInventoryMutation,cessationBlockers,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
+import {BILLING_ACCOUNT,parsePricing,pricingPreview,draftExcessPriceQuote,dwellingInventory,stagedStock,assertInventoryMutation,cessationBlockers,entitlement,verifyStripeSignature,complimentaryChange,managementWriteEnforced} from '../src/api/managementBilling/contract.js';
 import {assertManagementWrite} from '../src/api/managementBilling/store.js';
 import {sql} from '../src/api/mssql/pool.js';
 import {runQuery} from '../src/api/mssql/query.js';
@@ -318,6 +318,114 @@ test('pricing drafts preserve unresolved policy and preview uses exact minor uni
   for(const change of [{market:'US'},{billingCurrency:'LKR'},{rentCurrency:'BND'},{baseFeeMinor:1.1},{baseFeeMinor:0},{includedRentMinor:-1},{excessPolicy:'percentage'},{reason:'short'},{effectiveAt:'2026-12-01'}])
     {assert.throws(()=>parsePricing({...rules,...change}));}
   for(const quantity of [0,-1,1.1,10001,'12']) {assert.throws(()=>pricingPreview(rules,quantity));}
+});
+
+// CM01.3 draft arithmetic. F = 300 is a synthetic example only, not a current
+// rate or approved version (see docs/R5-LK-COMMERCIAL-READINESS-20261116.md §2).
+const draftDwelling=(n,rent)=>({key:`unit:00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,rentCurrency:'LKR',rentBasis:'agreed_monthly_base_rent',monthlyRentMinor:rent});
+const draftInput=(dwellings,overrides={})=>({market:'LK',rentCurrency:'LKR',billingCurrency:'USD',commercialVersionId:'lk-draft-synthetic-v0',
+  effectiveAt:'2026-12-01T00:00:00Z',baseChargeMinor:500,thresholdMinor:2500000,excessRate:{basisPoints:200},
+  fx:{baseCurrency:'USD',quoteCurrency:'LKR',rate:'300',observationId:'synthetic-observation-0001',observedOn:'2026-11-30',source:'synthetic-test-fixture'},
+  rounding:'half_up_per_dwelling_usd_cent',dwellings,...overrides});
+
+test('draft excess pricing reproduces the readiness-record examples exactly and rounds once per dwelling',()=>{
+  const cases=[[20000,500],[25000,500],[25001,500],[25075,501],[50000,667],[100000,1000]];
+  for(const [rent,expected] of cases){
+    assert.equal(draftExcessPriceQuote(draftInput([draftDwelling(1,rent*100)])).monthlyTotalMinor,expected,`LKR ${rent}`);
+  }
+  const quote=draftExcessPriceQuote(draftInput([draftDwelling(1,2507500),draftDwelling(2,2507500)]));
+  assert.deepEqual(quote.dwellings.map(d=>d.monthlyUsdMinor),[501,501]);
+  assert.equal(quote.monthlyTotalMinor,1002,'Round each dwelling then sum (USD 10.02); rounding the combined amount would give USD 10.01');
+  assert.deepEqual(quote.dwellings[0].unroundedUsdMinor,{numerator:'1001',denominator:'2'});
+  assert.deepEqual(quote.dwellings[0].excessChargeRentMinor,{numerator:'150',denominator:'1'});
+  assert.deepEqual(quote.dwellings[0].excessChargeUsdMinor,{numerator:'1',denominator:'2'});
+  assert.equal(quote.dwellings[0].excessRentMinor,7500);
+  assert.equal(quote.status,'draft');assert.equal(quote.published,false);assert.equal(quote.approved,false);assert.equal(quote.taxIncluded,false);
+  assert.deepEqual(quote.inputs.fx,{baseCurrency:'USD',quoteCurrency:'LKR',rate:'300',exact:{numerator:'300',denominator:'1'},
+    observationId:'synthetic-observation-0001',observedOn:'2026-11-30',source:'synthetic-test-fixture'});
+  assert.deepEqual(quote.inputs.excessRate,{form:'basis_points',numerator:'1',denominator:'50'});
+  assert.equal(quote.inputs.commercialVersionId,'lk-draft-synthetic-v0');
+  assert.match(quote.quoteHash,/^[0-9a-f]{64}$/);
+  assert.equal(draftExcessPriceQuote(draftInput([draftDwelling(1,2507500),draftDwelling(2,2507500)])).quoteHash,quote.quoteHash,'Deterministic');
+});
+
+test('draft excess pricing uses exact rational FX and ratio inputs without floating-point drift',()=>{
+  const decimal=draftExcessPriceQuote(draftInput([draftDwelling(1,5000000)],{fx:{...draftInput([]).fx,rate:'299.99999999'}}));
+  const ratio=draftExcessPriceQuote(draftInput([draftDwelling(1,5000000)],{excessRate:{numerator:1,denominator:50},
+    fx:{...draftInput([]).fx,rate:{numerator:29999999999,denominator:100000000}}}));
+  assert.deepEqual(decimal.dwellings[0].unroundedUsdMinor,ratio.dwellings[0].unroundedUsdMinor);
+  assert.equal(decimal.monthlyTotalMinor,667);
+  assert.equal(ratio.inputs.excessRate.form,'ratio');assert.equal(ratio.inputs.fx.rate,null);
+  // Exactly half a cent rounds up; one part in 10^8 below half rounds down.
+  assert.equal(draftExcessPriceQuote(draftInput([draftDwelling(1,2507500)],{fx:{...draftInput([]).fx,rate:'300.00000001'}})).monthlyTotalMinor,500);
+  assert.equal(draftExcessPriceQuote(draftInput([draftDwelling(1,2507500)])).monthlyTotalMinor,501);
+  const large=draftExcessPriceQuote(draftInput([draftDwelling(1,100000000000)],{excessRate:{basisPoints:10000},fx:{...draftInput([]).fx,rate:'0.5'}}));
+  assert.equal(large.monthlyTotalMinor,500+(100000000000-2500000)*2,'Large rents stay exact at the supported maximum');
+});
+
+test('draft excess pricing rejects missing, invalid or mismatched inputs instead of assuming defaults',()=>{
+  const valid=draftInput([draftDwelling(1,5000000)]);
+  const fx=valid.fx;const dwelling=valid.dwellings[0];
+  const invalid=[
+    [{market:'BN',rentCurrency:'BND'},'BILLING_DRAFT_MARKET_INVALID'],[{market:'US'},'BILLING_DRAFT_MARKET_INVALID'],
+    [{rentCurrency:'USD'},'BILLING_DRAFT_CURRENCY_INVALID'],[{billingCurrency:'LKR'},'BILLING_DRAFT_CURRENCY_INVALID'],
+    [{fx:{...fx,quoteCurrency:'BND'}},'BILLING_DRAFT_CURRENCY_INVALID'],[{fx:{...fx,baseCurrency:'LKR',quoteCurrency:'USD'}},'BILLING_DRAFT_CURRENCY_INVALID'],
+    [{dwellings:[{...dwelling,rentCurrency:'USD'}]},'BILLING_DRAFT_CURRENCY_INVALID'],
+    [{commercialVersionId:''},'BILLING_DRAFT_VERSION_INVALID'],[{commercialVersionId:null},'BILLING_DRAFT_VERSION_INVALID'],
+    [{effectiveAt:'2026-12-01'},'BILLING_DRAFT_DATE_INVALID'],[{effectiveAt:null},'BILLING_DRAFT_DATE_INVALID'],
+    [{fx:{...fx,observedOn:'2026-12-02'}},'BILLING_DRAFT_DATE_INVALID'],[{fx:{...fx,observedOn:'2026-02-30'}},'BILLING_DRAFT_DATE_INVALID'],
+    [{baseChargeMinor:5.5},'BILLING_DRAFT_BASE_INVALID'],[{baseChargeMinor:0},'BILLING_DRAFT_BASE_INVALID'],[{baseChargeMinor:'500'},'BILLING_DRAFT_BASE_INVALID'],
+    [{thresholdMinor:-1},'BILLING_DRAFT_THRESHOLD_INVALID'],[{thresholdMinor:null},'BILLING_DRAFT_THRESHOLD_INVALID'],
+    [{excessRate:{basisPoints:0}},'BILLING_DRAFT_PERCENT_INVALID'],[{excessRate:{basisPoints:10001}},'BILLING_DRAFT_PERCENT_INVALID'],
+    [{excessRate:{basisPoints:2.5}},'BILLING_DRAFT_PERCENT_INVALID'],[{excessRate:0.02},'BILLING_DRAFT_PERCENT_INVALID'],
+    [{excessRate:{basisPoints:200,numerator:1,denominator:50}},'BILLING_DRAFT_PERCENT_INVALID'],[{excessRate:{numerator:3,denominator:2}},'BILLING_DRAFT_PERCENT_INVALID'],
+    [{excessRate:'pending'},'BILLING_DRAFT_PERCENT_INVALID'],
+    [{fx:{...fx,rate:300}},'BILLING_DRAFT_FX_INVALID'],[{fx:{...fx,rate:'0'}},'BILLING_DRAFT_FX_INVALID'],[{fx:{...fx,rate:'-300'}},'BILLING_DRAFT_FX_INVALID'],
+    [{fx:{...fx,rate:'300.123456789'}},'BILLING_DRAFT_FX_INVALID'],[{fx:{...fx,rate:'3e2'}},'BILLING_DRAFT_FX_INVALID'],[{fx:{...fx,rate:''}},'BILLING_DRAFT_FX_INVALID'],
+    [{fx:{...fx,rate:{numerator:300,denominator:0}}},'BILLING_DRAFT_FX_INVALID'],[{fx:{...fx,observationId:'x'}},'BILLING_DRAFT_FX_INVALID'],
+    [{fx:{...fx,source:undefined}},'BILLING_DRAFT_FX_INVALID'],[{fx:{...fx,fallback:'350'}},'BILLING_DRAFT_FX_INVALID'],[{fx:null},'BILLING_DRAFT_FX_INVALID'],
+    [{rounding:'half_up_total'},'BILLING_DRAFT_ROUNDING_INVALID'],[{rounding:undefined},'BILLING_DRAFT_ROUNDING_INVALID'],
+    [{dwellings:[]},'BILLING_DRAFT_DWELLINGS_INVALID'],[{dwellings:[{...dwelling,key:'house-1'}]},'BILLING_DRAFT_DWELLINGS_INVALID'],
+    [{dwellings:[dwelling,dwelling]},'BILLING_DUPLICATE_DWELLING'],[{dwellings:[{...dwelling,extra:true}]},'BILLING_DRAFT_DWELLINGS_INVALID'],
+    [{dwellings:[{key:dwelling.key,rentCurrency:'LKR',rentBasis:dwelling.rentBasis}]},'BILLING_DRAFT_DWELLINGS_INVALID'],
+    [{dwellings:[{...dwelling,monthlyRentMinor:null}]},'BILLING_DRAFT_RENT_INVALID'],[{dwellings:[{...dwelling,monthlyRentMinor:undefined}]},'BILLING_DRAFT_RENT_INVALID'],
+    [{dwellings:[{...dwelling,monthlyRentMinor:-1}]},'BILLING_DRAFT_RENT_INVALID'],[{dwellings:[{...dwelling,monthlyRentMinor:-0.5}]},'BILLING_DRAFT_RENT_INVALID'],
+    [{dwellings:[{...dwelling,monthlyRentMinor:Number.NaN}]},'BILLING_DRAFT_RENT_INVALID'],[{dwellings:[{...dwelling,monthlyRentMinor:'0'}]},'BILLING_DRAFT_RENT_INVALID'],
+    [{dwellings:[{...dwelling,monthlyRentMinor:false}]},'BILLING_DRAFT_RENT_INVALID'],
+    [{dwellings:[{...dwelling,monthlyRentMinor:50000.5}]},'BILLING_DRAFT_RENT_INVALID'],[{dwellings:[{...dwelling,monthlyRentMinor:'5000000'}]},'BILLING_DRAFT_RENT_INVALID'],
+    [{dwellings:[{...dwelling,monthlyRentMinor:100000000001}]},'BILLING_DRAFT_RENT_INVALID'],
+    [{dwellings:[{...dwelling,rentBasis:'annual_rent'}]},'BILLING_DRAFT_RENT_BASIS_INVALID'],[{dwellings:[{...dwelling,rentBasis:null}]},'BILLING_DRAFT_RENT_BASIS_INVALID'],
+    [{extra:true},'BILLING_DRAFT_FIELDS_INVALID']
+  ];
+  for(const [change,code] of invalid){
+    assert.throws(()=>draftExcessPriceQuote({...valid,...change}),{code},JSON.stringify(change));
+  }
+  const missingMarket={...valid};delete missingMarket.market;
+  assert.throws(()=>draftExcessPriceQuote(missingMarket),{code:'BILLING_DRAFT_FIELDS_INVALID'});
+  assert.throws(()=>draftExcessPriceQuote(null),{code:'BILLING_DRAFT_FIELDS_INVALID'});
+  assert.throws(()=>draftExcessPriceQuote(draftInput([draftDwelling(1,100000000000)],{baseChargeMinor:10000000,excessRate:{basisPoints:10000},
+    fx:{...fx,rate:{numerator:1,denominator:1000000000000000}}})),{code:'BILLING_DRAFT_OVERFLOW'});
+  const before=JSON.stringify(valid);draftExcessPriceQuote(valid);assert.equal(JSON.stringify(valid),before,'Inputs are not mutated');
+});
+
+test('draft excess pricing prices an explicitly supplied zero rent at the base charge only',()=>{
+  const quote=draftExcessPriceQuote(draftInput([draftDwelling(1,0)]));
+  assert.equal(quote.monthlyTotalMinor,500);
+  assert.deepEqual(quote.dwellings[0],{key:draftDwelling(1,0).key,rentBasis:'agreed_monthly_base_rent',rentCurrency:'LKR',monthlyRentMinor:0,
+    excessRentMinor:0,excessChargeRentMinor:{numerator:'0',denominator:'1'},excessChargeUsdMinor:{numerator:'0',denominator:'1'},
+    unroundedUsdMinor:{numerator:'500',denominator:'1'},monthlyUsdMinor:500});
+  const zeroThreshold=draftExcessPriceQuote(draftInput([draftDwelling(1,0)],{thresholdMinor:0}));
+  assert.equal(zeroThreshold.monthlyTotalMinor,500,'Zero rent at a zero threshold has no excess');
+  const mixed=draftExcessPriceQuote(draftInput([draftDwelling(1,0),draftDwelling(2,2507500)]));
+  assert.deepEqual(mixed.dwellings.map(d=>d.monthlyUsdMinor),[500,501]);assert.equal(mixed.monthlyTotalMinor,1001);
+  const missing=draftDwelling(1,0);delete missing.monthlyRentMinor;
+  assert.throws(()=>draftExcessPriceQuote(draftInput([missing])),{code:'BILLING_DRAFT_DWELLINGS_INVALID'},'An absent rent is never treated as zero');
+});
+
+test('draft excess pricing leaves the guarded live pricing contract unchanged',()=>{
+  assert.throws(()=>parsePricing({...rules,excessPolicy:'percentage'}),{code:'BILLING_EXCESS_UNAPPROVED'});
+  const preview=pricingPreview(parsePricing({...rules,includedRentMinor:2500000,excessPolicy:'none',effectiveAt:'2026-12-01T00:00:00Z'}),2);
+  assert.equal(preview.adjustmentApplied,false);assert.equal(preview.monthlyBaseMinor,1000);assert.equal(preview.taxIncluded,false);
 });
 test('dwelling count separates whole houses and child units without occupancy or listing loopholes',()=>{
   const properties=[{id:'p1',tenant_id:tenant,name:'House',propertytype:'house',status:'occupied',published:false},

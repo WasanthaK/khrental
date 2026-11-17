@@ -58,6 +58,170 @@ export const pricingPreview = (rule, quantity) => {
     appliesTo:'new_subscriptions_only'};
 };
 
+// CM01.3 draft arithmetic only. This helper is deliberately NOT used by
+// parsePricing, pricingPreview, publication, Checkout or any route: it neither
+// approves nor publishes a percentage/FX price. It fetches no rate and applies
+// no fallback rate, rent, basis or rounding. All money arithmetic is exact
+// BigInt/rational; the only rounding is half-up once per dwelling to USD cents.
+const DRAFT_MARKETS = {LK:{rentCurrency:'LKR'}};
+const MINOR_EXPONENT = {USD:2, LKR:2};
+const DRAFT_RENT_BASES = ['agreed_monthly_base_rent','reviewed_monthly_asking_rent'];
+const DRAFT_ROUNDING = 'half_up_per_dwelling_usd_cent';
+const DRAFT_KEYS = ['market','rentCurrency','billingCurrency','commercialVersionId','effectiveAt','baseChargeMinor',
+  'thresholdMinor','excessRate','fx','rounding','dwellings'];
+const DRAFT_FX_KEYS = ['baseCurrency','quoteCurrency','rate','observationId','observedOn','source'];
+const DRAFT_DWELLING_KEYS = ['key','rentCurrency','rentBasis','monthlyRentMinor'];
+const DRAFT_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{2,99}$/;
+const MAX_RENT_MINOR = 100000000000;
+const MAX_DRAFT_DWELLINGS = 10000;
+const draftProblem = (code, message) => problem(400, code, message);
+const exactKeys = (value, keys, code, message) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !(key in value)))
+    {throw draftProblem(code, message);}
+  return value;
+};
+const draftInteger = (value, min, max, code, label) => {
+  if (!Number.isSafeInteger(value) || value < min || value > max)
+    {throw draftProblem(code, `${label} must be an integer from ${min} to ${max}.`);}
+  return BigInt(value);
+};
+const bigGcd = (a, b) => {
+  let x = a < 0n ? -a : a;
+  let y = b;
+  while (y) {[x, y] = [y, x % y];}
+  return x;
+};
+const rational = (numerator, denominator) => {
+  const divisor = bigGcd(numerator, denominator) || 1n;
+  return {numerator:String(numerator / divisor), denominator:String(denominator / divisor)};
+};
+const utcInstant = value => typeof value === 'string' &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) && Number.isFinite(Date.parse(value)) &&
+  new Date(value).toISOString().replace('.000Z','Z') === value.replace('.000Z','Z');
+const calendarDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0,10) === value;
+const draftReference = (value, code, label) => {
+  if (typeof value !== 'string' || !DRAFT_REFERENCE.test(value))
+    {throw draftProblem(code, `${label} must be a traceable identifier of 3–100 characters.`);}
+  return value;
+};
+
+// Exactly one of {basisPoints} or {numerator, denominator}; never above 100%.
+const draftExcessRate = value => {
+  const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort().join(',') : '';
+  if (keys === 'basisPoints') {
+    const points = draftInteger(value.basisPoints, 1, 10000, 'BILLING_DRAFT_PERCENT_INVALID', 'Excess basis points');
+    return {form:'basis_points', numerator:points, denominator:10000n};
+  }
+  if (keys === 'denominator,numerator') {
+    const numerator = draftInteger(value.numerator, 1, 1000000, 'BILLING_DRAFT_PERCENT_INVALID', 'Excess ratio numerator');
+    const denominator = draftInteger(value.denominator, 1, 1000000, 'BILLING_DRAFT_PERCENT_INVALID', 'Excess ratio denominator');
+    if (numerator > denominator) {throw draftProblem('BILLING_DRAFT_PERCENT_INVALID', 'The excess percentage cannot exceed 100%.');}
+    return {form:'ratio', numerator, denominator};
+  }
+  throw draftProblem('BILLING_DRAFT_PERCENT_INVALID', 'State the excess percentage as basis points or an exact ratio.');
+};
+
+// Rent currency per USD: a positive decimal string (≤ 9 integer and ≤ 8
+// fraction digits) or an exact {numerator, denominator}. Numbers are refused
+// so that binary floating point never enters the rate.
+const draftFxRate = value => {
+  if (typeof value === 'string') {
+    const match = /^(0|[1-9]\d{0,8})(?:\.(\d{1,8}))?$/.exec(value);
+    const fraction = match?.[2] || '';
+    const numerator = match ? BigInt(`${match[1]}${fraction}`) : 0n;
+    if (numerator <= 0n) {throw draftProblem('BILLING_DRAFT_FX_INVALID', 'Use a positive exchange rate with at most 8 decimal places.');}
+    return {numerator, denominator:10n ** BigInt(fraction.length)};
+  }
+  const keys = value && typeof value === 'object' && !Array.isArray(value) ? Object.keys(value).sort().join(',') : '';
+  if (keys !== 'denominator,numerator')
+    {throw draftProblem('BILLING_DRAFT_FX_INVALID', 'Use a decimal string or an exact ratio for the exchange rate.');}
+  return {
+    numerator:draftInteger(value.numerator, 1, 1000000000000000, 'BILLING_DRAFT_FX_INVALID', 'Exchange-rate numerator'),
+    denominator:draftInteger(value.denominator, 1, 1000000000000000, 'BILLING_DRAFT_FX_INVALID', 'Exchange-rate denominator')
+  };
+};
+
+export const draftExcessPriceQuote = input => {
+  exactKeys(input, DRAFT_KEYS, 'BILLING_DRAFT_FIELDS_INVALID', 'Submit every draft pricing input without additional fields.');
+  const market = DRAFT_MARKETS[input.market];
+  if (!market) {throw draftProblem('BILLING_DRAFT_MARKET_INVALID', 'Draft percentage pricing is prepared only for Sri Lanka.');}
+  const {rentCurrency} = market;
+  if (input.rentCurrency !== rentCurrency || input.billingCurrency !== 'USD')
+    {throw draftProblem('BILLING_DRAFT_CURRENCY_INVALID', 'Use LKR rent and USD billing for the Sri Lanka draft.');}
+  const commercialVersionId = draftReference(input.commercialVersionId, 'BILLING_DRAFT_VERSION_INVALID', 'Commercial version');
+  if (!utcInstant(input.effectiveAt)) {throw draftProblem('BILLING_DRAFT_DATE_INVALID', 'Use an explicit UTC effective instant.');}
+  const baseChargeMinor = draftInteger(input.baseChargeMinor, 1, 10000000, 'BILLING_DRAFT_BASE_INVALID', 'USD base charge in cents');
+  const thresholdMinor = draftInteger(input.thresholdMinor, 0, MAX_RENT_MINOR, 'BILLING_DRAFT_THRESHOLD_INVALID', 'Rent threshold in minor units');
+  const excessRate = draftExcessRate(input.excessRate);
+  const fx = exactKeys(input.fx, DRAFT_FX_KEYS, 'BILLING_DRAFT_FX_INVALID', 'Submit the complete exchange-rate observation without additional fields.');
+  if (fx.baseCurrency !== 'USD' || fx.quoteCurrency !== rentCurrency)
+    {throw draftProblem('BILLING_DRAFT_CURRENCY_INVALID', 'The exchange rate must be stated as LKR per USD.');}
+  const fxRate = draftFxRate(fx.rate);
+  const observationId = draftReference(fx.observationId, 'BILLING_DRAFT_FX_INVALID', 'Exchange-rate observation');
+  const source = draftReference(fx.source, 'BILLING_DRAFT_FX_INVALID', 'Exchange-rate source');
+  if (!calendarDate(fx.observedOn) || Date.parse(`${fx.observedOn}T00:00:00Z`) > Date.parse(input.effectiveAt))
+    {throw draftProblem('BILLING_DRAFT_DATE_INVALID', 'Use an exchange-rate observation dated on or before the effective instant.');}
+  if (input.rounding !== DRAFT_ROUNDING)
+    {throw draftProblem('BILLING_DRAFT_ROUNDING_INVALID', `Select the ${DRAFT_ROUNDING} rounding convention explicitly.`);}
+  if (!Array.isArray(input.dwellings) || !input.dwellings.length || input.dwellings.length > MAX_DRAFT_DWELLINGS)
+    {throw draftProblem('BILLING_DRAFT_DWELLINGS_INVALID', `Include between 1 and ${MAX_DRAFT_DWELLINGS} dwellings.`);}
+
+  // Converting rent minor units to USD cents: cents = rentMinor × 10^(USD−rent) ÷ rate.
+  const exponentShift = MINOR_EXPONENT.USD - MINOR_EXPONENT[rentCurrency];
+  const scaleNumerator = 10n ** BigInt(Math.max(exponentShift, 0));
+  const scaleDenominator = 10n ** BigInt(Math.max(-exponentShift, 0));
+  const seen = new Set();
+  let totalMinor = 0n;
+  const dwellings = input.dwellings.map(dwelling => {
+    exactKeys(dwelling, DRAFT_DWELLING_KEYS, 'BILLING_DRAFT_DWELLINGS_INVALID', 'Submit each dwelling key, rent currency, rent basis and monthly rent.');
+    const match = typeof dwelling.key === 'string' ? /^(property|unit):(.+)$/.exec(dwelling.key) : null;
+    if (!match) {throw draftProblem('BILLING_DRAFT_DWELLINGS_INVALID', 'Use a property:<id> or unit:<id> dwelling key.');}
+    const key = `${match[1]}:${identifier(match[2])}`;
+    if (seen.has(key)) {throw draftProblem('BILLING_DUPLICATE_DWELLING', 'Each dwelling may be priced only once.');}
+    seen.add(key);
+    if (dwelling.rentCurrency !== rentCurrency)
+      {throw draftProblem('BILLING_DRAFT_CURRENCY_INVALID', 'Every dwelling rent must be stated in LKR.');}
+    if (!DRAFT_RENT_BASES.includes(dwelling.rentBasis))
+      {throw draftProblem('BILLING_DRAFT_RENT_BASIS_INVALID', 'Choose an explicit monthly rent basis for every dwelling.');}
+    // An explicitly supplied zero is a real rent (base charge only); an absent,
+    // null, negative or non-integer rent is refused rather than treated as zero.
+    const rentMinor = draftInteger(dwelling.monthlyRentMinor, 0, MAX_RENT_MINOR, 'BILLING_DRAFT_RENT_INVALID', 'Monthly rent in minor units');
+    const excessRentMinor = rentMinor > thresholdMinor ? rentMinor - thresholdMinor : 0n;
+    // adjustment cents = excess × rate% × scale ÷ fx, held as one exact fraction.
+    const adjustmentNumerator = excessRentMinor * excessRate.numerator * scaleNumerator * fxRate.denominator;
+    const adjustmentDenominator = excessRate.denominator * scaleDenominator * fxRate.numerator;
+    const unroundedNumerator = baseChargeMinor * adjustmentDenominator + adjustmentNumerator;
+    const roundedMinor = (2n * unroundedNumerator + adjustmentDenominator) / (2n * adjustmentDenominator);
+    if (roundedMinor > BigInt(Number.MAX_SAFE_INTEGER))
+      {throw draftProblem('BILLING_DRAFT_OVERFLOW', 'The draft price exceeds the supported range.');}
+    totalMinor += roundedMinor;
+    return {
+      key, rentBasis:dwelling.rentBasis, rentCurrency, monthlyRentMinor:Number(rentMinor),
+      excessRentMinor:Number(excessRentMinor),
+      excessChargeRentMinor:rational(excessRentMinor * excessRate.numerator, excessRate.denominator),
+      excessChargeUsdMinor:rational(adjustmentNumerator, adjustmentDenominator),
+      unroundedUsdMinor:rational(unroundedNumerator, adjustmentDenominator),
+      monthlyUsdMinor:Number(roundedMinor)
+    };
+  });
+  if (totalMinor > BigInt(Number.MAX_SAFE_INTEGER))
+    {throw draftProblem('BILLING_DRAFT_OVERFLOW', 'The draft total exceeds the supported range.');}
+  const inputs = {
+    market:input.market, rentCurrency, billingCurrency:'USD', commercialVersionId,
+    effectiveAt:new Date(input.effectiveAt).toISOString(), baseChargeMinor:Number(baseChargeMinor),
+    thresholdMinor:Number(thresholdMinor),
+    excessRate:{form:excessRate.form, ...rational(excessRate.numerator, excessRate.denominator)},
+    fx:{baseCurrency:'USD', quoteCurrency:rentCurrency, rate:typeof fx.rate === 'string' ? fx.rate : null,
+      exact:rational(fxRate.numerator, fxRate.denominator), observationId, observedOn:fx.observedOn, source},
+    rounding:DRAFT_ROUNDING
+  };
+  const quote = {status:'draft', published:false, approved:false, taxIncluded:false,
+    currency:'USD', quantity:dwellings.length, inputs, dwellings, monthlyTotalMinor:Number(totalMinor)};
+  return {...quote, quoteHash:hash(quote)};
+};
+
 const residential = new Set(['house','condo','condominium','apartment','apartment complex']);
 export const stagedStock = input => {
   if(!Array.isArray(input)||!input.length||input.length>100)
