@@ -1745,21 +1745,6 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       assert.equal(allowedDeletion.status,200,JSON.stringify(await allowedDeletion.json()));
       assert.equal(await first(pool,'SELECT id FROM agreements WHERE id=@id',{id:deletionCandidate.id}),null,
         'Only the dedicated unsigned disposable agreement was removed after renewed management authority');
-      // The identical renter payment proof succeeds under the active entitlement,
-      // and the renter's account history remains readable after a later expiry.
-      const acceptedProof = await submitProof();
-      assert.equal(acceptedProof.status,201,JSON.stringify(await acceptedProof.clone().json()));
-      const proofRows = await proofPayments();
-      assert.equal(proofRows.length,1);assert.equal(proofRows[0].status,'pending');assert.equal(Number(proofRows[0].amount),100);
-      assert.equal(proofRows[0].proofurl,`/storage/invoices/${proofKey}`);
-      assert.equal(guid((await first(pool,'SELECT tenant_id FROM payments WHERE id=@id',{id:proofRows[0].id})).tenant_id),scoped.tenantId,
-        'Body tenantId override is ignored');
-      await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
-      const proofAccount = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/invoices/${proofInvoice.id}/account`,{
-        headers:{Authorization:`Bearer ${renterToken}`,'x-tenant-id':scoped.tenantId}});
-      assert.equal(proofAccount.status,200,'renter payment history survives expiry');
-      await setState('');
-      console.log('PASS: identical renter payment proof succeeds with active entitlement; renter account read retained after expiry');
       const duplicateId = crypto.randomUUID();
       const beforeBulk = await writerSnapshot();
       const failedInsert = await platformCommand({action:'insert',table:'agreement_templates',payload:[
@@ -1773,6 +1758,20 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       const paidImport = await platformCommand({action:'insert',table:'agreement_templates',payload:[{name:'Permitted atomic import A'},{name:'Permitted atomic import B'}]});
       assert.equal(paidImport.status,200,JSON.stringify(await paidImport.json()));
       assert.equal((await writerSnapshot()).templates,beforeBulk.templates+2);
+      // The identical renter payment proof succeeds under the active entitlement,
+      // and the renter's account history remains readable after a later expiry.
+      const acceptedProof = await submitProof();
+      assert.equal(acceptedProof.status,201,JSON.stringify(await acceptedProof.clone().json()));
+      const proofRows = await proofPayments();
+      assert.equal(proofRows.length,1);assert.equal(proofRows[0].status,'pending');assert.equal(Number(proofRows[0].amount),100);
+      assert.equal(proofRows[0].proofurl,`/storage/invoices/${proofKey}`);
+      assert.equal(guid((await first(pool,'SELECT tenant_id FROM payments WHERE id=@id',{id:proofRows[0].id})).tenant_id),scoped.tenantId,
+        'Body tenantId override is ignored');
+      await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
+      const proofAccount = await fetch(`http://127.0.0.1:${server.address().port}/api/billing/invoices/${proofInvoice.id}/account`,{
+        headers:{Authorization:`Bearer ${renterToken}`,'x-tenant-id':scoped.tenantId}});
+      assert.equal(proofAccount.status,200,'renter payment history survives expiry');
+      console.log('PASS: identical renter payment proof succeeds with active entitlement; renter account read retained after expiry');
       await setState("UPDATE dbo.management_billing_accounts SET paid_through=DATEADD(SECOND,-1,SYSUTCDATETIME()) WHERE tenant_id=@tenantId");
       console.log('PASS: generic/import/RPC and direct repository management expiry, ignored caller overrides, atomic failed bulk insert/upsert and authorized bulk success');
       // Both reads and SaaS payment recovery remain outside these rental guards.
