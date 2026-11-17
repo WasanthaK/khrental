@@ -1653,7 +1653,9 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,'pending',N'Original disposable notes')`,scoped);
       const agreementRequest = (method, suffix, body) => fetch(`http://127.0.0.1:${server.address().port}/api/mssql/agreements${suffix}`,{
         method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
-        body:JSON.stringify({...body,tenant_id:unscoped.tenantId,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
+        // A body tenant_id is refused earlier as a cross-tenant override, so only
+        // the enforcement override is sent; it must be ignored.
+        body:JSON.stringify({...body,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
       for (const [label, send] of [
         ['agreement create',()=>agreementRequest('POST','',{renteeid:scoped.renteeId,propertyid:scoped.propertyId,status:'draft',notes:'Denied agreement'})],
         ['agreement update',()=>agreementRequest('PUT',`/${draftAgreement.id}`,{notes:'Denied agreement edit'})],
