@@ -3,6 +3,7 @@ import {isPlatformAdmin as defaultPlatformAdmin} from '../mssql/platformAdminRou
 import {storageUploadPolicy,requireTenantStorageAdmin} from '../storage/mutationPolicy.js';
 import {createCredentialThrottle} from '../auth/credentialThrottle.js';
 import { withManagementWrite } from '../managementBilling/store.js';
+import { assertAccessExpansionAllowed, genericAppUserWriteExpandsAccess } from '../managementBilling/accessAdministration.js';
 import { assertInventoryMutation } from '../managementBilling/contract.js';
 import { normalizePropertyRentalValues } from '../../utils/listingCategories.js';
 import { normalizePropertyCountry } from '../../utils/constants.js';
@@ -1139,7 +1140,9 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
               case 'upsert': return executeUpsert(options);
             }
           };
-          result = MANAGEMENT_TABLES.has(authorized.table)
+          // Access-expanding app_users writes share the management entitlement
+          // lock and commit boundary; narrowing/profile edits do not.
+          result = MANAGEMENT_TABLES.has(authorized.table) || genericAppUserWriteExpandsAccess(authorized)
             ? await withManagementWrite({tenantId: req.tenantId, action: mutate})
             : await mutate(null);
           break;
@@ -1301,6 +1304,8 @@ export const createPlatformRouter = ({getStorageDriver=defaultStorageDriver,chec
 
   router.post('/auth/invite', requireAuthenticated, requireAdmin, requireBusinessTenant, async (req, res, next) => {
     try {
+      // Shadowed by the canonical invitation router; guarded for defence in depth.
+      await assertAccessExpansionAllowed({ tenantId: req.tenantId });
       const { email, options = {} } = req.body || {};
       const requestedRole = String(options?.data?.role || 'rentee').trim().toLowerCase();
       const role = requestedRole === 'staff' ? 'staff' : 'rentee';

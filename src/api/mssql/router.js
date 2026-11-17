@@ -1,6 +1,7 @@
 import express from 'express';
 import { getMssqlConfigStatus, isMssqlConfigured } from './config.js';
 import { createTenantContextMiddleware, serializeTenantContext } from '../tenant/context.js';
+import { appUserUpdateExpandsAccess, assertAccessExpansionAllowed } from '../managementBilling/accessAdministration.js';
 import { isTenantRole, hasPermission, PERMISSIONS } from '../platform/permissionEngine.js';
 import {
   createAppUser,
@@ -93,7 +94,7 @@ const requireAgreementManager = (req, res, next) => {
   next();
 };
 
-export const createMssqlRouter = () => {
+export const createMssqlRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
   const router = express.Router();
   const requireAdmin = createTenantContextMiddleware({
     requireUser: true,
@@ -385,7 +386,11 @@ export const createMssqlRouter = () => {
     res.json({ data: user || null });
   }));
 
+  // Legacy Team-UI identity writers. Adding a user, linking a login or
+  // widening role/status/property access needs an active management
+  // entitlement; deletion and narrowing stay available after expiry.
   router.post('/app-users', asyncHandler(async (req, res) => {
+    await assertAccessExpansion({ tenantId: req.tenantId });
     const user = await createAppUser({ ...(req.body || {}), tenant_id: req.tenantId });
     res.status(201).json({ data: user });
   }));
@@ -413,6 +418,10 @@ export const createMssqlRouter = () => {
   }));
 
   router.put('/app-users/:id', asyncHandler(async (req, res) => {
+    const current = await getAppUserById(req.params.id, req.tenantId);
+    if (current && appUserUpdateExpandsAccess(current, req.body || {})) {
+      await assertAccessExpansion({ tenantId: req.tenantId });
+    }
     const user = await updateAppUser(req.params.id, { ...(req.body || {}), tenant_id: req.tenantId });
 
     if (!user) {
@@ -431,6 +440,7 @@ export const createMssqlRouter = () => {
       return;
     }
 
+    await assertAccessExpansion({ tenantId: req.tenantId });
     const user = await linkAuthUserToAppUser(req.params.id, authId, req.tenantId);
 
     if (!user) {

@@ -14,6 +14,7 @@ import {
   validateUserInvitation
 } from './invitations.js';
 import { normalizeInvitationEmail } from './invitationTokens.js';
+import { assertAccessExpansionAllowed } from '../managementBilling/accessAdministration.js';
 
 const buildAuthUser = (record) => ({
   id: record.authId,
@@ -48,7 +49,7 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-export const createInvitationRouter = ({sendInvitation=createInvitationDelivery()}={}) => {
+export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(),assertAccessExpansion=assertAccessExpansionAllowed}={}) => {
   const router = express.Router();
   const requireAdminTenant = createTenantContextMiddleware({
     requireUser: true,
@@ -102,6 +103,9 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
         return;
       }
 
+      // Expired organizations cannot invite. Redemption of an invitation that
+      // was already issued is identity/credential setup and is unchanged.
+      await assertAccessExpansion({ tenantId: req.tenantId });
       const target = await findAppUserByEmail(email);
       if (!target) {
         res.status(404).json({
@@ -141,6 +145,7 @@ export const createInvitationRouter = ({sendInvitation=createInvitationDelivery(
   router.post('/invitations', requireAdminTenant, requireAdmin, async (req, res, next) => {
     try {
       const appUserId = req.body?.appUserId || req.body?.app_user_id;
+      await assertAccessExpansion({ tenantId: req.tenantId });
       const invitation = await sendInvitation({
         tenantId: req.tenantId,
         appUserId,

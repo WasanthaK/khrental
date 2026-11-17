@@ -87,6 +87,12 @@ on:
       - 'migrations/**'
       - 'src/api/storage/authenticatedTenantRoute.js'
       - 'tests/evia-audit-http.test.js'
+      # Expired-organization access-administration policy and its writers.
+      - 'scripts/verify-access-administration-expiry-sqlserver.mjs'
+      - 'src/api/mssql/renteeRouter.js'
+      - 'src/api/mssql/teamMemberRouter.js'
+      - 'src/api/platform/propertyAssignmentsRouter.js'
+      - 'src/api/platform/router.js'
       - '.github/workflows/test-billing-two-tenant-sqlserver.yml'
   workflow_dispatch:
 

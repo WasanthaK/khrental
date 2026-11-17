@@ -8,6 +8,7 @@ import {
   listTenantTeamMembers,
   updateTenantTeamMember
 } from './teamMemberRepository.js';
+import { assertAccessExpansionAllowed, teamMemberUpdateExpandsAccess } from '../managementBilling/accessAdministration.js';
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -22,7 +23,7 @@ const requirePermission = (req, permission) => authorizePermission(
   permission
 );
 
-export const createTeamMemberRouter = () => {
+export const createTeamMemberRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
   const router = express.Router();
   const requireScopedTenant = createTenantContextMiddleware({
     requireUser: true,
@@ -52,6 +53,8 @@ export const createTeamMemberRouter = () => {
 
   router.post('/team-members', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.MEMBERSHIPS_MANAGE);
+    // Expired organizations cannot add or attach team members.
+    await assertAccessExpansion({ tenantId: req.tenantId });
     const result = await createOrAttachTenantTeamMember(req.tenantId, req.body || {});
     res.status(result.created ? 201 : 200).json({
       data: result.data,
@@ -65,6 +68,12 @@ export const createTeamMemberRouter = () => {
 
   router.put('/team-members/:id', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.MEMBERSHIPS_MANAGE);
+    // Demotion and deactivation stay available; wider permissions or
+    // reactivation need an active management entitlement.
+    const current = await getTenantTeamMemberById(req.tenantId, req.params.id);
+    if (current && teamMemberUpdateExpandsAccess(current, req.body || {})) {
+      await assertAccessExpansion({ tenantId: req.tenantId });
+    }
     const member = await updateTenantTeamMember(req.tenantId, req.params.id, req.body || {});
     if (!member) {
       res.status(404).json({ error: 'Team member not found in the active organization.', code: 'TEAM_MEMBER_NOT_FOUND' });

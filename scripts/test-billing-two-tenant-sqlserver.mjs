@@ -3741,6 +3741,11 @@ async function main() {
     // snapshot assertions, whose expected event counts remain unchanged.
     await verifyMonthlyManagementAccessAgainstDisposableSql(pool);
     await verifySecurityReviewSql(pool);
+    // Owner-approved expired-organization access-administration policy.
+    // Runs last on its own organizations; needs the billing schema above.
+    const { verifyAccessAdministrationExpiryAgainstDisposableSql } =
+      await import('./verify-access-administration-expiry-sqlserver.mjs');
+    await verifyAccessAdministrationExpiryAgainstDisposableSql({ pool, first, query });
 
     console.log('PASS: disposable two-tenant SQL Server invoice and account/receipt read isolation, verified-only outstanding balances, non-mutating browser interaction and lifecycle contracts');
   } finally {

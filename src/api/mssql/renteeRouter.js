@@ -4,6 +4,11 @@ import { authorizePermission } from '../platform/authorization.js';
 import { PERMISSIONS, hasPermission, isAdminRole } from '../platform/permissionEngine.js';
 import { getAppUserInvitationStatus } from './repositories.js';
 import {
+  activatesAccess,
+  assertAccessExpansionAllowed,
+  renteeUpdateExpandsAccess
+} from '../managementBilling/accessAdministration.js';
+import {
   createOrAttachTenantRentee,
   getTenantRenteeById,
   listTenantRentees,
@@ -41,8 +46,16 @@ const canReadRentee = (req, renteeId) => (
   || hasPermission({ user: req.user, membership: req.membership }, PERMISSIONS.RENTEES_READ)
 );
 
-export const createRenteeRouter = () => {
+export const createRenteeRouter = ({ assertAccessExpansion = assertAccessExpansionAllowed } = {}) => {
   const router = express.Router();
+  // Expired organizations keep renter reads and revocation, but cannot add
+  // renters, reactivate them or extend their property access.
+  const guardRenteeUpdate = async (req) => {
+    const current = await getTenantRenteeById(req.tenantId, req.params.id);
+    if (current && renteeUpdateExpandsAccess(current, req.body || {})) {
+      await assertAccessExpansion({ tenantId: req.tenantId });
+    }
+  };
   const requireScopedTenant = createTenantContextMiddleware({
     requireUser: true,
     requireTenant: true,
@@ -94,6 +107,7 @@ export const createRenteeRouter = () => {
 
   router.post('/rentees', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
+    await assertAccessExpansion({ tenantId: req.tenantId });
     const result = await createOrAttachTenantRentee(req.tenantId, req.body || {});
     res.status(result.created ? 201 : 200).json({
       data: result.data,
@@ -107,6 +121,7 @@ export const createRenteeRouter = () => {
 
   router.put('/rentees/:id', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
+    await guardRenteeUpdate(req);
     const rentee = await updateTenantRentee(req.tenantId, req.params.id, req.body || {});
     if (!rentee) {
       res.status(404).json({ error: 'Renter not found in the active organization.', code: 'RENTEE_NOT_FOUND' });
@@ -117,6 +132,10 @@ export const createRenteeRouter = () => {
 
   router.patch('/rentees/:id/membership-status', requireScopedTenant, asyncHandler(async (req, res) => {
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
+    const current = await getTenantRenteeById(req.tenantId, req.params.id);
+    if (current && activatesAccess(current.status, req.body?.status)) {
+      await assertAccessExpansion({ tenantId: req.tenantId });
+    }
     const result = await updateTenantRenteeMembershipStatus(
       req.tenantId,
       req.params.id,
@@ -169,6 +188,9 @@ export const createRenteeRouter = () => {
     }
 
     requirePermission(req, PERMISSIONS.RENTEES_MANAGE);
+    if (renteeUpdateExpandsAccess(rentee, req.body || {})) {
+      await assertAccessExpansion({ tenantId: req.tenantId });
+    }
     const updated = await updateTenantRentee(req.tenantId, req.params.id, req.body || {});
     res.json({ data: updated });
   }));
