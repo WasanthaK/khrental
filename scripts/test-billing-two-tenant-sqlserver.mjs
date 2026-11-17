@@ -1532,6 +1532,13 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         (SELECT COUNT(*) FROM agreement_templates WHERE tenant_id=@tenantId) AS templates,
         (SELECT STRING_AGG(name,'|') WITHIN GROUP (ORDER BY id) FROM agreement_templates WHERE tenant_id=@tenantId) AS template_names,
         (SELECT status FROM utility_readings WHERE id=@readingId) AS reading_status,
+        (SELECT status FROM invoices WHERE id=@invoiceId) AS invoice_status,
+        (SELECT COUNT(*) FROM dbo.invoice_payment_references WHERE tenant_id=@tenantId) AS payment_references,
+        (SELECT STRING_AGG(CONCAT(CONVERT(NVARCHAR(36),id),':',status,':',COALESCE(void_reason,N'')),'|') WITHIN GROUP (ORDER BY id)
+          FROM tenancy_billing_adjustments WHERE tenant_id=@tenantId) AS adjustment_states,
+        (SELECT STRING_AGG(CONCAT(CONVERT(NVARCHAR(36),id),':',COALESCE(status,N''),':',COALESCE(signature_status,N''),':',
+            COALESCE(notes,N''),':',CONVERT(NVARCHAR(40),updatedat,127)),'|') WITHIN GROUP (ORDER BY id)
+          FROM agreements WHERE tenant_id=@tenantId) AS agreement_states,
         (SELECT COUNT(*) FROM billing_lifecycle_events WHERE tenant_id=@tenantId) AS events`,
         {...scoped,invoiceId:invoice.id});
       const deniedCommand = async (suffix, method, body) => {
@@ -1557,6 +1564,22 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       await deniedCommand(`${invoicePath}/manual-payment`,'POST',{amount:10,paymentMethod:'cash'});
       await deniedCommand(`${invoicePath}/reminder`,'POST',{});
       await deniedCommand(`${invoicePath}/send-reminder`,'POST',{});
+      // Remaining enforced invoice writers. Each request is otherwise valid for
+      // an issued invoice, so the 403 proves the entitlement guard ran first:
+      // no delivery event, email, payment reference or audit row is written.
+      await deniedCommand(`${invoicePath}/retry-delivery`,'POST',{});
+      await deniedCommand(`${invoicePath}/resend`,'POST',{confirmation:'RESEND-ISSUED-INVOICE',resendRequestId:crypto.randomUUID()});
+      await deniedCommand(`${invoicePath}/supplement-reference`,'POST',{
+        confirmation:'ASSIGN-LEGACY-INVOICE-REFERENCE',reason:'Disposable expired-access denial check'});
+      // An approved, uninvoiced adjustment in a far-future period that no
+      // monthly run in this script reaches; removed directly after the check.
+      const voidable = await first(pool,`INSERT tenancy_billing_adjustments
+        (tenant_id,agreement_id,billing_period,component_type,description,amount,created_by,approved_by)
+        OUTPUT INSERTED.id VALUES(@tenantId,@agreementId,'2099-12','other','Disposable void denial',10,@adminId,@adminId)`,
+        {...scoped,adminId:admin.id});
+      await deniedCommand(`billing-adjustments/${voidable.id}/void`,'POST',{reason:'Denied void must not persist'});
+      await query(pool,'DELETE FROM tenancy_billing_adjustments WHERE id=@id',{id:voidable.id});
+      console.log('PASS: expired management denies invoice delivery retry, resend, legacy reference supplementation and adjustment void without events, email or references');
       const maintenance = await first(pool, `INSERT INTO maintenance_requests(tenant_id,propertyid,title,description,status,assignedto)
         OUTPUT INSERTED.id VALUES(@tenantId,@propertyId,'Disposable access check','Enforcement fixture','pending',@adminId)`,
         {...scoped,adminId:admin.id});
@@ -1607,7 +1630,13 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         [`utility-reviews/readings/${scoped.readingId}/reject`,'POST',{reason:'Denied utility review'}],
         [`utility-reviews/readings/${scoped.readingId}/value`,'PUT',{previousReading:0,currentReading:1,expectedPreviousReading:null,expectedCurrentReading:null}],
         [`properties/${scoped.propertyId}/fixed-utilities`,'PUT',{configs:[]}],
-        ['invoice-master/issuer','PUT',{legalName:'Disposable issuer',postalAddress:'Fixture address',supportEmail:'fixture@example.invalid',supportPhone:'',website:''}]
+        ['invoice-master/issuer','PUT',{legalName:'Disposable issuer',postalAddress:'Fixture address',supportEmail:'fixture@example.invalid',supportPhone:'',website:''}],
+        // The disposable schema omits the invoice-master columns, so these
+        // prove the guard denies before any lock or column access (an
+        // unguarded writer would fail with a schema 500, not 403).
+        [`invoice-master/properties/${scoped.propertyId}/billing`,'PUT',{beneficiaryName:'Denied beneficiary',
+          billingContactName:'',billingContactEmail:'',billingContactPhone:'',parties:{}}],
+        [`invoice-master/properties/${scoped.propertyId}/units/${crypto.randomUUID()}/billing`,'PUT',{beneficiaryName:'Denied unit beneficiary'}]
       ]) {
         const before = await writerSnapshot();
         const response = await fetch(`http://127.0.0.1:${server.address().port}/api/${path}`,{
@@ -1617,6 +1646,29 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         assert.equal(data.code,'MANAGEMENT_READ_ONLY');
         assert.deepEqual(await writerSnapshot(),before,'Dedicated utility/master writer cannot bypass expiry');
       }
+      // Agreement create/update/manual-sign over the production MSSQL router
+      // and the generic status RPC. The draft fixture and payloads pass the
+      // relationship and signing-provenance checks, so only expiry can deny.
+      const draftAgreement = await first(pool,`INSERT agreements(tenant_id,renteeid,propertyid,status,notes)
+        OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,'pending',N'Original disposable notes')`,scoped);
+      const agreementRequest = (method, suffix, body) => fetch(`http://127.0.0.1:${server.address().port}/api/mssql/agreements${suffix}`,{
+        method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
+        body:JSON.stringify({...body,tenant_id:unscoped.tenantId,MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false})});
+      for (const [label, send] of [
+        ['agreement create',()=>agreementRequest('POST','',{renteeid:scoped.renteeId,propertyid:scoped.propertyId,status:'draft',notes:'Denied agreement'})],
+        ['agreement update',()=>agreementRequest('PUT',`/${draftAgreement.id}`,{notes:'Denied agreement edit'})],
+        ['manual agreement signing',()=>agreementRequest('POST',`/${draftAgreement.id}/sign`,{})],
+        ['generic agreement status RPC',()=>platformCommand({agreement_id:draftAgreement.id,new_status:'review'},'update_agreement_status')]
+      ]) {
+        const before = await writerSnapshot();
+        const response = await send();
+        const data = await response.json();
+        assert.equal(response.status,403,JSON.stringify({label,data}));
+        assert.equal(data.code,'MANAGEMENT_READ_ONLY',label);
+        assert.deepEqual(await writerSnapshot(),before,`${label} cannot bypass management expiry`);
+      }
+      await query(pool,'DELETE FROM agreements WHERE id=@id',{id:draftAgreement.id});
+      console.log('PASS: expired management denies agreement create/update/manual-sign HTTP and status RPC, plus invoice-master property/unit billing, without writes');
       const repository = await import('../src/api/mssql/repositories.js');
       const deletionCandidate = await first(pool,`INSERT agreements(tenant_id,renteeid,propertyid,status)
         OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,'cancelled')`,scoped);
