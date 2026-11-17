@@ -80,6 +80,10 @@ const mapTeamRow = (row) => {
   mapped.invited = Boolean(mapped.invited);
   mapped.status ||= 'active';
   mapped.active = mapped.active === undefined ? mapped.status === 'active' : Boolean(mapped.active);
+  // A scoped readback can return a deactivated membership; report it truthfully.
+  if (mapped.tenant_membership_status && normalizeValue(mapped.tenant_membership_status) !== 'active') {
+    mapped.active = false;
+  }
   mapped.directory_role = 'staff';
   mapped.permission_bundle = mapped.tenant_membership_permission_bundle
     || mapped.permission_bundle
@@ -97,7 +101,7 @@ const getTenantMembership = async (tenantId, appUserId) => runSingleQuery(
   { tenantId, appUserId }
 );
 
-export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250 } = {}) => {
+export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250, includeInactive = false } = {}) => {
   const safePageSize = Math.min(Math.max(Number(pageSize) || 250, 1), 500);
   const params = { tenantId };
   const searchClause = search
@@ -125,7 +129,7 @@ export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250 }
      WHERE (
        (
          tm_link.id IS NOT NULL
-         AND LOWER(COALESCE(tm_link.status, 'active')) = 'active'
+         ${includeInactive ? '' : "AND LOWER(COALESCE(tm_link.status, 'active')) = 'active'"}
          AND LOWER(COALESCE(tm_link.role, '')) = 'staff'
        )
        OR (
@@ -145,6 +149,14 @@ export const listTenantTeamMembers = async (tenantId, { search, pageSize = 250 }
 
 export const getTenantTeamMemberById = async (tenantId, appUserId) => {
   const rows = await listTenantTeamMembers(tenantId, { pageSize: 500 });
+  return rows.find((row) => String(row.id).toLowerCase() === String(appUserId).toLowerCase()) || null;
+};
+
+// Organization-scoped readback that can also see an inactive staff membership,
+// so a successful deactivation can be reported truthfully. It is not the team
+// directory and never makes an inactive member editable or active again.
+const getTenantTeamMemberRecord = async (tenantId, appUserId) => {
+  const rows = await listTenantTeamMembers(tenantId, { pageSize: 500, includeInactive: true });
   return rows.find((row) => String(row.id).toLowerCase() === String(appUserId).toLowerCase()) || null;
 };
 
@@ -220,7 +232,17 @@ export const createOrAttachTenantTeamMember = async (tenantId, payload = {}) => 
 
 export const updateTenantTeamMember = async (tenantId, appUserId, payload = {}) => {
   const current = await getTenantTeamMemberById(tenantId, appUserId);
-  if (!current) {return null;}
+  if (!current) {
+    // Repeating the same revocation of an already inactive member is a
+    // truthful no-op. Every other change to an inactive member stays
+    // unavailable here, so this path can never reopen access.
+    const requested = normalizeValue(payload.membership_status);
+    const record = requested && requested !== 'active' ? await getTenantTeamMemberRecord(tenantId, appUserId) : null;
+    return record && normalizeValue(record.tenant_membership_status) === requested ? record : null;
+  }
+
+  // Validate before any write so a rejected request leaves no partial change.
+  const bundle = normalizeBundle(payload, current.permission_bundle || current.role);
 
   // Full forms can repeat unchanged profile fields while changing only the
   // organization membership. Never write even those fields across workspaces.
@@ -237,7 +259,6 @@ export const updateTenantTeamMember = async (tenantId, appUserId, payload = {}) 
 
   const membership = await getTenantMembership(tenantId, appUserId);
   if (membership) {
-    const bundle = normalizeBundle(payload, current.permission_bundle || current.role);
     await updateCanonicalTenantMembership(tenantId, membership.id, {
       role: 'staff',
       permission_bundle: bundle,
@@ -246,5 +267,5 @@ export const updateTenantTeamMember = async (tenantId, appUserId, payload = {}) 
     });
   }
 
-  return getTenantTeamMemberById(tenantId, appUserId);
+  return getTenantTeamMemberRecord(tenantId, appUserId);
 };
