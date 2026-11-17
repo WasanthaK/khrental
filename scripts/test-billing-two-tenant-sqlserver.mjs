@@ -1745,6 +1745,46 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
       assert.equal(allowedDeletion.status,200,JSON.stringify(await allowedDeletion.json()));
       assert.equal(await first(pool,'SELECT id FROM agreements WHERE id=@id',{id:deletionCandidate.id}),null,
         'Only the dedicated unsigned disposable agreement was removed after renewed management authority');
+      // Tenant-boundary rejections are structured 4xx, not 500. Management
+      // is active here, so only the boundary can deny; replies must not echo
+      // the other organization's identifiers and nothing may be written.
+      const mssqlRequest = async (method, suffix, body) => {
+        const response = await fetch(`http://127.0.0.1:${server.address().port}/api/mssql${suffix}`,{
+          method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`,'x-tenant-id':scoped.tenantId},
+          body:JSON.stringify(body)});
+        return {status:response.status,text:await response.text()};
+      };
+      const boundaryDraft = await first(pool,`INSERT agreements(tenant_id,renteeid,propertyid,status,notes)
+        OUTPUT INSERTED.id VALUES(@tenantId,@renteeId,@propertyId,'draft',N'Boundary fixture')`,scoped);
+      const foreignIds = new RegExp([unscoped.tenantId,unscoped.propertyId,unscoped.renteeId].join('|'),'i');
+      for (const [label, method, suffix, body, status, code] of [
+        // The original PR #692 failing request: agreement create naming another organization.
+        ['agreement create with foreign tenant_id','POST','/agreements',
+          {renteeid:scoped.renteeId,propertyid:scoped.propertyId,status:'draft',tenant_id:unscoped.tenantId},403,'TENANT_OVERRIDE_BLOCKED'],
+        ['agreement template create with foreign tenant_id','POST','/agreement-templates',
+          {name:'Foreign tenant template',tenant_id:unscoped.tenantId},403,'TENANT_OVERRIDE_BLOCKED'],
+        ['agreement create referencing a foreign property','POST','/agreements',
+          {renteeid:scoped.renteeId,propertyid:unscoped.propertyId,status:'draft'},400,'TENANT_RELATIONSHIP_INVALID'],
+        ['agreement create referencing a foreign renter','POST','/agreements',
+          {renteeid:unscoped.renteeId,propertyid:scoped.propertyId,status:'draft'},400,'TENANT_RELATIONSHIP_INVALID'],
+        ['agreement update referencing a foreign property','PUT',`/agreements/${boundaryDraft.id}`,
+          {propertyid:unscoped.propertyId},400,'TENANT_RELATIONSHIP_INVALID'],
+        ['agreement create referencing a missing template','POST','/agreements',
+          {renteeid:scoped.renteeId,propertyid:scoped.propertyId,templateid:crypto.randomUUID(),status:'draft'},400,'TENANT_RELATIONSHIP_INVALID']
+      ]) {
+        const before = await writerSnapshot();
+        const reply = await mssqlRequest(method,suffix,body);
+        assert.equal(reply.status,status,`${label}: ${reply.text}`);
+        assert.equal(JSON.parse(reply.text).code,code,label);
+        assert.doesNotMatch(reply.text,foreignIds,`${label} must not disclose another organization's identifiers`);
+        assert.deepEqual(await writerSnapshot(),before,`${label} writes nothing`);
+      }
+      // The same organization's own id in another letter case is not foreign.
+      const ownCase = await mssqlRequest('POST','/agreement-templates',{name:'Own tenant case template',tenant_id:scoped.tenantId.toUpperCase()});
+      assert.equal(ownCase.status,201,ownCase.text);
+      await query(pool,'DELETE FROM agreement_templates WHERE tenant_id=@tenantId AND name=N\'Own tenant case template\'',scoped);
+      await query(pool,'DELETE FROM agreements WHERE id=@id',{id:boundaryDraft.id});
+      console.log('PASS: cross-organization payload and relationship rejections are structured 403/400 without disclosure or writes; own-tenant id case-insensitive');
       const duplicateId = crypto.randomUUID();
       const beforeBulk = await writerSnapshot();
       const failedInsert = await platformCommand({action:'insert',table:'agreement_templates',payload:[

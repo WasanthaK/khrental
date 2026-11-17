@@ -4,6 +4,7 @@ import { paginateQuery, runQuery, runSingleQuery } from './query.js';
 import { getMssqlPool, sql } from './pool.js';
 import { evaluateManualSigning } from '../../utils/manualAgreementSigning.js';
 import { assertGenericAgreementWriteSafe, shouldApplyGenericAgreementChange, normalizeAgreementPayload } from './agreementWritePolicy.js';
+import { mergeTenantPayload, tenantRelationshipError } from './tenantPayloadScope.js';
 
 const DEFAULT_PAGE_SIZE = 50;
 const TABLE_COLUMN_CACHE = new Map();
@@ -646,19 +647,6 @@ const applyTenantFilter = ({ filters, params, tenantId, column = 'tenant_id' }) 
   params.tenantId = assertTenantId(tenantId);
 };
 
-const mergeTenantPayload = (payload = {}, tenantId) => {
-  const scopedTenantId = assertTenantId(tenantId);
-
-  if (payload.tenant_id && payload.tenant_id !== scopedTenantId) {
-    throw new Error('Cross-tenant payload override is not allowed');
-  }
-
-  return {
-    ...payload,
-    tenant_id: scopedTenantId
-  };
-};
-
 const ensureTenantScopedEntity = async ({ table, id, tenantId, label = table }) => {
   if (!id) {
     return null;
@@ -673,7 +661,7 @@ const ensureTenantScopedEntity = async ({ table, id, tenantId, label = table }) 
   );
 
   if (!row) {
-    throw new Error(`${label} does not belong to the active tenant`);
+    throw tenantRelationshipError(label);
   }
 
   return row;
