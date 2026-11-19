@@ -260,9 +260,11 @@ test('renter agreement UI allows a per-property billing day from 5 through 28', 
   assert.match(renteeAgreementsSource, /Array\.from\(\{ length: 24 \}/);
 });
 
-test('production automatic billing earliest check is day five', () => {
-  assert.match(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=5/);
-  assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=1/);
+test('production deploy preserves existing occupant invoice scheduler configuration', () => {
+  assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_ENABLED=/);
+  assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=/);
+  assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DUE_DAYS=/);
+  assert.match(monthlyBillingSchedulerSource, /const DEFAULT_BILLING_DAY = 5/);
 });
 
 test('property fixed utility migration adds property scope and uniqueness', () => {
