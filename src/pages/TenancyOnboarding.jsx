@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import {
   activateTenancy,
+  updateOwnerBillingSchedule,
   getTenancyOnboarding,
   initializeMoveInChecklist,
   recordManualAgreementSignature,
@@ -49,6 +50,20 @@ const TenancyOnboarding = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  const saveBillingSchedule = async event => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setWorking(true);
+    const result = await updateOwnerBillingSchedule(id, Number(form.get('billingDay')), Number(form.get('paymentDueDay')));
+    if (result.error) {
+      toast.error(result.error.message || 'Billing dates could not be saved');
+    } else {
+      toast.success('Billing dates saved');
+      await load();
+    }
+    setWorking(false);
+  };
 
   const handleResendInvitation = async () => {
     if (!data?.rentee?.id) {return;}
@@ -131,7 +146,7 @@ const TenancyOnboarding = () => {
       toast.error(Array.isArray(reasons) && reasons.length > 0 ? reasons.join(' ') : result.error.message || 'Tenancy could not be activated');
     } else {
       toast.success('Tenancy activated');
-      setData(result.data);
+      await load();
     }
     setWorking(false);
   };
@@ -173,6 +188,25 @@ const TenancyOnboarding = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {isActive && data.canSetBillingSchedule && (
+            <form onSubmit={saveBillingSchedule} className="space-y-3 rounded-lg bg-white p-5 shadow">
+              <h2 className="text-lg font-semibold">Monthly rent billing dates</h2>
+              <p>{data.billingSchedule?.billingDay ? 'Changes apply to future invoice drafts.' :
+                'Automatic invoices are paused until you confirm both dates.'}</p>
+              <div className="flex flex-wrap gap-4">
+                <label>Invoice day of month
+                  <input className="block rounded border p-2" type="number" name="billingDay" min="1" max="31"
+                    required defaultValue={data.billingSchedule?.billingDay ?? ''} />
+                </label>
+                <label>Payment due day of month
+                  <input className="block rounded border p-2" type="number" name="paymentDueDay" min="1" max="31"
+                    required defaultValue={data.billingSchedule?.paymentDueDay ?? ''} />
+                </label>
+              </div>
+              <p className="text-sm text-gray-600">An earlier due day falls in the following month. Short months use their last day.</p>
+              <button disabled={working} className="rounded bg-blue-700 px-4 py-2 text-white">Confirm billing dates</button>
+            </form>
+          )}
           <section className="bg-white rounded-lg shadow p-5">
             <div className="flex items-center justify-between mb-4">
               <div>

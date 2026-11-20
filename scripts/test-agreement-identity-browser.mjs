@@ -105,6 +105,9 @@ try {
     await click(page, 'Review and send');
     assert.equal(counts.contexts, 0, 'Invalid form cannot save or open signing');
     const selects = await page.$$('select'); await selects[0].select('template'); await selects[1].select('property'); await selects[3].select('renter-global');
+    const dueDay = '#agreement-payment-due-day';
+    assert.equal(await page.$eval(dueDay, input => input.value), '', 'Owner chooses the payment due day');
+    await page.type(dueDay, '19');
     await page.waitForFunction(() => document.querySelector('form').checkValidity());
     await page.waitForFunction(()=>!document.querySelector('button[value="pending"]').disabled);
     await page.select('#agreement-template','slow-template');

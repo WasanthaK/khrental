@@ -65,7 +65,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
     terms: {
       monthlyRent: '',
       depositAmount: '',
-      paymentDueDay: '5',
+      paymentDueDay: '',
       noticePeriod: '30',
       specialConditions: ''
     }
@@ -104,7 +104,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
 
       // Extract property terms data
       const propertyTerms = property.terms || {};
-      const paymentDueDay = propertyTerms.paymentDueDay || '5';
+      const paymentDueDay = propertyTerms.paymentDueDay || '';
       const noticePeriod = propertyTerms.noticePeriod || '30';
       const specialConditions = propertyTerms.specialConditions || '';
 
@@ -214,7 +214,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
             parsedTerms = {
               monthlyRent: '',
               depositAmount: '',
-              paymentDueDay: '5',
+              paymentDueDay: '',
               noticePeriod: '30',
               specialConditions: ''
             };
@@ -227,7 +227,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
           parsedTerms = {
             monthlyRent: '',
             depositAmount: '',
-            paymentDueDay: '5',
+            paymentDueDay: '',
             noticePeriod: '30',
             specialConditions: ''
           };
@@ -476,7 +476,7 @@ export const AgreementFormProvider = ({ children, agreementId }) => {
           // Override with unit-specific values - ensure these values always get set
           monthlyRent,
           depositAmount,
-          paymentDueDay: propertyTerms.paymentDueDay || '5',
+          paymentDueDay: propertyTerms.paymentDueDay || '',
           noticePeriod: propertyTerms.noticePeriod || '30',
           specialConditions: unitRentalValues.specialConditions || propertyTerms.specialConditions || '',
           // Add any unit-specific terms

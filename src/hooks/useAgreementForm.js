@@ -54,7 +54,7 @@ const normalizeInitialData = (initialData) => {
       terms: {
         monthlyRent: '',
         depositAmount: '',
-        paymentDueDay: '5',
+        paymentDueDay: '',
         noticePeriod: '30',
         additionalTerms: '',
         startDate: today(),
@@ -71,7 +71,7 @@ const normalizeInitialData = (initialData) => {
       ...terms,
       monthlyRent: firstNonEmpty(terms.monthlyRent, initialData.rentamount, ''),
       depositAmount: firstNonEmpty(terms.depositAmount, initialData.depositamount, ''),
-      paymentDueDay: firstNonEmpty(terms.paymentDueDay, '5'),
+      paymentDueDay: firstNonEmpty(terms.paymentDueDay),
       noticePeriod: firstNonEmpty(terms.noticePeriod, '30'),
       additionalTerms: firstNonEmpty(terms.additionalTerms, terms.specialConditions, ''),
       startDate: dateOnly(firstNonEmpty(terms.startDate, initialData.startdate), today()),
@@ -261,7 +261,7 @@ export const useAgreementForm = (initialData = null) => {
           ...current.terms,
           monthlyRent: firstNonEmpty(unitRental.monthlyRent, unitRental.rent, unitRental.baseRent, propertyRental.monthlyRent, propertyRental.rent, propertyRental.baseRent, current.terms?.monthlyRent, ''),
           depositAmount: firstNonEmpty(unitRental.depositAmount, unitRental.deposit, propertyRental.depositAmount, propertyRental.deposit, current.terms?.depositAmount, ''),
-          paymentDueDay: firstNonEmpty(propertyTerms.paymentDueDay, current.terms?.paymentDueDay, '5'),
+          paymentDueDay: firstNonEmpty(propertyTerms.paymentDueDay, current.terms?.paymentDueDay),
           noticePeriod: firstNonEmpty(propertyTerms.noticePeriod, current.terms?.noticePeriod, '30')
         }
       }));
@@ -324,7 +324,7 @@ export const useAgreementForm = (initialData = null) => {
           ...current.terms,
           monthlyRent: firstNonEmpty(rentalValues.monthlyRent, rentalValues.rent, rentalValues.baseRent, current.terms?.monthlyRent, ''),
           depositAmount: firstNonEmpty(rentalValues.depositAmount, rentalValues.deposit, current.terms?.depositAmount, ''),
-          paymentDueDay: firstNonEmpty(propertyTerms.paymentDueDay, current.terms?.paymentDueDay, '5'),
+          paymentDueDay: firstNonEmpty(propertyTerms.paymentDueDay, current.terms?.paymentDueDay),
           noticePeriod: firstNonEmpty(propertyTerms.noticePeriod, current.terms?.noticePeriod, '30')
         }
       }));

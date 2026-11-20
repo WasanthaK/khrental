@@ -3,7 +3,7 @@ import { assertManagementWrite } from '../managementBilling/store.js';
 import {
   agreementOverlapsBillingPeriod,
   calculateProratedMonthlyRent,
-  resolveAgreementBillingDay,
+  ownerBillingDates, ownerScheduleQuery, readOwnerSchedule,
   resolveAgreementMonthlyRent
 } from './billingLifecycle.js';
 import {
@@ -64,7 +64,7 @@ export const generateMonthlyInvoicesForTenant = async ({
   actorUserId = null,
   notes = null,
   source = 'manual',
-  automaticRunDate = null,
+  automaticRunDate = source === 'automatic_scheduler' ? new Date() : null,
   authorizeProperty = () => {}
 } = {}) => {
   if (!tenantId) {
@@ -98,10 +98,9 @@ export const generateMonthlyInvoicesForTenant = async ({
     try {
       await authorizeProperty(agreement.propertyid, agreement);
 
-      if (automaticRunDate) {
+      if (source === 'automatic_scheduler' || automaticRunDate) {
         const runDate = automaticRunDate instanceof Date ? automaticRunDate : new Date(automaticRunDate);
         const agreementStart = agreement.startdate ? new Date(agreement.startdate) : null;
-        const billingDay = resolveAgreementBillingDay(agreement);
 
         if (
           Number.isNaN(runDate.getTime())
@@ -110,18 +109,7 @@ export const generateMonthlyInvoicesForTenant = async ({
           results.skipped.push({
             agreementId: agreement.id,
             propertyId: agreement.propertyid,
-            reason: 'before_tenancy_start',
-            billingDay
-          });
-          continue;
-        }
-
-        if (runDate.getUTCDate() < billingDay) {
-          results.skipped.push({
-            agreementId: agreement.id,
-            propertyId: agreement.propertyid,
-            reason: 'before_tenancy_billing_day',
-            billingDay
+            reason: 'before_tenancy_start'
           });
           continue;
         }
@@ -145,6 +133,19 @@ export const generateMonthlyInvoicesForTenant = async ({
       await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
       try {
         await assertManagementWrite({tenantId, transaction});
+
+        let invoiceDueDate = dueDate;
+        if (source === 'automatic_scheduler' || automaticRunDate) {
+          const row = await singleTransaction(transaction, ownerScheduleQuery, {tenantId, agreementId: agreement.id});
+          const dates = ownerBillingDates(start, readOwnerSchedule(row));
+          if (!dates || new Date(automaticRunDate) < dates.generation) {
+            await transaction.rollback();
+            results.skipped.push({agreementId: agreement.id, propertyId: agreement.propertyid,
+              reason: dates ? 'before_tenancy_billing_day' : 'owner_billing_schedule_required'});
+            continue;
+          }
+          invoiceDueDate = dates.due.toISOString();
+        }
 
         const existing = await singleTransaction(
           transaction,
@@ -344,7 +345,7 @@ export const generateMonthlyInvoicesForTenant = async ({
             billingPeriod: normalizedBillingPeriod,
             components: JSON.stringify(legacyComponents),
             totalAmount,
-            dueDate,
+            dueDate: invoiceDueDate,
             issuedBy: actorUserId,
             notes
           }

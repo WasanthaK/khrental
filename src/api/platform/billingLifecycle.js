@@ -40,32 +40,31 @@ export const resolveAgreementMonthlyRent = (agreement = {}) => {
   return contractualRent > 0 ? contractualRent : 0;
 };
 
-export const DEFAULT_TENANCY_BILLING_DAY = 5;
-export const MIN_TENANCY_BILLING_DAY = 5;
-export const MAX_TENANCY_BILLING_DAY = 28;
+export const isBillingCalendarDay = day => Number.isInteger(day) && day >= 1 && day <= 31;
 
-export const normalizeTenancyBillingDay = (
-  value,
-  fallback = DEFAULT_TENANCY_BILLING_DAY
-) => {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  if (
-    Number.isInteger(parsed)
-    && parsed >= MIN_TENANCY_BILLING_DAY
-    && parsed <= MAX_TENANCY_BILLING_DAY
-  ) {
-    return parsed;
+export const ownerBillingDates = (periodStart, schedule) => {
+  if (!isBillingCalendarDay(schedule?.billingDay) || !isBillingCalendarDay(schedule?.paymentDueDay)) {
+    return null;
   }
-  return fallback;
+  const start = new Date(periodStart);
+  const year = start.getUTCFullYear();
+  const month = start.getUTCMonth();
+  const calendarDate = (m, day) => {
+    const lastDay = new Date(Date.UTC(year, m + 1, 0)).getUTCDate();
+    return new Date(Date.UTC(year, m, Math.min(day, lastDay)));
+  };
+  return {
+    generation: calendarDate(month, schedule.billingDay),
+    due: calendarDate(month + Number(schedule.paymentDueDay < schedule.billingDay), schedule.paymentDueDay)
+  };
 };
 
-export const resolveAgreementBillingDay = (agreement = {}) => {
-  const terms = parseAgreementTerms(agreement.terms);
-  return normalizeTenancyBillingDay(
-    terms.billingDay ?? terms.billingday,
-    DEFAULT_TENANCY_BILLING_DAY
-  );
-};
+// Only the dedicated owner confirmation event authorizes future automatic drafts.
+export const ownerScheduleQuery = `SELECT TOP 1 metadata FROM dbo.tenancy_lifecycle_events
+  WHERE tenant_id=@tenantId AND agreement_id=@agreementId AND event_type='owner_billing_schedule'
+  ORDER BY createdat DESC, id DESC`;
+
+export const readOwnerSchedule = row => parseAgreementTerms(row?.metadata);
 
 const utcDayStart = (value) => {
   const date = toDate(value);

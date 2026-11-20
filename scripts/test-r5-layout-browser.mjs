@@ -17,7 +17,7 @@ createRoot(document.getElementById('root')).render(<BrowserRouter><Routes><Route
 const modules={
   eviaSignServiceLegacy:`export {};`,
   requestContext:`export const buildRequestContextHeaders=(headers={})=>({...headers,Authorization:'Bearer fixture-quixo-session','x-tenant-id':'fixture-tenant'});`,
-  platformClient:`const model=${JSON.stringify(model)};export const platform={from:()=>({select:()=>({eq:()=>({single:async()=>({data:{property:{name:'Demo home'},rentee:{name:'Demo renter'},terms:{monthlyRent:125000,depositAmount:125000}}})})})})};export const getTenancyOnboarding=async()=>{const currency=new URLSearchParams(location.search).get('currency')||'LKR';return {data:{...model,agreement:{...model.agreement,terms:currency==='missing'?{}:currency==='malformed'?'{broken':JSON.stringify({currency})}}};};export const initializeMoveInChecklist=async()=>({error:{message:'Add required items to the property checklist.'}});export const activateTenancy=async()=>{throw Error('Must stay blocked')};export const recordManualAgreementSignature=async()=>{throw Error('No signatures')};export const recordTenancyDeposit=async()=>{throw Error('No funds')};export const updateMoveInChecklistItem=async()=>{throw Error('No inspection')};`,
+  platformClient:`const model=${JSON.stringify(model)};let schedule={};export const updateOwnerBillingSchedule=async(id,billingDay,paymentDueDay)=>{schedule={billingDay,paymentDueDay};return {data:schedule}};export const platform={from:()=>({select:()=>({eq:()=>({single:async()=>({data:{property:{name:'Demo home'},rentee:{name:'Demo renter'},terms:{monthlyRent:125000,depositAmount:125000}}})})})})};export const getTenancyOnboarding=async()=>{const currency=new URLSearchParams(location.search).get('currency')||'LKR';const owner=new URLSearchParams(location.search).has('owner');return {data:{...model,canSetBillingSchedule:owner,billingSchedule:schedule,agreement:{...model.agreement,status:owner?'active':model.agreement.status,terms:currency==='missing'?{}:currency==='malformed'?'{broken':JSON.stringify({currency})}}};};export const initializeMoveInChecklist=async()=>({error:{message:'Add required items to the property checklist.'}});export const activateTenancy=async()=>{throw Error('Must stay blocked')};export const recordManualAgreementSignature=async()=>{throw Error('No signatures')};export const recordTenancyDeposit=async()=>{throw Error('No funds')};export const updateMoveInChecklistItem=async()=>{throw Error('No inspection')};`,
   fileService:`export const STORAGE_BUCKETS={FILES:'files'};export const BUCKET_FOLDERS={files:{AGREEMENTS:'agreements'}};`,
   storageApiService:`export const uploadTenantFile=async({file,path})=>{window.fixturePdf=btoa(String.fromCharCode(...new Uint8Array(await file.arrayBuffer())));return {path,url:'fixture.pdf'};};export const buildStorageUrl=()=>'';export const downloadTenantFile=()=>{};export const listTenantFiles=()=>{};`,
   tenancyExitService:`const noWrite=async()=>{throw Error('Read-only fixture')};export const addTenancySettlementItem=noWrite,approveTenancySettlement=noWrite,closeTenancy=noWrite,completeMoveOutInspection=noWrite,createRenewalDraft=noWrite,createTenancyNotice=noWrite,initializeMoveOutInspection=noWrite,reviewTenancySettlementItem=noWrite,settleTenancy=noWrite,updateMoveOutInspectionItem=noWrite;export const getTenancyExit=async()=>{const currency=new URLSearchParams(location.search).get('currency')||'LKR';return {data:{agreement:{id:'fixture',status:'closed',terms:currency==='missing'?{}:currency==='malformed'?'{broken':{currency}},notices:[],inspection:{status:'completed',items:[]},settlement:{status:'settled',deposit_received:125000,approved_deductions:1000,outstanding_invoices:2500,refund_amount:121500,amount_due:0,items:[{id:'deduction',description:'Synthetic deduction',item_type:'damage',amount:1000,status:'approved'}]}}};};`,
@@ -55,6 +55,21 @@ try {
   });
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`${origin}/dashboard/agreements/fixture/onboarding`,{waitUntil:'networkidle0'});
+  const ownerPage = await browser.newPage();
+  await ownerPage.goto(`${origin}/dashboard/agreements/fixture/onboarding?owner`);
+  const invoiceDay = 'input[name="billingDay"]';
+  const dueDay = 'input[name="paymentDueDay"]';
+  await ownerPage.waitForSelector(invoiceDay);
+  for (const field of [invoiceDay, dueDay]) {
+    assert.equal(await ownerPage.$eval(field, input => input.value), '');
+  }
+  await ownerPage.type(invoiceDay, '9');
+  assert.equal(await ownerPage.$eval(dueDay, input => input.form.checkValidity()), false);
+  await ownerPage.type(dueDay, '22');
+  await ownerPage.$eval(dueDay, input => input.form.requestSubmit());
+  await ownerPage.waitForFunction(() => document.body.innerText.includes('Changes apply to future invoice drafts.'));
+  assert.equal(await ownerPage.$eval(dueDay, input => input.value), '22');
+  await ownerPage.close();
   const result=await page.evaluate(()=>window.proof);assert.ok(result?.pdf,'actual renderer produced PDF');
   const pages=[...new Set(result.draws.map(d=>d.page))];assert.ok(pages.length>=4,'representative multipage contract');
   for(const [i,p] of pages.entries()) {

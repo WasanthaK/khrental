@@ -8,8 +8,7 @@ import { classifyInvoiceEmailError } from '../src/api/platform/invoiceDeliverySt
 import { normalizeIssuedInvoicePdf, createIssuedInvoicePdfAttachment } from '../src/api/platform/issuedInvoicePdf.js';
 import { captureInvoiceBankDetails, readIssuedInvoiceBankDetails, buildInvoiceBankEmailSections } from '../src/api/platform/invoicePaymentInstructions.js';
 import {
-  getAutomaticBillingPeriod,
-  shouldRunAutomaticBilling
+  getAutomaticBillingPeriod
 } from '../src/api/platform/monthlyBillingScheduler.js';
 import {
   PAYMENT_STATUS,
@@ -20,7 +19,7 @@ import {
   getInvoiceStatusAfterVerification,
   canSubmitPaymentProof,
   calculateProratedMonthlyRent,
-  resolveAgreementBillingDay,
+  ownerBillingDates,
   resolveAgreementMonthlyRent
 } from '../src/api/platform/billingLifecycle.js';
 import {
@@ -177,18 +176,18 @@ test('billing does not derive contractual rent from unrelated property pricing',
   }), 0);
 });
 
-test('automatic billing uses the current UTC month and starts checks from day five', () => {
-  const now = new Date('2026-10-05T10:00:00.000Z');
-  assert.equal(getAutomaticBillingPeriod(now), '2026-10');
-  assert.equal(shouldRunAutomaticBilling({ now, billingDay: 5 }), true);
-  assert.equal(shouldRunAutomaticBilling({ now, billingDay: 6 }), false);
-});
-
-test('tenancy billing day defaults to five and honors renter-selected day 5 through 28', () => {
-  assert.equal(resolveAgreementBillingDay({ terms: null }), 5);
-  assert.equal(resolveAgreementBillingDay({ terms: { billingDay: 12 } }), 12);
-  assert.equal(resolveAgreementBillingDay({ terms: JSON.stringify({ billingDay: 28 }) }), 28);
-  assert.equal(resolveAgreementBillingDay({ terms: { billingDay: 2 } }), 5);
+test('automatic billing requires two owner-selected calendar days', () => {
+  const start = '2028-02-01';
+  assert.equal(getAutomaticBillingPeriod(new Date(start)), '2028-02');
+  for (const schedule of [null, {}, {billingDay: 1}, {billingDay: 0, paymentDueDay: 1},
+    {billingDay: 1, paymentDueDay: 32}, {billingDay: 1, paymentDueDay: 2.5}]) {
+    assert.equal(ownerBillingDates(start, schedule), null);
+  }
+  const dates = ownerBillingDates(start, {billingDay: 1, paymentDueDay: 31});
+  assert.equal(dates.generation.toISOString().slice(0,10), start);
+  assert.equal(dates.due.toISOString().slice(0,10), '2028-02-29');
+  const rollover = ownerBillingDates('2026-12-01', {billingDay: 31, paymentDueDay: 2});
+  assert.equal(rollover.due.toISOString().slice(0,10), '2027-01-02');
 });
 
 test('mid-month rent is prorated using actual occupied calendar days', () => {
@@ -232,7 +231,7 @@ test('automatic billing records a system source without impersonating a staff us
 });
 
 test('automatic billing applies per-tenancy billing day and does not generate before tenancy start', () => {
-  assert.match(monthlyBillingServiceSource, /resolveAgreementBillingDay/);
+  assert.match(monthlyBillingServiceSource, /owner_billing_schedule_required/);
   assert.match(monthlyBillingServiceSource, /before_tenancy_billing_day/);
   assert.match(monthlyBillingServiceSource, /before_tenancy_start/);
   assert.match(monthlyBillingSchedulerSource, /automaticRunDate:\s*now/);
@@ -245,26 +244,17 @@ test('monthly billing uses current-month rent and carries approved prior-period 
   assert.match(monthlyBillingServiceSource, /calculateProratedMonthlyRent/);
 });
 
-test('renter billing day changes are narrowly scoped to own active tenancy', () => {
-  assert.match(tenancyOnboardingSource, /router\.patch\('\/:agreementId\/billing-day'/);
-  assert.match(tenancyOnboardingSource, /ACTIVE_AGREEMENT_NOT_FOUND/);
-  assert.match(tenancyOnboardingSource, /renteeid = @renteeId/);
-  assert.match(tenancyOnboardingSource, /billing_day_changed/);
-  assert.match(tenancyOnboardingSource, /source: 'tenant_portal'/);
-});
-
-test('renter agreement UI allows a per-property billing day from 5 through 28', () => {
-  assert.match(renteeAgreementsSource, /Monthly invoice generation day/);
-  assert.match(renteeAgreementsSource, /Choose day 5–28 for this property/);
-  assert.match(renteeAgreementsSource, /updateMyTenancyBillingDay/);
-  assert.match(renteeAgreementsSource, /Array\.from\(\{ length: 24 \}/);
+test('schedule confirmation is restricted to the owning organization', () => {
+  assert.match(tenancyOnboardingSource, /OWNER_REQUIRED/);
+  assert.match(tenancyOnboardingSource, /owner_billing_schedule/);
+  assert.doesNotMatch(renteeAgreementsSource, /updateMyTenancyBillingDay/);
 });
 
 test('production deploy preserves existing occupant invoice scheduler configuration', () => {
   assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_ENABLED=/);
   assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DAY=/);
   assert.doesNotMatch(deployWorkflowSource, /AUTO_MONTHLY_BILLING_DUE_DAYS=/);
-  assert.match(monthlyBillingSchedulerSource, /const DEFAULT_BILLING_DAY = 5/);
+  assert.doesNotMatch(monthlyBillingSchedulerSource, /DEFAULT_BILLING_DAY/);
 });
 
 test('property fixed utility migration adds property scope and uniqueness', () => {
