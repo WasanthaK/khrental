@@ -122,7 +122,7 @@ jobs:
           [[ "$CANCELLATION_RECOVERY_OPERATION" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ && "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
           [[ "$GITHUB_RUN_ID" =~ ^[0-9]+$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
-          test "$EXPECTED_BUILD" = e0f7e821b8e511898836f71df86fde2fa8399463
+          test "$EXPECTED_BUILD" = 03047b5766a13c9582774050e8505bb488c3236f
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           if [ "$CANCELLATION_RECOVERY_MODE" = verify ] && [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
             echo 'CANCELLATION_RECOVERY_BLOCKED=inspect_original_operation_before_retry' >&2
@@ -163,7 +163,7 @@ jobs:
           image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/cancellation-app-before.json")
           [[ "$revision" =~ ^khrental-app--[a-z0-9-]+$ ]]
           test "${image##*:}" = "$EXPECTED_BUILD"
-          test "$revision" = khrental-app--0000523
+          test "$revision" = khrental-app--0000524
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
       - name: Run selected mode once through the unchanged deployed service
         id: execute
