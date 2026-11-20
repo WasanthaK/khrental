@@ -1,5 +1,5 @@
 import {problem} from './contract.js';
-import {objectId} from './stripe.js';
+import {objectId,scheduleBelongsToSubscription} from './stripe.js';
 
 // Cancellation rolls forward. Never restore an old schedule or invent a credit.
 // Legacy operation keys are retained, including the unsuffixed cancellation key.
@@ -35,8 +35,7 @@ export const cancellationRecovery=({store,stripe,keySuffix=''})=>async({job,step
       input:{scheduleId:intent.scheduleId,subscriptionId,customerId:intent.customerId},key:`${key}:release`,
       read:async input=>{
         const schedule=await stripe.request('GET',`/v1/subscription_schedules/${input.scheduleId}`);
-        const bound=objectId(schedule.subscription)||objectId(schedule.released_subscription);
-        if(schedule.livemode!==false||bound!==input.subscriptionId||objectId(schedule.customer)!==input.customerId){
+        if(schedule.id!==input.scheduleId||schedule.livemode!==false||!scheduleBelongsToSubscription(schedule,input.subscriptionId)||objectId(schedule.customer)!==input.customerId){
           throw problem(409,'BILLING_SCHEDULE_MISMATCH','The quantity schedule does not belong to this subscription.');
         }
         return {confirmed:schedule.status==='released',result:{scheduleId:input.scheduleId,released:true}};

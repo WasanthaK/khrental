@@ -17,6 +17,7 @@ const fixture=()=>{
   const stripe={assertAccount:async()=>{},request:async(method,url,body,key)=>{
     if(method==='GET'){
       if(url==='/v1/events'){return {data:state.events,has_more:false};}
+      if (url === '/v1/subscription_schedules/sched') {return structuredClone(state.schedule);}
       assert.equal(url,'/v1/subscriptions/sub');return structuredClone(sub);
     }
     assert.equal(method,'POST');assert.equal(url,'/v1/subscriptions/sub');
@@ -92,4 +93,16 @@ test('explicit legacy trial cleanup projects without payment/access while defaul
   assert.throws(()=>subscriptionProjection({...input,invoice:{status:'paid'},cessationCleanup:true}),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
   f.sub.status='active';assert.throws(()=>subscriptionProjection({...input,cessationCleanup:true}),{code:'BILLING_SUBSCRIPTION_MISMATCH'});
   f.sub.status='canceled';assert.equal(entitlement({...f.account,...subscriptionProjection({...input,cessationCleanup:true})},now).management,false);
+});
+
+test('cessation cleanup rejects conflicting release evidence before completing a step', async () => {
+  const f = fixture();
+  f.job.intent.scheduleId = 'sched';
+  f.state.schedule = {id: 'sched', status: 'released', livemode: false, customer: 'cus',
+    subscription: 'sub', released_subscription: {id: 'other'}};
+  await assert.rejects(f.run(), {code: 'BILLING_SCHEDULE_MISMATCH'});
+  assert.equal(f.state.review, true);
+  assert.equal(f.state.writes.length, 0);
+  assert.equal(f.state.steps.release_cleanup_schedule.completed_at, undefined);
+  assert.equal(f.state.finished, false);
 });

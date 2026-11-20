@@ -31,7 +31,7 @@ const fixture=({schedule=false}={})=>{
   }};
   const store={account:async()=>({stripe_subscription_id:'sub_fixture',stripe_customer_id:'cus_fixture'}),inventory:async()=>[{}]};
   const runner=createRecoveryRunner({journal,handlers:{cancellation:cancellationRecovery({store,stripe})},clock:{now:()=>now},logger:{error:(_message,data)=>alerts.push(data)}});
-  return {run:()=>runner.run({tenantId:'tenant',id:'operation'}),writes,steps,remote,alerts,
+  return {run:()=>runner.run({tenantId:'tenant',id:'operation'}),writes,steps,remote,scheduleRemote,alerts,
     lose:()=>{lost=true;},fence:()=>{fenced=true;},failFinish:()=>{finishFailure=true;},advance:ms=>{now+=ms;},job,review:()=>review};
 };
 
@@ -84,5 +84,16 @@ test('cancellation recovery requires an explicit boolean from the provider', asy
       assert.equal(f.writes.length, 0);
       assert.equal(f.steps.get('set_cancellation')?.completed_at, undefined);
     }
+  }
+});
+
+test('cancellation sends conflicting schedule bindings to review before a release or checkpoint', async () => {
+  for (const status of ['active', 'released']) {
+    const f = fixture({schedule: true});
+    Object.assign(f.scheduleRemote, {status, released_subscription: {id: 'sub_other'}});
+    await assert.rejects(f.run(), {code: 'BILLING_SCHEDULE_MISMATCH'});
+    assert.equal(f.review(), true);
+    assert.equal(f.writes.length, 0);
+    assert.equal(f.steps.get('release_schedule').completed_at, undefined);
   }
 });
