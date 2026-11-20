@@ -371,7 +371,7 @@ export const saveAgreement = async (agreement) => {
         // Use unit rental values if available, otherwise use provided values
         monthlyRent: unitRentalValues.monthlyRent || agreementData.terms.monthlyRent || '',
         depositAmount: unitRentalValues.depositAmount || agreementData.terms.depositAmount || '',
-        paymentDueDay: agreementData.terms.paymentDueDay || '5',
+        paymentDueDay: agreementData.terms.paymentDueDay || '',
         noticePeriod: agreementData.terms.noticePeriod || '30',
         specialConditions: agreementData.terms.specialConditions || ''
       };
@@ -483,7 +483,7 @@ async function getMergeDataForAgreement(agreement) {
       // Initialize with agreement terms, ensuring values are properly formatted even if zero
       monthlyRent: '',
       depositAmount: '',
-      paymentDueDay: agreement.terms?.paymentDueDay || '5',
+      paymentDueDay: agreement.terms?.paymentDueDay || '',
       noticePeriod: agreement.terms?.noticePeriod || '30',
       specialConditions: agreement.terms?.specialConditions || ''
     }

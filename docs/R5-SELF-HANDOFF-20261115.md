@@ -1,5 +1,10 @@
 # R5 self-handoff — 15 November 2026
 
+## Owner-confirmed rent billing dates
+
+Each active tenancy needs an invoice day and a payment due day explicitly confirmed by the property-owning organization's administrator. Automatic draft generation skips the tenancy until both days are recorded. Historical sample values do not establish owner confirmation. Both fields accept days 1 through 31. An earlier due day falls in the next month, and a day beyond the end of a month falls on its last day. Schedule changes apply to future drafts. Production acceptance still requires the serving commit, revision readiness, application and SQL health, and before-and-after production billing settings.
+
+
 Latest verified acceptance: 20 November 2026, 14:50:25 Asia/Colombo (09:20:25 UTC).
 This handoff supports continuation; the canonical status remains in [Execution Plan](EXECUTION-PLAN.md), [Delivery](R4-R5-DELIVERY.md), and [Acceptance Ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md).
 

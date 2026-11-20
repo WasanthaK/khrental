@@ -167,12 +167,20 @@ try {
   assert.deepEqual(currentRenter.current_property_ids,[a.propertyId],'activation projects property association without changing global user fields');
   assert.equal((await listTenantRentees(b.tenantId)).some(row=>row.id===a.renter.id),false,'current association cannot leak across organizations');
   assert.equal((await call(`/checklist/items/${checklist.items[0].id}`,{status:'pending'},a.owner,a.tenantId,'PATCH')).status,404,'activated inspection retained');
-  await denyExpired('renter billing day and audit',()=>call('/billing-day',{billingDay:5},a.renter,a.tenantId,'PATCH'));
-  const beforeBillingDay=await domainSnapshot();
-  await pool.request().batch("CREATE TRIGGER dbo.r5_billing_day_rollback ON dbo.tenancy_lifecycle_events AFTER INSERT AS BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE event_type='billing_day_changed') THROW 51099,'FIXTURE_DAY_ROLLBACK',1; END");
+  const schedule = {billingDay: 3, paymentDueDay: 18};
+  const setSchedule = (body=schedule, who=a.owner, tenantId=a.tenantId) =>
+    call('/billing-schedule', body, who, tenantId, 'PATCH');
+  assert.deepEqual((await call('/onboarding')).json.data.billingSchedule, {});
+  assert.equal((await setSchedule(schedule, a.renter)).status, 403);
+  assert.equal((await setSchedule(schedule, b.owner, b.tenantId)).status, 404);
+  assert.equal((await setSchedule({billingDay: 3})).status, 400);
+  await denyExpired('owner billing schedule', () => setSchedule());
+  assert.equal((await setSchedule()).status, 200);
+  assert.deepEqual((await call('/onboarding')).json.data.billingSchedule, schedule);
+  await pool.request().batch("CREATE TRIGGER dbo.r5_billing_day_rollback ON dbo.tenancy_lifecycle_events AFTER INSERT AS BEGIN IF EXISTS(SELECT 1 FROM inserted WHERE event_type='owner_billing_schedule') THROW 51099,'FIXTURE_DAY_ROLLBACK',1; END");
   try {
-    assert.equal((await call('/billing-day',{billingDay:5},a.renter,a.tenantId,'PATCH')).status,500);
-    assert.deepEqual(await domainSnapshot(),beforeBillingDay,'billing-day audit failure rolls back agreement terms');
+    assert.equal((await setSchedule({billingDay: 4, paymentDueDay: 16})).status, 500);
+    assert.deepEqual((await call('/onboarding')).json.data.billingSchedule, schedule);
   } finally { await pool.request().batch('DROP TRIGGER dbo.r5_billing_day_rollback'); }
   const summary=await fetch(`${origin}/api/tenancies/me/summary`,{headers:{Authorization:`Bearer ${a.renter.token}`,'x-tenant-id':a.tenantId}});
   assert.equal((await summary.json()).data.tenancies.length,1);

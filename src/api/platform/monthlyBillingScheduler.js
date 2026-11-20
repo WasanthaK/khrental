@@ -2,40 +2,15 @@ import { runQuery } from '../mssql/query.js';
 import { generateMonthlyInvoicesForTenant } from './monthlyBillingService.js';
 
 const DEFAULT_INTERVAL_MS = 60 * 60 * 1000;
-const DEFAULT_BILLING_DAY = 5;
-
-const toPositiveInteger = (value, fallback) => {
-  const parsed = Number.parseInt(String(value ?? ''), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
-
 export const getAutomaticBillingPeriod = (now = new Date()) => (
   `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 );
 
-export const shouldRunAutomaticBilling = ({
-  now = new Date(),
-  billingDay = DEFAULT_BILLING_DAY
-} = {}) => now.getUTCDate() >= toPositiveInteger(billingDay, DEFAULT_BILLING_DAY);
-
 export const runAutomaticMonthlyBilling = async ({
   now = new Date(),
-  billingDay = DEFAULT_BILLING_DAY,
-  dueDays = 14,
   logger = console
 } = {}) => {
-  if (!shouldRunAutomaticBilling({ now, billingDay })) {
-    return {
-      billingPeriod: getAutomaticBillingPeriod(now),
-      skipped: true,
-      reason: 'before_billing_day',
-      tenants: []
-    };
-  }
-
   const billingPeriod = getAutomaticBillingPeriod(now);
-  const dueDate = new Date(now);
-  dueDate.setUTCDate(dueDate.getUTCDate() + toPositiveInteger(dueDays, 14));
 
   const tenants = await runQuery(
     `SELECT id
@@ -50,7 +25,6 @@ export const runAutomaticMonthlyBilling = async ({
       const result = await generateMonthlyInvoicesForTenant({
         tenantId: tenant.id,
         billingPeriod,
-        dueDate: dueDate.toISOString(),
         actorUserId: null,
         notes: 'Automatically generated monthly tenancy invoice draft.',
         source: 'automatic_scheduler',
@@ -97,8 +71,6 @@ export const runAutomaticMonthlyBilling = async ({
 export const startAutomaticMonthlyBillingScheduler = ({
   enabled = false,
   intervalMs = DEFAULT_INTERVAL_MS,
-  billingDay = DEFAULT_BILLING_DAY,
-  dueDays = 14,
   startupDelayMs = 30_000,
   logger = console
 } = {}) => {
@@ -114,7 +86,7 @@ export const startAutomaticMonthlyBillingScheduler = ({
     if (running || stopped) {return;}
     running = true;
     try {
-      await runAutomaticMonthlyBilling({ billingDay, dueDays, logger });
+      await runAutomaticMonthlyBilling({ logger });
     } catch (error) {
       logger.error('[BillingScheduler] run_failed', {
         error: error.message,
@@ -136,8 +108,6 @@ export const startAutomaticMonthlyBillingScheduler = ({
   interval.unref?.();
 
   logger.info('[BillingScheduler] enabled', {
-    billingDay: toPositiveInteger(billingDay, DEFAULT_BILLING_DAY),
-    dueDays: toPositiveInteger(dueDays, 14),
     intervalMs: Math.max(60_000, Number(intervalMs) || DEFAULT_INTERVAL_MS)
   });
 

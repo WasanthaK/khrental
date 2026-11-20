@@ -11,10 +11,7 @@ import {
   isAgreementSignatureComplete
 } from './tenancyActivation.js';
 import {
-  MAX_TENANCY_BILLING_DAY,
-  MIN_TENANCY_BILLING_DAY,
-  normalizeTenancyBillingDay,
-  resolveAgreementBillingDay
+  isBillingCalendarDay, ownerScheduleQuery, readOwnerSchedule
 } from './billingLifecycle.js';
 
 const createRequestError = (status, message, code, details = null) => {
@@ -348,92 +345,30 @@ export const createTenancyOnboardingRouter = () => {
     }
   });
 
-  router.patch('/:agreementId/billing-day', async (req, res, next) => {
+  router.patch('/:agreementId/billing-schedule', async (req, res, next) => {
     try {
-      if (!isTenantRole({ user: req.user, membership: req.membership })) {
-        throw createRequestError(403, 'Tenant portal access is required.', 'TENANT_PORTAL_REQUIRED');
+      if (!isAdminRole(req)) {
+        throw createRequestError(403, 'Only the property owner can set the billing schedule.', 'OWNER_REQUIRED');
       }
-
-      const agreement = await loadAgreementContext(req.tenantId, req.params.agreementId);
-      if (
-        String(agreement.renteeid || '') !== String(req.user.id || '')
-        || String(agreement.status || '').toLowerCase() !== 'active'
-      ) {
-        throw createRequestError(404, 'Active tenancy agreement not found.', 'ACTIVE_AGREEMENT_NOT_FOUND');
+      const {billingDay, paymentDueDay} = req.body || {};
+      if (!isBillingCalendarDay(billingDay) || !isBillingCalendarDay(paymentDueDay)) {
+        throw createRequestError(400, 'Choose two calendar days between 1 and 31.', 'INVALID_BILLING_SCHEDULE');
       }
-
-      const requestedBillingDay = Number.parseInt(String(req.body?.billingDay ?? ''), 10);
-      if (
-        !Number.isInteger(requestedBillingDay)
-        || requestedBillingDay < MIN_TENANCY_BILLING_DAY
-        || requestedBillingDay > MAX_TENANCY_BILLING_DAY
-      ) {
-        throw createRequestError(
-          400,
-          `billingDay must be between ${MIN_TENANCY_BILLING_DAY} and ${MAX_TENANCY_BILLING_DAY}.`,
-          'INVALID_BILLING_DAY'
-        );
-      }
-
-      const previousBillingDay = resolveAgreementBillingDay(agreement);
-      const billingDay = normalizeTenancyBillingDay(requestedBillingDay);
-
       await withManagementWrite({tenantId: req.tenantId, action: async transaction => {
-        const updated = await runSingleQuery(
-          `DECLARE @rental_changed TABLE(id UNIQUEIDENTIFIER);
-  UPDATE agreements
-           SET terms = JSON_MODIFY(
-                 CASE WHEN ISJSON(terms) = 1 THEN terms ELSE N'{}' END,
-                 '$.billingDay',
-                 @billingDay
-               ),
-               updatedat = SYSUTCDATETIME()
-           OUTPUT INSERTED.id INTO @rental_changed
-           WHERE tenant_id = @tenantId
-             AND id = @agreementId
-             AND renteeid = @renteeId
-             AND status = 'active';
-  SELECT a.* FROM dbo.agreements a JOIN @rental_changed c ON c.id=a.id;`,
-          {
-            tenantId: req.tenantId,
-            agreementId: agreement.id,
-            renteeId: req.user.id,
-            billingDay
-          }, transaction
-        );
-
-        if (!updated) {
-          throw createRequestError(409, 'The tenancy changed before the billing day could be updated.', 'TENANCY_STATE_CHANGED');
+        const params = {tenantId: req.tenantId, agreementId: req.params.agreementId, actorId: req.user.id};
+        const agreement = await runSingleQuery(`SELECT a.status FROM dbo.agreements a WITH (UPDLOCK,HOLDLOCK)
+          JOIN dbo.tenant_memberships m WITH (HOLDLOCK) ON m.tenant_id=a.tenant_id AND m.app_user_id=@actorId
+          WHERE a.id=@agreementId AND a.tenant_id=@tenantId AND a.status='active'
+          AND m.role='admin' AND m.status='active'`, params, transaction);
+        if (!agreement) {
+          throw createRequestError(404, 'Active tenancy not found.', 'ACTIVE_AGREEMENT_NOT_FOUND');
         }
-
-        await runQuery(
-          `INSERT INTO tenancy_lifecycle_events (
-             tenant_id, agreement_id, event_type, from_status, to_status, actor_user_id, metadata
-           ) VALUES (
-             @tenantId, @agreementId, 'billing_day_changed', 'active', 'active', @actorUserId, @metadata
-           )`,
-          {
-            tenantId: req.tenantId,
-            agreementId: agreement.id,
-            actorUserId: req.user.id,
-            metadata: JSON.stringify({
-              propertyId: agreement.propertyid,
-              previousBillingDay,
-              billingDay,
-              source: 'tenant_portal'
-            })
-          }, transaction
-        );
+        await runQuery(`INSERT INTO dbo.tenancy_lifecycle_events
+          (tenant_id, agreement_id, event_type, from_status, to_status, actor_user_id, metadata)
+          VALUES (@tenantId,@agreementId,'owner_billing_schedule','active','active',@actorId,@metadata)`,
+          {...params, metadata: JSON.stringify({billingDay, paymentDueDay})}, transaction);
       }});
-
-      res.json({
-        data: {
-          agreementId: agreement.id,
-          propertyId: agreement.propertyid,
-          billingDay
-        },
-        error: null
-      });
+      res.json({data: {billingDay, paymentDueDay}, error: null});
     } catch (error) {
       next(error);
     }
@@ -445,6 +380,10 @@ export const createTenancyOnboardingRouter = () => {
       const agreement = await loadAgreementContext(req.tenantId, req.params.agreementId);
       requirePropertyScope(req, agreement.propertyid);
       const projection = await buildOnboardingProjection(req.tenantId, agreement);
+      projection.canSetBillingSchedule = isAdminRole(req);
+      projection.billingSchedule = readOwnerSchedule(await runSingleQuery(ownerScheduleQuery, {
+        tenantId: req.tenantId, agreementId: agreement.id
+      }));
       res.json({ data: projection, error: null });
     } catch (error) {
       next(error);

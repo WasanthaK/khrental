@@ -59,7 +59,7 @@ const normalizeTerms = (terms) => {
     ...parsed,
     startDate: parsed.startDate || parsed.startdate || null,
     endDate: parsed.endDate || parsed.enddate || null,
-    paymentDueDay: firstNonEmpty(parsed.paymentDueDay, parsed.paymentdueday, '5'),
+    paymentDueDay: firstNonEmpty(parsed.paymentDueDay, parsed.paymentdueday),
     noticePeriod: firstNonEmpty(parsed.noticePeriod, parsed.noticeperiod, '30'),
     specialConditions: firstNonEmpty(parsed.specialConditions, parsed.additionalTerms, '')
   };
@@ -189,7 +189,7 @@ export const buildAgreementMergeData = async (agreement = {}, related = {}) => {
       ...terms,
       monthlyRent,
       depositAmount,
-      paymentDueDay: firstNonEmpty(terms.paymentDueDay, '5'),
+      paymentDueDay: firstNonEmpty(terms.paymentDueDay),
       noticePeriod: firstNonEmpty(terms.noticePeriod, '30'),
       specialConditions: firstNonEmpty(terms.specialConditions, terms.additionalTerms, '')
     }

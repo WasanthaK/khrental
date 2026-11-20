@@ -1404,6 +1404,22 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
   await pool.request().batch(fs.readFileSync(path.resolve('migrations/20261103_01_management_billing.sql'), 'utf8'));
   const scoped = await fixture(pool, 'Scoped management expiry proof', 1000, 25);
   const unscoped = await fixture(pool, 'Unchanged testing organization', 2000, 50);
+  await pool.request().batch(`IF OBJECT_ID('dbo.tenancy_lifecycle_events') IS NULL
+    CREATE TABLE dbo.tenancy_lifecycle_events (
+            id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_tenancy_lifecycle_events PRIMARY KEY DEFAULT NEWID(),
+            tenant_id UNIQUEIDENTIFIER NOT NULL,
+            agreement_id UNIQUEIDENTIFIER NOT NULL,
+            event_type NVARCHAR(100) NOT NULL,
+            from_status NVARCHAR(50) NULL,
+            to_status NVARCHAR(50) NULL,
+            actor_user_id UNIQUEIDENTIFIER NULL,
+            metadata NVARCHAR(MAX) NULL,
+            createdat DATETIMEOFFSET NOT NULL CONSTRAINT DF_tenancy_lifecycle_events_createdat DEFAULT SYSUTCDATETIME()
+        );`);
+  const confirmSchedule = item => query(pool, `INSERT INTO dbo.tenancy_lifecycle_events
+    (tenant_id,agreement_id,event_type,metadata) VALUES (@tenantId,@agreementId,'owner_billing_schedule',@metadata)`,
+    {...item, metadata: JSON.stringify({billingDay: 2, paymentDueDay: 21})});
+  await confirmSchedule(scoped);
   const keys = ['MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED', 'MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS', 'MANAGEMENT_BILLING_SCHEMA_READY'];
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
   let periodIndex = 0;
@@ -2024,6 +2040,11 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
     await query(pool, 'UPDATE dbo.management_billing_accounts SET risk_hold=1 WHERE tenant_id=@tenantId', scoped);
     await denied('Rolled-back job released its lock');
 
+    const held = await generate(unscoped, 'automatic_scheduler');
+    assert.deepEqual(held.errors, []);
+    assert.equal(held.created.length, 0);
+    assert.equal(held.skipped[0].reason, 'owner_billing_schedule_required');
+    await confirmSchedule(unscoped);
     const unaffected = await generate(unscoped, 'automatic_scheduler');
     assert.deepEqual(unaffected.errors, []);
     assert.equal(unaffected.created.length, 1, 'Existing unselected testing organization is unchanged');
