@@ -16,6 +16,9 @@ export const cancellationRecovery=({store,stripe,keySuffix=''})=>async({job,step
     if(remote.livemode!==false||remote.id!==subscriptionId||objectId(remote.customer)!==intent.customerId){
       throw problem(409,'BILLING_SUBSCRIPTION_MISMATCH','Subscription ownership needs reconciliation.');
     }
+    if (typeof remote.cancel_at_period_end !== 'boolean') {
+      throw problem(409, 'BILLING_RECOVERY_EVIDENCE_REQUIRED', 'The provider cancellation status needs review.');
+    }
     return remote;
   };
   const before=await subscription();
@@ -48,7 +51,7 @@ export const cancellationRecovery=({store,stripe,keySuffix=''})=>async({job,step
       if(objectId(remote.schedule)){
         throw problem(409,'BILLING_SCHEDULE_REVIEW','An unexpected schedule needs review before cancellation.');
       }
-      return {confirmed:Boolean(remote.cancel_at_period_end)===input.cancelAtPeriodEnd,
+      return {confirmed:remote.cancel_at_period_end===input.cancelAtPeriodEnd,
         result:{subscriptionId,cancelAtPeriodEnd:input.cancelAtPeriodEnd}};
     },
     write:(input,stepKey)=>stripe.request('POST',`/v1/subscriptions/${input.subscriptionId}`,{cancel_at_period_end:input.cancelAtPeriodEnd},stepKey)
