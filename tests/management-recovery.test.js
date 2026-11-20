@@ -67,3 +67,22 @@ test('provider outage reaches a bounded visible review state without logging raw
   assert.deepEqual(alerts,[{commandId:'i',code:'BILLING_RECOVERY_FAILED'}]);
   assert.equal(recoveryDelay(1),30);assert.equal(recoveryDelay(8),3600);assert.equal(recoveryCode({code:'private email @example.test'}),'BILLING_RECOVERY_FAILED');
 });
+
+test('cancellation recovery requires an explicit boolean from the provider', async () => {
+  for (const intent of [false, true]) {
+    for (const flag of [undefined, null, 'false', 0]) {
+      const f = fixture();
+      f.job.intent.cancelAtPeriodEnd = intent;
+      if (flag === undefined) {
+        delete f.remote.cancel_at_period_end;
+      } else {
+        f.remote.cancel_at_period_end = flag;
+      }
+
+      await assert.rejects(f.run(), {code: 'BILLING_RECOVERY_EVIDENCE_REQUIRED'});
+      assert.equal(f.review(), true);
+      assert.equal(f.writes.length, 0);
+      assert.equal(f.steps.get('set_cancellation')?.completed_at, undefined);
+    }
+  }
+});
