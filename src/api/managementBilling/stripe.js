@@ -41,6 +41,11 @@ export const createStripeClient = ({env=process.env,fetchImpl=globalThis.fetch}=
 };
 
 export const objectId = object => typeof object === 'string' ? object : object?.id;
+export const scheduleBelongsToSubscription = (schedule, subscriptionId) => {
+  const references = [schedule.subscription, schedule.released_subscription].filter(ref => ref != null);
+  return Boolean(subscriptionId) && references.length > 0 && references.every(ref => objectId(ref) === subscriptionId);
+};
+
 export const invoiceSubscription = invoice => objectId(invoice?.parent?.subscription_details?.subscription || invoice?.subscription);
 
 export const firstRenewalFailure = async ({stripe, invoice, account, now=billingClock.now()}) => {

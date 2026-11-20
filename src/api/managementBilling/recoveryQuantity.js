@@ -1,5 +1,5 @@
 import {hash,problem} from './contract.js';
-import {objectId} from './stripe.js';
+import {objectId,scheduleBelongsToSubscription} from './stripe.js';
 import {billingClock} from './clock.js';
 import {requestEvidence} from './recoveryEvidence.js';
 import {cancellationRecovery} from './recoveryCancellation.js';
@@ -159,13 +159,13 @@ export const cessationCleanupRecovery=({store,stripe,clock=billingClock})=>async
       read:async input=>{
         const sub=await subscription(),schedule=await stripe.request('GET',`/v1/subscription_schedules/${input.scheduleId}`);
         if(schedule.id!==input.scheduleId||schedule.livemode!==false||objectId(schedule.customer)!==intent.customerId||
-          (objectId(schedule.subscription)||objectId(schedule.released_subscription))!==intent._subscriptionId){
+          !scheduleBelongsToSubscription(schedule,intent._subscriptionId)){
           throw problem(409,'BILLING_SCHEDULE_MISMATCH','The cleanup schedule binding changed.');
         }
         if(schedule.status==='released'){
           if(objectId(sub.schedule)){throw problem(409,'BILLING_SCHEDULE_MISMATCH','A new schedule needs review.');}
           const proof=await evidence('subscription_schedule.released',schedule.id,`${key}:cleanup-release`,s=>
-            objectId(s.released_subscription)===intent._subscriptionId);
+            objectId(s.released_subscription)===intent._subscriptionId && scheduleBelongsToSubscription(s,intent._subscriptionId));
           if(!proof){throw problem(503,'BILLING_RECOVERY_EVIDENCE_UNAVAILABLE','Schedule release needs matching request evidence.');}
           return {confirmed:true,result:{scheduleId:schedule.id,released:true,...proof}};
         }
