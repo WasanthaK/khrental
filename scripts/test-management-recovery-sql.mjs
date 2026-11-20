@@ -39,7 +39,21 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   const service=createBillingService({store,stripe:synthetic,env});
   await assert.rejects(service.cancel(args),{code:'STRIPE_UNAVAILABLE'});
   await assert.rejects(service.cancel({...args,id:crypto.randomUUID()}),{code:'BILLING_COMMAND_PENDING'});
-  await assert.rejects(service.recoverOperation({tenantId:otherTenant,id}),{code:'BILLING_COMMAND_NOT_FOUND'});
+  // A denied recovery must leave the owner's durable state intact in both phases.
+  const assertIsolated = async () => {
+    const snapshot = async () => ({
+      command: await store.read('SELECT * FROM dbo.management_billing_commands WHERE id=@id', {id}),
+      recovery: await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id', {id}),
+      steps: await store.read('SELECT * FROM dbo.management_billing_steps WHERE command_id=@id ORDER BY name', {id}),
+      audit: await store.read('SELECT * FROM dbo.management_billing_audit WHERE resource_id=@id ORDER BY id', {id})
+    });
+    const before = await snapshot();
+    const requestCount = calls.length;
+    await assert.rejects(service.recoverOperation({tenantId: otherTenant, id}), {code: 'BILLING_COMMAND_NOT_FOUND'});
+    assert.equal(calls.length, requestCount);
+    assert.deepEqual(await snapshot(), before);
+  };
+  await assertIsolated();
   const posts=calls.filter(c=>c.method==='POST').length;
   await store.locked(tenantId,async q=>{
     await q('UPDATE dbo.management_billing_steps SET created_at=DATEADD(hour,-48,SYSUTCDATETIME()) WHERE command_id=@id',{id});
@@ -50,6 +64,9 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   assert.equal(calls.filter(c=>c.method==='POST').length,posts,'Aged recovery proves the effect without a second provider write');
   assert.equal((await store.read('SELECT state FROM dbo.management_billing_recovery WHERE command_id=@id',{id}))[0].state,'succeeded');
   assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='sandbox.cancellation.recovered'",{id})).length,1);
+
+  await assertIsolated();
+  console.log('PASS: pending and completed cancellation recovery are tenant-isolated with unchanged command, journal, steps and audit and zero provider requests');
 
   const leaseId=crypto.randomUUID();
   await store.beginCommand({tenantId,id:leaseId,actorId,kind:'cancellation',payload:{cancelAtPeriodEnd:true},recovery:true});
