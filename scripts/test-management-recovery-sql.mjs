@@ -65,7 +65,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
     app.use('/api/management-billing', createManagementBillingRouter({
       store, stripe: synthetic, env: {...env, MANAGEMENT_BILLING_SCHEMA_READY: 'true'},
       resolveContext(req, _res, next) {
-        Object.assign(req, {tenantId: otherTenant, user: {id: actorId}, authSession: {}, membership});
+        Object.assign(req, {tenantId: membership.tenant_id, user: {id: actorId}, authSession: {}, membership});
         next();
       }
     }));
