@@ -43,6 +43,13 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   await assert.rejects(service.cancel(args),{code:'STRIPE_UNAVAILABLE'});
   await assert.rejects(service.cancel({...args,id:crypto.randomUUID()}),{code:'BILLING_COMMAND_PENDING'});
   // A denied recovery must leave the owner's durable state intact in both phases.
+  const otherAdmin = crypto.randomUUID();
+  await store.locked(otherTenant, async q => {
+    await q("INSERT INTO dbo.app_users(id,status) VALUES(@otherAdmin,'active')", {otherAdmin});
+    await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role)
+      VALUES(@membershipId,@otherTenant,@otherAdmin,'active','admin')`,
+      {membershipId: crypto.randomUUID(), otherTenant, otherAdmin});
+  });
   const assertIsolated = async () => {
     const snapshot = async () => ({
       command: await store.read('SELECT * FROM dbo.management_billing_commands WHERE id=@id', {id}),
@@ -57,7 +64,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
     // The synthetic transport observes every mutation attempted by the service.
     const membership = (await store.read(
       'SELECT tenant_id,role,status FROM dbo.tenant_memberships WHERE tenant_id=@otherTenant AND app_user_id=@actorId',
-      {otherTenant, actorId}
+      {otherTenant, actorId: otherAdmin}
     ))[0];
     assert.equal(membership?.role, 'admin');
     const app = express();
@@ -65,7 +72,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
     app.use('/api/management-billing', createManagementBillingRouter({
       store, stripe: synthetic, env: {...env, MANAGEMENT_BILLING_SCHEMA_READY: 'true'},
       resolveContext(req, _res, next) {
-        Object.assign(req, {tenantId: membership.tenant_id, user: {id: actorId}, authSession: {}, membership});
+        Object.assign(req, {tenantId: membership.tenant_id, user: {id: otherAdmin}, authSession: {}, membership});
         next();
       }
     }));
