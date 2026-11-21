@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {once} from 'node:events';
+import express from 'express';
+import {createManagementBillingRouter} from '../src/api/managementBilling/router.js';
 import crypto from 'node:crypto';
 import {inspectManagementRecovery} from './inspect-management-billing-schema.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
@@ -50,6 +53,35 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
     const before = await snapshot();
     const requestCount = calls.length;
     await assert.rejects(service.recoverOperation({tenantId: otherTenant, id}), {code: 'BILLING_COMMAND_NOT_FOUND'});
+    // Test the mounted route with a fixed workspace context and disposable SQL.
+    // The synthetic transport observes every mutation attempted by the service.
+    const membership = (await store.read(
+      'SELECT tenant_id,role,status FROM dbo.tenant_memberships WHERE tenant_id=@otherTenant AND app_user_id=@actorId',
+      {otherTenant, actorId}
+    ))[0];
+    assert.equal(membership?.role, 'admin');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/management-billing', createManagementBillingRouter({
+      store, stripe: synthetic, env: {...env, MANAGEMENT_BILLING_SCHEMA_READY: 'true'},
+      resolveContext(req, _res, next) {
+        Object.assign(req, {tenantId: otherTenant, user: {id: actorId}, authSession: {}, membership});
+        next();
+      }
+    }));
+    const server = app.listen(0, '127.0.0.1');
+    try {
+      await once(server, 'listening');
+      const response = await fetch(`http://127.0.0.1:${server.address().port}/api/management-billing/reconcile-cancellation`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({requestId: id})
+      });
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), {
+        code: 'BILLING_COMMAND_NOT_FOUND', error: 'This billing operation was not found.'
+      });
+    } finally {
+      await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
     assert.equal(calls.length, requestCount);
     assert.deepEqual(await snapshot(), before);
   };
