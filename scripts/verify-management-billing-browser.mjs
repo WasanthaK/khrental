@@ -12,6 +12,32 @@ try{
  await vite.listen();const origin=`http://127.0.0.1:${vite.httpServer.address().port}`;
  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox']});
  fs.mkdirSync(output,{recursive:true});
+ for (const width of [390,1440]) {
+  const page=await browser.newPage();
+  await page.setViewport({width,height:950});
+  await page.goto(origin+'/tests/fixtures/management-billing/index.html?screen=issuers',{waitUntil:'networkidle2'});
+  const draft='form[name="draft"]';
+  await page.type(draft+' input[placeholder="LK"]','nz');
+  await page.type(draft+' input[maxlength="200"]','Example company');
+  await page.type(draft+' input[placeholder="US"]','us');
+  await page.focus(draft+' button');
+  await page.keyboard.press('Enter');
+  const schedule='form[name="schedule"]';
+  await page.waitForSelector(schedule);
+  assert.equal(await page.$eval(schedule+' select',el=>el.value),'fixture-issuer');
+  await page.$eval(schedule+' input[type="datetime-local"]',el=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'2030-04-01T10:30');
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await page.type(schedule+' input[maxlength="250"]','Fixture approval');
+  await page.focus(schedule+' button');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.body.innerText.includes('Scheduled · 2030-04-01 10:30 UTC · Fixture approval'));
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:path.join(output,'issuers-'+width+'.png'),fullPage:true});
+  await page.close();
+ }
  for(const screen of ['pricing','subscription','complimentary']){for(const width of [390,1440]){
   const page=await browser.newPage();const errors=[];
   page.on('pageerror',error=>errors.push(error.message));

@@ -1,3 +1,4 @@
+import MarketInvoiceIssuers from '../components/admin/MarketInvoiceIssuers';
 import React,{useEffect,useRef,useState} from 'react';
 import usePlatformAdminStatus from '../hooks/usePlatformAdminStatus';
 import {requestMssqlApi} from '../services/mssqlApiClient';
@@ -118,5 +119,5 @@ export default function ManagementPricing(){
     enrollment={{workspaces,value:enrollment,update:(key,value)=>setEnrollment(previous=>({...previous,[key]:value})),submit:()=>run(async()=>{await requestMssqlApi('/api/management-billing/admin/enroll',{method:'POST',body:enrollment});setNotice('Workspace enrolled. Its administrator can open Management subscription to test checkout.');})}}
     onPreview={()=>run(async()=>setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body:{rules:rulesFrom(form),quantity:Number(quantity)}})))}
     onSave={event=>{event.preventDefault();run(async()=>{await requestMssqlApi('/api/management-billing/admin/pricing',{method:'POST',body:{rules:rulesFrom(form),expectedVersion:Math.max(0,...versions.filter(v=>v.market===form.market).map(v=>v.version))}});await load();setNotice('New draft saved. Existing subscriptions are unchanged.');});}}
-    onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/><ComplimentaryAccess workspaces={workspaces}/></>;
+    onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/><MarketInvoiceIssuers/><ComplimentaryAccess workspaces={workspaces}/></>;
 }

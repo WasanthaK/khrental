@@ -1,9 +1,20 @@
+import MarketInvoiceIssuers from '../../../src/components/admin/MarketInvoiceIssuers';
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ManagementPricingView,ManagementComplimentaryView} from '../../../src/pages/ManagementPricing';
 import {ManagementSubscriptionView} from '../../../src/pages/ManagementSubscription';
 import '../../../src/index.css';
 const initial={market:'LK',billingCurrency:'USD',baseFee:'5.00',rentCurrency:'LKR',includedRent:'',excessPolicy:'pending',effectiveDate:'',reason:'Synthetic screen review. No commercial approval.'};
+const fixtureIssuers = [];
+const issuerRequest = async (path, options) => {
+  if (!options) {return [...fixtureIssuers];}
+  if (path.endsWith('/schedule')) {
+    Object.assign(fixtureIssuers[0], options.body, {status:'Scheduled'});
+  } else {
+    fixtureIssuers.push({...options.body, id:'fixture-issuer', status:'Draft'});
+  }
+  return {id:'fixture-issuer'};
+};
 function Fixture(){
  const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('12'),[preview,setPreview]=useState(null),[notice,setNotice]=useState('');
  const [compMode,setCompMode]=useState('fixed'),[expiry,setExpiry]=useState('2027-01-01T00:00'),[note,setNote]=useState('Synthetic complimentary acceptance decision.');
@@ -13,6 +24,7 @@ function Fixture(){
  const params=new URLSearchParams(location.search),screen=params.get('screen'),scenario=params.get('scenario');
  const data={enrolled:true,configured:true,inventoryQuantity:12,billedQuantity:12,status:'active',entitlement:{state:'active'},cancelAtPeriodEnd:false,
    inventory:Array.from({length:12},(_,i)=>({key:`unit:${i}`,label:`Example residence · Unit ${i+1}`}))};
+ if(screen==='issuers'){return <MarketInvoiceIssuers request={issuerRequest}/>;}
  if(screen==='subscription'){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
   if(['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(data,{status:scenario==='cessation-grace'?'past_due':'trialing',entitlement:{state:scenario==='cessation-grace'?'grace':'payment_pending'},pendingQuantity:null});}

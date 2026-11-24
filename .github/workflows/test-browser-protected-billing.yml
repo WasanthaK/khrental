@@ -21,6 +21,7 @@ on:
       - 'src/pages/InvoiceManagementDashboard.jsx'
       - 'src/pages/rentee/**'
       - 'src/pages/ManagementPricing.jsx'
+      - 'src/components/admin/MarketInvoiceIssuers.jsx'
       - 'src/pages/ManagementSubscription.jsx'
       - 'src/pages/TenancyOnboarding.jsx'
       - 'src/pages/TenancyExit.jsx'
