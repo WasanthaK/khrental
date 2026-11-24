@@ -5,7 +5,7 @@
 Each active tenancy needs an invoice day and a payment due day explicitly confirmed by the property-owning organization's administrator. Automatic draft generation skips the tenancy until both days are recorded. Historical sample values do not establish owner confirmation. Both fields accept days 1 through 31. An earlier due day falls in the next month, and a day beyond the end of a month falls on its last day. Schedule changes apply to future drafts. The [controlled production release](evidence/r5-release-0000525.md) passed on 20 November.
 
 
-Latest verified release: 20 November 2026, 18:21:32 Asia/Colombo (12:51:32 UTC).
+Latest verified release: 24 November 2026, 22:15:40 Asia/Colombo (16:45:40 UTC).
 This handoff supports continuation; the canonical status remains in [Execution Plan](EXECUTION-PLAN.md), [Delivery](R4-R5-DELIVERY.md), and [Acceptance Ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md).
 
 Dated acceptance sections preserve historical checkpoints, including the work planned at each checkpoint. Use [Next executable slice](#next-executable-slice) and [Remaining queue and exit criteria](#remaining-queue-and-exit-criteria) for current work.
@@ -15,7 +15,7 @@ R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain
 
 Owner scope decision, 15 November 2026 19:36 Asia/Colombo: natural seven-day grace expiry/later recovery (BL05.5) and the Evia service/package and matching audit (CT03.4/5) are OUT OF R5. Neither is accepted. Grace expiry moves to field testing; Evia moves to later troubleshooting because it affects the audit report only. Every other queue item stays in R5 and must be closed there. Do not work on either item as R5 work, and do not retry, resend or re-sign anything with Evia without a new owner instruction.
 
-The public application served `ec6d1eed18c87fd6b9de36aefea200bc247008a7` from ready Azure revision `khrental-app--0000525`. Application and SQL health passed. The production rental-billing settings matched the pre-release baseline at 18:21:32 Asia/Colombo on 20 November. [Release evidence](evidence/r5-release-0000525.md). Reverify before a new deployed test.
+On 24 November at 22:15 Asia/Colombo, [production run 1853](https://github.com/WasanthaK/khrental/actions/runs/45439600173) verified ready revision `0000526`, the public build `dc5ba385158046b0d5ab7040fac6148e5ca4bdb7`, application health and SQL connectivity. This release includes the issuer administration screen and cancellation ownership fix. The production issuer migration and deployed functional acceptance remain open.
 
 ## Parallel commercial preparation — 16 November 2026
 

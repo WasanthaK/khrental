@@ -2,6 +2,8 @@
 
 ## Current canonical status — 24 November 2026
 
+On 24 November at 22:15 Asia/Colombo, [production run 1853](https://github.com/WasanthaK/khrental/actions/runs/45439600173) verified ready revision `0000526`, the public build `dc5ba385158046b0d5ab7040fac6148e5ca4bdb7`, application health and SQL connectivity. This release includes the issuer administration screen and cancellation ownership fix. The production issuer migration and deployed functional acceptance remain open.
+
 **R5 is partial. Live charging and full enforcement are OFF. Natural seven-day grace expiry and the Evia package/matching audit are outside R5 by [owner decision](#owner-scope-decision--15-november-2026).** The [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue) is the reconciled status table for this document. Mounted HTTP cancellation isolation passed with disposable SQL. Deployed HTTP isolation of a journaled cancellation command remains open. [Acceptance evidence](R5-LIFECYCLE-ACCEPTANCE-20261105.md#bl0811-cancellation-isolation). [Last verified production release](evidence/r5-release-0000525.md).
 
 The dated checkpoints are retained as evidence history. Their earlier “current”, “remaining” and “next” wording describes that checkpoint only; use the controlling queue for today's work. Accepted signing, the controlled rental lifecycle, retained-history role checks and completed reservation cases must not be reopened. No claim is made that the original paid-test SQL error's exact cause was identified.
