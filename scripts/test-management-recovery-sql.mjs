@@ -30,7 +30,11 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   await store.locked(tenantId,q=>q('UPDATE dbo.management_billing_accounts SET stripe_schedule_id=NULL WHERE tenant_id=@tenantId',{tenantId}));
   const id=crypto.randomUUID(),args={tenantId,id,actorId,cancelAtPeriodEnd:true};
   let lost=true;
-  const synthetic={...stripe,request:async(...args)=>{
+  let accountChecks=0;
+  const synthetic={...stripe,assertAccount:async()=>{
+    accountChecks++;
+    return stripe.assertAccount();
+  },request:async(...args)=>{
     const result=await stripe.request(...args);
     if(args[0]==='POST'&&args[1]===`/v1/subscriptions/${sub.id}`&&lost){
       lost=false;
@@ -65,6 +69,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
     assert.ok(before.steps.length > 0);
     const providerBefore = structuredClone([...remote.entries()]);
     const requestCount = calls.length;
+    const accountChecksBefore = accountChecks;
     await assert.rejects(service.recoverOperation({tenantId: otherTenant, id}), {code: 'BILLING_COMMAND_NOT_FOUND'});
     // Test the mounted route with a fixed workspace context and disposable SQL.
     // The synthetic transport observes every mutation attempted by the service.
@@ -97,6 +102,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
     } finally {
       await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
+    assert.equal(accountChecks, accountChecksBefore, 'A denied command must not contact Stripe to check the account');
     assert.equal(calls.length, requestCount);
     const after = await snapshot();
     const providerAfter = [...remote.entries()];
