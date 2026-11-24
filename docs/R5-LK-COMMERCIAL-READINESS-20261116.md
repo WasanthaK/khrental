@@ -72,6 +72,19 @@ Two dwellings at LKR 25,075 would total USD 10.02 under the proposed per-dwellin
 
 On 24 November 2026 the owner confirmed that Quixo Inc. (USA) will issue Quixo Homes invoices for the Sri Lanka launch. Live merchant account and payout approval remain unverified. Obtain a single approved merchant profile: confirmed invoice issuer, establishment/residence and operating presence, service/contact address, registration identifiers, intended live account, invoice issuer, authorized signatory, payout readiness and any account restrictions. Store sensitive supporting records in the appropriate restricted system; this document needs verified outcomes and references, not bank credentials or identity documents.
 
+### Country billing configuration
+
+The owner requires country launches and future changes of billing entity to be configured in the database. The launch market and the issuer’s country are independent. Sri Lanka’s confirmed initial invoice issuer is Quixo Inc. (USA). A future local operation is an example of a change this design must support. No local entity or transfer date has been approved.
+
+- Platform administrators maintain legal entities and their provider account references. Each country has a dated history of issuer assignments. An entity can serve more than one country. A draft assignment can be prepared before its activation date is known.
+- A country cutover creates a new assignment with an effective instant and an approval record. Prevent conflicting effective assignments. Validate merchant and payout readiness before permitting live billing. Adding a country or changing its issuer must not require an application release.
+- Bind each new subscription to its approved assignment and provider account. Persist the issuing entity and the invoice-time details on each issued invoice. Historical invoice access, credits and refunds resolve against the originating issuer and provider account.
+- Make the treatment of existing subscriptions an explicit cutover decision. Preserve their original account binding until a supported migration or replacement is completed and reconciled. A country profile edit alone must never move funds or subscriptions.
+- Acceptance must cover adding a new country with records alone, scheduling a replacement issuer, billing immediately before and at the effective instant, and retrieving an earlier invoice with its original issuer. Keep a draft or unready merchant from activating live charges.
+
+Implementation remains open. The existing sandbox billing-account constraint pins a single Stripe account. The pricing validation and admin market selector also enumerate countries. These boundaries require engineering before live multi-issuer routing can be accepted.
+
+
 | Collection route | Current evidence and decision |
 | --- | --- |
 | Direct Quixo SaaS sale with Stripe Billing | Existing sandbox integration is evidence of that bounded integration only. The actual merchant remains responsible for applicable tax obligations; live identity, registration, customer classification and payout evidence are open. |
