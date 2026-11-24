@@ -381,20 +381,23 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
   // command kinds need their own evidence; quantity equality alone is not proof
   // that the intended proration or future schedule was applied.
   const reconcileCancellation=async({tenantId,id,actorId})=>{
-    await stripe.assertAccount();
     if(env.MANAGEMENT_RECOVERY_SCHEMA_READY==='true'){
       const journaled=await store.locked(tenantId,async q=>{
         await store.assertActor(q,tenantId,actorId);
         return q(`SELECT r.command_id FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c
           ON c.id=r.command_id WHERE c.tenant_id=@tenantId AND c.id=@id`,{tenantId,id});
       });
-      if(journaled.length){return recoverOperation({tenantId,id});}
+      if(journaled.length){
+        await stripe.assertAccount();
+        return recoverOperation({tenantId,id});
+      }
     }
     return store.locked(tenantId,async q=>{
       await store.assertActor(q,tenantId,actorId);
       const command=(await q(`SELECT * FROM dbo.management_billing_commands
         WHERE id=@id AND tenant_id=@tenantId`,{id,tenantId}))[0];
       if(!command) {throw problem(404,'BILLING_COMMAND_NOT_FOUND','This billing operation was not found.');}
+      await stripe.assertAccount();
       if(command.status==='completed') {return JSON.parse(command.result_json);}
       if(command.status!=='pending') {throw problem(409,'BILLING_COMMAND_NOT_PENDING','This billing operation is no longer awaiting confirmation.');}
       const payload=JSON.parse(command.payload_json);
