@@ -26,6 +26,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.managem
   CREATE UNIQUE INDEX UX_market_issuer_effective ON dbo.management_market_issuer_assignments(market,effective_at_utc)
     WHERE effective_at_utc IS NOT NULL;
 
+EXEC(N'CREATE OR ALTER TRIGGER dbo.management_market_issuer_history ON dbo.management_market_issuer_assignments
+AFTER UPDATE, DELETE AS
+BEGIN
+  SET NOCOUNT ON;
+  IF EXISTS (SELECT 1 FROM deleted WHERE effective_at_utc <= SYSUTCDATETIME())
+    THROW 51240, ''An effective issuer assignment is historical. Add a new dated assignment.'', 1;
+END');
+
+EXEC(N'CREATE OR ALTER TRIGGER dbo.management_invoice_issuer_history ON dbo.management_invoice_issuers
+AFTER UPDATE AS
+BEGIN
+  SET NOCOUNT ON;
+  IF EXISTS (SELECT 1 FROM deleted d JOIN dbo.management_market_issuer_assignments a
+    ON a.issuer_id=d.id WHERE a.effective_at_utc IS NOT NULL)
+    THROW 51241, ''An approved issuer is retained for billing history. Create a new issuer record.'', 1;
+END');
+
 EXEC(N'CREATE OR ALTER FUNCTION dbo.management_invoice_issuer_at(@market CHAR(2), @as_of_utc DATETIME2(7))
 RETURNS TABLE AS RETURN (
   SELECT TOP (1) a.id AS assignment_id, a.issuer_id, a.market, a.effective_at_utc, i.legal_name, i.country_code

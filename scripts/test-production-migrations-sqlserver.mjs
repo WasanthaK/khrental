@@ -1095,6 +1095,9 @@ const main = async () => {
       INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
       SELECT market,issuer_id,effective_at_utc,'duplicate' FROM dbo.management_market_issuer_assignments
       WHERE market='CA' AND effective_at_utc='2030-02-01'`), /duplicate/i);
+    await assert.rejects(testPool.request().query(`
+      UPDATE dbo.management_invoice_issuers SET legal_name='Edited issuer'
+      WHERE country_code='CA' AND legal_name='Fixture issuer B'`), /retained for billing history/i);
     console.log('PASS: market issuer migration replay, draft exclusion, country isolation, cutover and conflicting date');
 
 
