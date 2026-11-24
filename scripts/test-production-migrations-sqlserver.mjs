@@ -60,7 +60,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261110_02_management_cessation',
   '20261112_01_management_recovery',
   '20261112_02_management_restoration',
-  '20261112_03_management_splits'
+  '20261112_03_management_splits',
+  '20261124_01_market_invoice_issuers'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1071,6 +1072,31 @@ const main = async () => {
     await testPool.request().query('ENABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements');
     console.log('PASS: governed offer/hold migration double apply, exact enabled trigger proof and drift denial');
     await verifyManagementBilling(testPool);
+    const issuerMigration = fs.readFileSync('migrations/20261124_01_market_invoice_issuers.sql','utf8');
+    await testPool.request().batch(issuerMigration);
+    await testPool.request().batch(issuerMigration);
+    const issuers = await testPool.request().query(`
+      SELECT i.legal_name, i.country_code FROM dbo.management_invoice_issuers i
+      JOIN dbo.management_market_issuer_assignments a ON a.issuer_id=i.id WHERE a.market='LK' AND a.effective_at_utc IS NULL;
+      SELECT * FROM dbo.management_invoice_issuer_at('LK','2030-01-01');
+      DECLARE @first UNIQUEIDENTIFIER=NEWID(), @next UNIQUEIDENTIFIER=NEWID();
+      INSERT dbo.management_invoice_issuers(id,legal_name,country_code)
+        VALUES(@first,'Fixture issuer A','US'),(@next,'Fixture issuer B','CA');
+      INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
+        VALUES('CA',@first,'2030-01-01','fixture-a'),('CA',@next,'2030-02-01','fixture-b');
+      SELECT legal_name FROM dbo.management_invoice_issuer_at('CA','2030-01-31T23:59:59.9999999');
+      SELECT legal_name FROM dbo.management_invoice_issuer_at('CA','2030-02-01');
+      SELECT legal_name FROM dbo.management_invoice_issuer_at('CA','2029-12-31');
+    `);
+    assert.deepEqual(issuers.recordsets.map(rows=>rows.map(row=>row.legal_name)),
+      [['Quixo Inc.'],[],['Fixture issuer A'],['Fixture issuer B'],[]]);
+    assert.equal(issuers.recordsets[0][0].country_code,'US');
+    await assert.rejects(testPool.request().query(`
+      INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
+      SELECT market,issuer_id,effective_at_utc,'duplicate' FROM dbo.management_market_issuer_assignments
+      WHERE market='CA' AND effective_at_utc='2030-02-01'`), /duplicate/i);
+    console.log('PASS: market issuer migration replay, draft exclusion, country isolation, cutover and conflicting date');
+
 
   } finally {
     if (testPool) {

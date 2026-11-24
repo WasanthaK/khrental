@@ -159,6 +159,17 @@ const assertSatisfied = async (inspection, message) => {
   if (!state.satisfied) {throw new Error(`${message} (${state.detail})`);}
 };
 
+const inspectMarketIssuers = async pool => {
+  const {recordset} = await pool.request().query(`
+    SELECT CASE WHEN OBJECT_ID(N'dbo.management_invoice_issuers', N'U') IS NOT NULL
+      AND COL_LENGTH(N'dbo.management_market_issuer_assignments', N'approval_reference') IS NOT NULL
+      AND OBJECT_ID(N'dbo.management_invoice_issuer_at', N'IF') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.management_market_issuer_assignments')
+        AND name=N'UX_market_issuer_effective' AND is_unique=1 AND is_disabled=0)
+      THEN 1 ELSE 0 END AS ready`);
+  return {satisfied: Boolean(recordset[0].ready), detail: 'Market invoice issuer schema and effective-date lookup'};
+};
+
 const inspectInvoicePaymentReferences = async pool => {
   const result = await pool.request().query(`
     SELECT
@@ -527,6 +538,12 @@ const MIGRATIONS = [
     file:'migrations/20261112_03_management_splits.sql',
     inspect:inspectManagementSplits,
     verify:async pool=>assertSatisfied(inspectManagementSplits(pool),'Management split schema verification failed.')
+  },
+  {
+    id:'20261124_01_market_invoice_issuers',
+    file:'migrations/20261124_01_market_invoice_issuers.sql',
+    inspect:inspectMarketIssuers,
+    verify:async pool=>assertSatisfied(inspectMarketIssuers(pool),'Market issuer schema verification failed.')
   }
 ];
 
