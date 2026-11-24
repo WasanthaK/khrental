@@ -50,7 +50,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
       VALUES(@membershipId,@otherTenant,@otherAdmin,'active','admin')`,
       {membershipId: crypto.randomUUID(), otherTenant, otherAdmin});
   });
-  const assertIsolated = async () => {
+  const assertIsolated = async expectedStatus => {
     const snapshot = async () => ({
       command: await store.read('SELECT * FROM dbo.management_billing_commands WHERE id=@id', {id}),
       recovery: await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id', {id}),
@@ -58,6 +58,12 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
       audit: await store.read('SELECT * FROM dbo.management_billing_audit WHERE resource_id=@id ORDER BY id', {id})
     });
     const before = await snapshot();
+    assert.equal(before.command.length, 1);
+    assert.equal(before.command[0].kind, 'cancellation');
+    assert.equal(before.command[0].status, expectedStatus);
+    assert.equal(before.recovery.length, 1);
+    assert.ok(before.steps.length > 0);
+    const providerBefore = structuredClone([...remote.entries()]);
     const requestCount = calls.length;
     await assert.rejects(service.recoverOperation({tenantId: otherTenant, id}), {code: 'BILLING_COMMAND_NOT_FOUND'});
     // Test the mounted route with a fixed workspace context and disposable SQL.
@@ -77,12 +83,14 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
       }
     }));
     const server = app.listen(0, '127.0.0.1');
+    let status;
     try {
       await once(server, 'listening');
       const response = await fetch(`http://127.0.0.1:${server.address().port}/api/management-billing/reconcile-cancellation`, {
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({requestId: id})
       });
-      assert.equal(response.status, 404);
+      status = response.status;
+      assert.equal(status, 404);
       assert.deepEqual(await response.json(), {
         code: 'BILLING_COMMAND_NOT_FOUND', error: 'This billing operation was not found.'
       });
@@ -90,9 +98,21 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
       await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     }
     assert.equal(calls.length, requestCount);
-    assert.deepEqual(await snapshot(), before);
+    const after = await snapshot();
+    const providerAfter = [...remote.entries()];
+    assert.deepEqual(after, before);
+    assert.deepEqual(providerAfter, providerBefore);
+    const digest = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    const hashes = (rows, provider) => Object.fromEntries(
+      Object.entries({...rows, provider}).map(([name, value]) => [name, digest(value)])
+    );
+    console.log('CANCELLATION_ISOLATION_EVIDENCE=' + JSON.stringify({
+      environment: 'disposable-sql', provider: 'synthetic', commandStatus: expectedStatus,
+      httpStatus: status, providerRequests: calls.length - requestCount,
+      before: hashes(before, providerBefore), after: hashes(after, providerAfter)
+    }));
   };
-  await assertIsolated();
+  await assertIsolated('pending');
   const posts=calls.filter(c=>c.method==='POST').length;
   await store.locked(tenantId,async q=>{
     await q('UPDATE dbo.management_billing_steps SET created_at=DATEADD(hour,-48,SYSUTCDATETIME()) WHERE command_id=@id',{id});
@@ -104,7 +124,7 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   assert.equal((await store.read('SELECT state FROM dbo.management_billing_recovery WHERE command_id=@id',{id}))[0].state,'succeeded');
   assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE resource_id=@id AND action='sandbox.cancellation.recovered'",{id})).length,1);
 
-  await assertIsolated();
+  await assertIsolated('completed');
   console.log('PASS: pending and completed cancellation recovery are tenant-isolated with unchanged command, journal, steps and audit and zero provider requests');
 
   const leaseId=crypto.randomUUID();
