@@ -70,7 +70,7 @@ Two dwellings at LKR 25,075 would total USD 10.02 under the proposed per-dwellin
 
 ### Merchant facts still needed — CM02.1
 
-Existing company branding identifies Quixo, Inc.; it does not establish the live seller of record, account eligibility or actual payout destination. Obtain a single approved merchant profile: legal seller, establishment/residence and operating presence, service/contact address, registration identifiers, intended live account, invoice issuer, authorized signatory, payout readiness and any account restrictions. Store sensitive supporting records in the appropriate restricted system; this document needs verified outcomes and references, not bank credentials or identity documents.
+On 24 November 2026 the owner confirmed that Quixo Inc. (USA) will issue Quixo Homes invoices for the Sri Lanka launch. Live merchant account and payout approval remain unverified. Obtain a single approved merchant profile: confirmed invoice issuer, establishment/residence and operating presence, service/contact address, registration identifiers, intended live account, invoice issuer, authorized signatory, payout readiness and any account restrictions. Store sensitive supporting records in the appropriate restricted system; this document needs verified outcomes and references, not bank credentials or identity documents.
 
 | Collection route | Current evidence and decision |
 | --- | --- |
@@ -99,7 +99,7 @@ IRD's 3 July notice confirms the enacted digital-service regime and says procedu
 | Registration not yet required / exemption claimed | Record the specific basis, turnover evidence, monitoring owner and next review trigger. “Below threshold” is a conclusion requiring facts, not a default from sandbox configuration. |
 | Invoice and accounting | Validate issuer identity, registration details, tax treatment, currency/conversion, required invoice fields and correction/credit process against the selected regime. Keep SaaS invoices separate from landlord rental invoices. |
 
-**Open facts:** seller/establishment, actual registration and turnover, first subscriber countries and tax status, provider capability and legally reviewed invoice treatment. Tax readiness remains YELLOW; merchant/payout remains RED. No tax registration, `automatic_tax` setting or live transaction was created by this research.
+**Open facts:** relevant tax establishments, actual registration and turnover, first subscriber countries and tax status, provider capability and legally reviewed invoice treatment. Tax readiness remains YELLOW; merchant/payout remains RED. No tax registration, `automatic_tax` setting or live transaction was created by this research.
 
 ## 4. Privacy, transfers and retention — CM02.4–CM02.5
 
@@ -163,7 +163,7 @@ The restoration paragraph contains a **proposed** policy and cannot be published
 | --- | --- | --- |
 | A — price | Rent basis including vacant stock, CBSL/version-lock choice, half-up per-dwelling rounding, customer notice/cohort policy and tax presentation | Recommendations above; owner approval pending, percentage/FX implementation and acceptance pending |
 | B — lifecycle terms | No separate reactivation fee, ended-subscription gap versus overdue-invoice treatment, no exceptional bulk rule, error/refund/support treatment | Recommendations above; owner approval and affected flow/provider acceptance pending |
-| C — merchant/tax | Confirm Quixo's actual seller and live account, establishment/registration/turnover/customer facts, collection route, tax engine and invoice treatment | Facts and jurisdiction-specific review required; CM02.1 RED, CM02.2 YELLOW |
+| C — merchant/tax | Invoice issuer confirmed as Quixo Inc. (USA). Verify the live account, establishment/registration/turnover/customer facts, collection route, tax engine and invoice treatment | Facts and jurisdiction-specific review required; CM02.1 RED, CM02.2 YELLOW |
 | D — privacy | Approve actual roles/contact/entity, account-specific provider/transfer evidence, retention/backup schedule and controlled request proof | CM02.4/5 YELLOW |
 
 Documentation completion does not make the commercial decisions approved or LK launch-ready. After these decisions, separately scope the necessary percentage-pricing, customer treatment and request-handling engineering; recheck the current self-handoff and active branches before starting implementation. Keep live charging/full enforcement OFF and retain the owner's other R5 scope decisions.
