@@ -8,6 +8,8 @@
 - SECURITY, USER EXPERIENCE, and DURABILITY are mandatory design constraints for authentication and account lifecycle work
 - READ `docs/AUTHENTICATION-LIFECYCLE.md` and `docs/EXECUTION-PLAN.md` before changing authentication, invitations, user creation, memberships, session handling, password flows, onboarding, or auth-related routing
 
+For R5 engineering and coding assignments, follow the [R5 handoff instructions](docs/R5-SELF-HANDOFF-20261115.md#engineering-instructions).
+
 ## Customer Design and Acceptance Principles
 
 Content, UX, UI and usability are mandatory design criteria for every customer-facing change, alongside security, correctness and durability.
