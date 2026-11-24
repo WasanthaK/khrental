@@ -1,3 +1,4 @@
+import {verifyIssuerAdministration} from './test-market-issuer-administration-sql.mjs';
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
 import {inspectPropertyApplications} from './inspect-property-applications-schema.mjs';
@@ -1098,6 +1099,7 @@ const main = async () => {
     await assert.rejects(testPool.request().query(`
       UPDATE dbo.management_invoice_issuers SET legal_name='Edited issuer'
       WHERE country_code='CA' AND legal_name='Fixture issuer B'`), /retained for billing history/i);
+    await verifyIssuerAdministration(testPool);
     console.log('PASS: market issuer migration replay, draft exclusion, country isolation, cutover and conflicting date');
 
 

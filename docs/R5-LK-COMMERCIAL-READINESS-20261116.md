@@ -82,7 +82,7 @@ The owner requires country launches and future changes of billing entity to be c
 - Make the treatment of existing subscriptions an explicit cutover decision. Preserve their original account binding until a supported migration or replacement is completed and reconciled. A country profile edit alone must never move funds or subscriptions.
 - Acceptance must cover adding a new country with records alone, scheduling a replacement issuer, billing immediately before and at the effective instant, and retrieving an earlier invoice with its original issuer. Keep a draft or unready merchant from activating live charges.
 
-Implementation remains open. The existing sandbox billing-account constraint pins a single Stripe account. The pricing validation and admin market selector also enumerate countries. These boundaries require engineering before live multi-issuer routing can be accepted.
+The database supports effective-dated issuer assignments ([PR #720](https://github.com/WasanthaK/khrental/pull/720)). Platform administration supports saving drafts and scheduling an assignment by UTC time and approval reference. Production migration, deployed acceptance, invoice snapshots and provider routing remain open. The existing sandbox billing-account constraint pins a single Stripe account. The pricing validation and admin market selector also enumerate countries. These boundaries require engineering before live multi-issuer routing can be accepted.
 
 
 | Collection route | Current evidence and decision |

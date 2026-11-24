@@ -1,3 +1,4 @@
+import {listIssuerAssignments,saveIssuerDraft,scheduleIssuer} from './issuerAdministration.js';
 import express from 'express';
 import {createTenantContextMiddleware} from '../tenant/context.js';
 import {isPlatformAdmin} from '../mssql/platformAdminRouter.js';
@@ -29,6 +30,15 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   router.use((req,res,next)=>req.authSession && req.user?.id && !req.user?.is_dev_bypass?next():res.status(401).json({error:'An authenticated session is required.'}));
   const globalAdmin=wrap(async(req,_res,next)=>{if(!await checkPlatformAdmin(req.user)) {throw problem(403,'PLATFORM_ADMIN_REQUIRED','Platform administrator access is required.');}next();});
   const orgAdmin=wrap(async(req,_res,next)=>{assertBillingAdministrator(req);next();});
+  router.get('/admin/issuer-assignments',globalAdmin,wrap(async(_req,res)=>send(res,await listIssuerAssignments(store))));
+  router.post('/admin/issuer-assignments',globalAdmin,wrap(async(req,res)=>{
+    exact(req.body,['market','issuerCountry','legalName']);
+    send(res,await saveIssuerDraft(store,req.user.id,req.body));
+  }));
+  router.post('/admin/issuer-assignments/:id/schedule',globalAdmin,wrap(async(req,res)=>{
+    exact(req.body,['effectiveAt','approvalReference']);
+    send(res,await scheduleIssuer(store,req.user.id,req.params.id,req.body));
+  }));
   router.get('/admin/pricing',globalAdmin,wrap(async(_req,res)=>send(res,{versions:await store.listPricing(),sandboxConfigured:stripe.configured(),liveChargingEnabled:false})));
   router.post('/admin/pricing/preview',globalAdmin,wrap(async(req,res)=>{
     exact(req.body,['rules','quantity']);send(res,pricingPreview(parsePricing(req.body.rules),req.body.quantity));
