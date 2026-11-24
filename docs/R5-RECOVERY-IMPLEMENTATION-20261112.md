@@ -2,13 +2,15 @@
 
 **BL07.2 — Passed.** Administrator grant/revoke, stale-save rejection and audit checks passed. Test workspace deactivated. Remaining R5 gates stay open.
 
+The dated implementation checkpoints below preserve the sequence of work. Use the [current execution plan](EXECUTION-PLAN.md) for outstanding R5 work.
+
 ## BL07.3 paid access after complimentary expiry — passed 13 November 2026
 
 [Run 43362222581](https://github.com/WasanthaK/khrental/actions/runs/43362222581), job 131678160465, passed all five checks at **09:28:46 Asia/Colombo / 03:58:46 UTC**. In an isolated fixture with seeded paid state, authenticated writes succeeded before and after a 30-second complimentary grant expired naturally by SQL time; the post-expiry change was read back and billing/complimentary state remained unchanged. Both protected billing fixtures remained unchanged; Stripe writes were zero. The fixture session was revoked and user/membership/tenant deactivated.
 
 Original enforcement settings and public health were restored at **09:29:30 Asia/Colombo / 03:59:30 UTC**, revision **khrental-app--0000506**, unchanged application build `5dff24f354ed0f3a40d5d51bd61829b145d6fbf8`. [PR #625](https://github.com/WasanthaK/khrental/pull/625) added the check; [#626](https://github.com/WasanthaK/khrental/pull/626) corrected the source allowlist; [#627](https://github.com/WasanthaK/khrental/pull/627) shortened Azure commands after a pre-execution handshake 404. All three passed CI. Earlier runs 43361034868 and 43361502496 did not execute acceptance checks and are superseded by this pass.
 
-[Durable evidence](evidence/r5-paid-comp-expiry-20261113.json). **The paid-underlay expiry case is closed; do not rerun it.** Seeded paid/grant state is not real payment or actual Platform Admin grant/revoke/audit acceptance. BL07.2 privileged controls, natural seven-day grace, remaining role/resource/route and launch acceptance stay open; R5 is not complete. Live charging remains **OFF**, Evia **paused**, and accepted prior proofs, worker scope and retained clocks are preserved.
+[Durable evidence](evidence/r5-paid-comp-expiry-20261113.json). **The paid-underlay expiry case is closed; do not rerun it.** This fixture used seeded paid and grant state. The separate administrator grant/revoke and audit result is recorded under BL07.2 in the [acceptance ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions).
 
 ## R5 checkpoint — 13 November 2026
 
@@ -96,7 +98,7 @@ Current next work: complete the remaining deployed financial-operation/lifecycle
 
 The transport and inspection blockers are resolved for this original operation. #593–#597 provide the guarded harness and default read-only inspection mode; final harness CI passed. Ready 0000491, application image `59050153ad96b10be7c1990df846363a1642c046` and one-organization worker scope remain unchanged. The now-passed separate response-loss case used a new ID only after this confirmed completion; no original state or key was reset. Evia remains paused; R5 remains open.
 
-## Development progress and remaining acceptance — controlling queue
+## Historical development and acceptance queue
 
 This section and the current engineering status above control execution. Older dated checkpoints retain their evidence, but their “next”, “not implemented”, “migration pending” and “worker off” statements are historical. The detailed [handoff task dispositions](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) are reconciled to this queue; an acceptance gap must not be turned back into an implementation task.
 

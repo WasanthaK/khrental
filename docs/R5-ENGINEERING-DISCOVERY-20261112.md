@@ -4,7 +4,7 @@ Source baseline: `1f114d1fcd71ea93a8d399cb21a1b5c9881e5268`. This is the read-fi
 
 ## Current implementation checkpoint
 
-Recovery source is merged through [PR #574](https://github.com/WasanthaK/khrental/pull/574), with 1,257 passing tests and both SQL suites. See the [canonical plan](EXECUTION-PLAN.md#canonical-current-status--12-november-2026) for exact evidence. The tables below preserve the original discovery baseline; they must not requeue completed recovery or worker implementation. The next engineering work is restoration/split and remaining cessation states under the approved defaults below. Staging, genuine provider acceptance and activation remain open.
+Recovery source is merged through [PR #574](https://github.com/WasanthaK/khrental/pull/574), with 1,257 passing tests and both SQL suites. See the [canonical plan](EXECUTION-PLAN.md#development-progress-and-remaining-acceptance--controlling-queue) for exact evidence. The tables below preserve the original discovery baseline; they must not requeue completed recovery or worker implementation. The next engineering work is restoration/split and remaining cessation states under the approved defaults below. Staging, genuine provider acceptance and activation remain open.
 
 ## Result and implementation boundary
 
