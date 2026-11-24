@@ -41,6 +41,7 @@ on:
           - 20261112_01_management_recovery
           - 20261112_02_management_restoration
           - 20261112_03_management_splits
+          - 20261124_01_market_invoice_issuers
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false
