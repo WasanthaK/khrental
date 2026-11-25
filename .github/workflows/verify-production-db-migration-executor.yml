@@ -201,6 +201,8 @@ jobs:
             20261112_03_management_splits
             20261124_01_market_invoice_issuers"
 
+            local -a preflight_rows=()
+            local state
             for migration_id in $migration_ids; do
               if [ "$VERIFICATION_MODE" = "strict" ]; then
                 if ! grep -Eq "VERIFY[[:space:]]+$migration_id[[:space:]]+LEDGERED[[:space:]]+SCHEMA_OK([[:space:]]|$)" "$log_file"; then
@@ -208,10 +210,18 @@ jobs:
                   rm -f "$log_file"
                   return 1
                 fi
-              elif ! grep -Eq "PREFLIGHT[[:space:]]+$migration_id[[:space:]]+(LEDGERED|SATISFIED_UNTRACKED|PENDING)[[:space:]]" "$log_file"; then
-                echo "Missing read-only preflight state for $migration_id." >&2
-                rm -f "$log_file"
-                return 1
+              else
+                state=$(sed -nE "s/.*PREFLIGHT[[:space:]]+$migration_id[[:space:]]+(LEDGERED|SATISFIED_UNTRACKED|PENDING)[[:space:]].*/\1/p" "$log_file" | sort -u)
+                case "$state" in
+                  LEDGERED|SATISFIED_UNTRACKED|PENDING)
+                    preflight_rows+=("| $migration_id | $state |")
+                    ;;
+                  *)
+                    echo "Missing or conflicting preflight state for $migration_id." >&2
+                    rm -f "$log_file"
+                    return 1
+                    ;;
+                esac
               fi
             done
 
@@ -232,6 +242,10 @@ jobs:
                 echo
                 echo "**24/24 ledger/schema checks passed.** Raw Azure logs are not published."
               else
+                echo "| Migration | Preflight state |"
+                echo "| --- | --- |"
+                printf '%s\n' "${preflight_rows[@]}"
+                echo
                 echo "Pre-apply preflight inspected all 24 migrations with no database writes."
                 echo "Preflight allows PENDING and SATISFIED_UNTRACKED. It does not certify an applied schema."
                 echo "Production apply still requires separate authorization; strict acceptance must follow apply."
@@ -239,7 +253,7 @@ jobs:
               fi
             } >> "$GITHUB_STEP_SUMMARY"
 
-            echo "Retained seventeen redacted $VERIFICATION_MODE results for execution $execution_name."
+            echo "Retained 24 redacted $VERIFICATION_MODE results for execution $execution_name."
             rm -f "$log_file"
           }
 
@@ -257,7 +271,7 @@ jobs:
               case "$status" in
                 Succeeded)
                   capture_verification_evidence
-                  echo "Read-only executor $VERIFICATION_MODE verification passed with seventeen retained migration results."
+                  echo "Read-only executor $VERIFICATION_MODE verification passed with 24 retained migration results."
                   exit 0
                   ;;
                 Failed|Stopped)
