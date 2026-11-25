@@ -1,8 +1,8 @@
 # R4 and R5 delivery programme
 
-## Current canonical status — 24 November 2026
+## Current canonical status — 25 November 2026
 
-On 24 November at 22:15 Asia/Colombo, [production run 1853](https://github.com/WasanthaK/khrental/actions/runs/45439600173) verified ready revision `0000526`, the public build `dc5ba385158046b0d5ab7040fac6148e5ca4bdb7`, application health and SQL connectivity. This release includes the issuer administration screen and cancellation ownership fix. The production issuer migration and deployed functional acceptance remain open.
+On 25 November, production deployment [#1856](https://github.com/WasanthaK/khrental/actions/runs/45522706927) served `4e32c05d`. [Apply #71, attempt 2](https://github.com/WasanthaK/khrental/actions/runs/45616123887/job/139217741324) applied the market invoice issuer migration. [Strict verification #17, attempt 2](https://github.com/WasanthaK/khrental/actions/runs/45518652952/job/139221679391) passed all 24 ledger and schema checks. In the deployed Management pricing screen, the platform administrator saw **LK · Quixo Inc. (US)** with status **Draft** under Assignment history. The workspace administrator received the platform administrator access requirement. Live issuance still requires approval and an effective date.
 
 **R5 is partial. Live charging and full enforcement are OFF. Natural seven-day grace expiry and the Evia package/matching audit are outside R5 by [owner decision](#owner-scope-decision--15-november-2026).** The [controlling queue](#development-progress-and-remaining-acceptance--controlling-queue) is the reconciled status table for this document. Mounted HTTP cancellation isolation passed with disposable SQL. Deployed HTTP isolation of a journaled cancellation command remains open. [Acceptance evidence](R5-LIFECYCLE-ACCEPTANCE-20261105.md#bl0811-cancellation-isolation). [Last verified production release](evidence/r5-release-0000525.md).
 
