@@ -6,6 +6,16 @@ The owner requested this commercial lane in parallel with engineering. Its scope
 
 The [documentation review record](evidence/r5-lk-commercial-readiness-20261116.json) retains the source list, checks and evidence boundaries. It is not a deployed acceptance run.
 
+## Country billing decisions agreed on 26 November 2026
+
+For each launched country, an authorized platform admin maintains effective-dated database records for local prices, invoice issuer, collector, receiving account and applicable tax rules. For Sri Lanka, the admin sets the dwelling fee in LKR. Apply the existing 2% excess calculation in LKR above the LKR 25,000 threshold. The USD conversion proposal below is historical. The actual LKR base fee, precise rent basis, rounding and effective date still need confirmation.
+
+Quixo Inc. (USA) is the initial Sri Lanka platform invoice issuer. Its deployed assignment is draft. A future local entity can receive a new effective-dated assignment. The collector and receiving account are selected together, independently of the issuer. Stripe is the sandbox collector. PayHere is a candidate for later evaluation. Issued documents retain their original issuer, prices and tax treatment.
+
+The proposed Taxes screen allows admins to enable applicable VAT and withholding separately. Other configurable treatments include turnover levies, document duties and reverse charge. Each rule identifies its jurisdiction, issuer, taxable charge, rate or amount, effective period, responsible party and effect on invoice or settlement. These are design choices. Applicable registrations, rates and live collection authority remain open.
+
+Owner rent collection is a separate opt-in feature outside the current R5 closure criteria. Rent documents belong to the property owner's billing entity. Quixo issues its own fee invoices. The proposed ledger distinguishes rent due, cash received, verified withholding, fee deductions and owner payout. The mockups establish design direction only.
+
 ## 1. Decisions retained and implementation boundary
 
 | Topic | Existing direction retained |
@@ -14,7 +24,7 @@ The [documentation review record](evidence/r5-lk-commercial-readiness-20261116.j
 | Customer and listing | The property-management organization buys the SaaS subscription. Browsing is free; standard eligible public listing is included, with owner opt-out and no separate listing fee. SaaS charges are separate from landlord rent, deposits and rental invoices. |
 | Inventory changes | Ordinary additions are prorated onto the next invoice. Obligations-closed removals reduce quantity at renewal without an immediate current-period reduction credit. The final dwelling schedules cancellation at renewal; do not send quantity zero. |
 | Expiry and records | Management becomes read-only after expiry, including existing-tenancy writes. Preserve authorized history, renter access and billing recovery. The seven-day renewal-failure grace policy remains; its natural-expiry acceptance is outside R5 by owner decision. |
-| LK price direction | Retain the recorded LKR 25,000 threshold and 2% excess direction. The complete rent basis, FX convention, rounding, effective price and customer treatment still need approval. |
+| LK price direction | Retain the recorded LKR 25,000 threshold and 2% excess direction. Use the admin-maintained LKR table. The rent basis, rounding, LKR base fee and customer treatment still need approval. |
 | Authority and regions | Only verified platform administration governs market rules. Sri Lanka is first; Brunei has separate later commercial and launch acceptance. |
 
 Authority: [approved contract and 10 November commercial pack](QUIXO-STRIPE-B02-B03-READINESS.md#controlling-commercial-decision-pack--10-november-2026), [30 October configurable-pricing decision](QUIXO-HOMES-STRIPE-SAAS-BILLING.md#controlling-owner-decision--configurable-market-pricing-30-october-2026), and the canonical scope decision. The older statement that LKR 25,000 is merely an example must not reopen the subsequently retained direction.
@@ -25,7 +35,7 @@ The current [pricing contract](../src/api/managementBilling/contract.js) accepts
 
 Every recommendation in this section is **proposed**, including the suggested notice period and rent basis. None is a newly approved fee or legal minimum.
 
-### Calculation and exchange rate — CM01.3
+### Historical USD conversion proposal — superseded for Sri Lanka on 26 November
 
 Retain the existing candidate formula. For each dwelling, with monthly rent `R` in LKR and conversion rate `F` in LKR per USD:
 
