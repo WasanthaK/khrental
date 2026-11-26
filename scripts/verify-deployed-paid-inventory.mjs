@@ -165,6 +165,81 @@ const cleanupFixture=async()=>{
 };
 
 
+async function verifyInvoicePreviewRecovery() {
+  stage='invoice_preview_recovery';
+  const property=randomUUID();
+  await store.stageStock({tenantId,actorId,reason:'Preview one additional private dwelling.',records:[{
+    kind:'property',payload:{id:property,name:'Private preview fixture',propertytype:'house',country_code:'LK',
+      availability:'inactive',rentalvalues:{listingCategory:'residential'}}
+  }]});
+  try {
+    for(const expire of [false,true]){
+      const args={tenantId,actorId,id:randomUUID()};
+      const posts=[];
+      let nowOverride;
+      const client={...stripe,request:async(method,path,body,key)=>{
+        if(method==='GET'){return stripe.request(method,path,body,key);}
+        assert.equal(method,'POST');
+        assert.equal(path,'/v1/invoices/create_preview');
+        assert.equal(body.customer,customer.id);
+        assert.equal(body.subscription,subscription.id);
+        assert.equal(body.subscription_details.items[0].quantity,3);
+        assert.equal(key.toLowerCase(),`quixo:${tenantId}:${args.id}`);
+        if(posts.length){
+          assert.equal(expire,false);
+          assert.equal(posts.length,1);
+          assert.equal(key,posts[0].key);
+          assert.deepEqual(body,posts[0].body);
+        }
+        const value=await stripe.request(method,path,body,key);
+        posts.push({body:structuredClone(body),key,total:value.total});
+        if(posts.length===1){throw Object.assign(Error('Discarded fixture preview response'),{code:'STRIPE_UNAVAILABLE',status:503});}
+        return value;
+      }};
+      const subject=createBillingService({store,stripe:client,env,clock:{now:()=>nowOverride??Date.now()}});
+      await assert.rejects(subject.quantityPreview(args),{code:'STRIPE_UNAVAILABLE'});
+      assert.equal(posts.length,1);
+      const recoveryRow=async()=> (await store.read(`SELECT attempts,state,
+        CASE WHEN next_attempt_at<=SYSUTCDATETIME() AND lease_until IS NULL THEN 1 ELSE 0 END AS due
+        FROM dbo.management_billing_recovery r JOIN dbo.management_billing_commands c ON c.id=r.command_id WHERE r.command_id=@id AND c.tenant_id=@tenantId`,args))[0];
+      const deadline=Date.now()+90000;
+      let row=await recoveryRow();
+      while(!row.due && Date.now()<deadline){await delay(2000);row=await recoveryRow();}
+      assert.equal(row.attempts,1);assert.equal(row.state,'pending');assert.equal(row.due,1);
+      if(expire){
+        nowOverride=(posts[0].body.subscription_details.proration_date+601)*1000;
+        await assert.rejects(subject.quantityPreview(args),{code:'BILLING_REVIEW_EXPIRED'});
+        assert.equal(posts.length,1);
+        check('expired_preview_requires_fresh_review_without_provider_retry_controlled_clock');
+      }else{
+        const result=await subject.quantityPreview(args);
+        assert.equal(result.from,2);assert.equal(result.to,3);
+        assert.equal(result.nextInvoiceTotalMinor,posts[0].total);
+        assert.deepEqual(await subject.quantityPreview(args),result);
+        assert.equal(posts.length,2);
+        check('lost_preview_recovered_with_original_key_and_proration');
+      }
+      row=await recoveryRow();
+      assert.equal(row.attempts,2);assert.equal(row.state,'succeeded');
+      const steps=await store.read('SELECT name,idempotency_key,completed_at FROM dbo.management_billing_steps WHERE command_id=@id',args);
+      assert.equal(steps.length,1);assert.equal(steps[0].name,'preview_invoice');
+      assert.equal(steps[0].idempotency_key,posts[0].key);
+      assert.equal(Boolean(steps[0].completed_at),!expire);
+      const audits=await store.read("SELECT id FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND resource_id=@id AND action='sandbox.quantity_preview.recovered'",args);
+      assert.equal(audits.length,1);
+    }
+    const invoices=await read('/v1/invoices',{customer:customer.id,limit:100});
+    assert.equal(invoices.has_more,false);
+    assert.deepEqual(invoices.data.map(value=>value.id),[proof.initialInvoice]);
+    assert.equal((await provider()).items.data[0].quantity,2);
+    assert.equal(await count(),2);
+    check('preview_created_no_payable_invoice_or_quantity_change');
+    proof.invoicePreviewRecoveryAccepted=true;
+  } finally {
+    await store.withdrawStock({tenantId,actorId,ids:[property],reason:'Retire private preview fixture.'});
+  }
+}
+
 const advanceFixtureClock=async(target,key)=>{
     const ownedCustomer=await read('/v1/customers/'+customer.id),ownedSub=await provider();
     assert.equal(ownedCustomer.livemode,false);assert.equal(ownedCustomer.metadata.acceptance_fixture,tenantId);
@@ -871,7 +946,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cessation-reservation-conflict','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['invoice-preview-recovery','transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cessation-reservation-conflict','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -926,7 +1001,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(scenario==='cessation-reservation-conflict'){await verifyCessationReservation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(scenario==='invoice-preview-recovery'){await verifyInvoicePreviewRecovery();}else if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-financial-conflict'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(scenario==='cessation-reservation-conflict'){await verifyCessationReservation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
