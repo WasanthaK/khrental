@@ -1,4 +1,6 @@
-# R5 self-handoff — updated 25 November 2026
+# R5 self-handoff — updated 26 November 2026
+
+**Cancellation isolation case closed by owner decision, 26 November 2026.** The [CI job](https://github.com/WasanthaK/khrental/actions/runs/45435218718/job/138591046050) recorded HTTP 404 and zero synthetic provider requests for pending and completed cancellations. Before-and-after records matched in both cases. Deployed verification remains outstanding. This case leaves the active R5 queue. Other billing isolation and recovery checks remain in scope.
 
 ## Owner-confirmed rent billing dates
 
@@ -224,20 +226,19 @@ UUID `3723cb4a-f474-4789-93b6-513652b6cf08` is used and must never be replayed. 
 
 ## Next executable slice
 
-Verify the deployed HTTP denial using fresh isolated sandbox organizations and a journaled cancellation command. Record the response and compare the command, recovery row, steps, audit and provider state before and after.
+Continue with the remaining subscription and billing-operation recovery cases.
 
-Mounted HTTP cancellation isolation passed with disposable SQL. Deployed HTTP isolation of a journaled cancellation command remains open. [Acceptance evidence](R5-LIFECYCLE-ACCEPTANCE-20261105.md#bl0811-cancellation-isolation).
+Mounted HTTP cancellation isolation passed with disposable SQL. The owner closed the cancellation-isolation case on 26 November with deployed HTTP verification outstanding. [Acceptance evidence](R5-LIFECYCLE-ACCEPTANCE-20261105.md#bl0811-cancellation-isolation).
 
 The cessation maintenance, invoice, payment, settlement, deposit and reservation blocker proofs remain complete only for their recorded paid whole-property service/SQL cases. Their accepted fixtures, including reservation UUID `ca5c25a6-9cf6-4724-9b34-a5a4f9c049de`, must never be replayed. Remaining named deployed paid cases include open tenancy, zero-value draft invoice, canceled-invoice verified-payment residue, other refund/overpayment states and approved settlement; remaining entitlement states, transitions, simultaneous-race boundaries and rendered journeys stay under inventory item 1. Use the [cessation evidence-level matrix](R5-LIFECYCLE-ACCEPTANCE-20261105.md#cessation-evidence-levels--current-scope-clarification): PR #548 unit/real SQL insertion-lock and isolated-browser proofs, paid HTTP stale previews and the later six-family blocker passes are already retained and must not be generically reimplemented or repeated. Natural seven-day grace and Evia audit remain outside R5 by owner decision. Hosted Checkout remains accepted within its recorded scopes; rendered stock forms and credential login remain separate.
 
 ## Remaining queue and exit criteria
 
 1. Inventory create/import, restoration, split and cessation: remaining stock/resource and entitlement states, transitions and rendered forms; named deployed paid cessation cases for open tenancy, zero-value draft invoice, canceled-invoice verified-payment residue, other refund/overpayment states and approved settlement; specifically unproved simultaneous-race boundaries. Use the [evidence-level matrix](R5-LIFECYCLE-ACCEPTANCE-20261105.md#cessation-evidence-levels--current-scope-clarification) to preserve completed PR #548 unit/real SQL insertion-lock and isolated-browser proofs, paid HTTP stale-preview negatives and the six recorded obligation-family passes. Active paid final-dwelling zero-stock and hosted Checkout payment/promotion are also accepted within their recorded scopes. Do not reimplement or repeat accepted cases; name the missing evidence layer before assigning a new one.
-2. Complete the deployed cancellation isolation check in [Next executable slice](#next-executable-slice). The four cancellation scenarios and open/expired/completed Checkout remain accepted within their recorded scopes.
-3. Remaining billing event and organization-isolation coverage. Retained renewal, within-grace recovery and delayed failure remain accepted; do not advance their retained clocks.
-4. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
-5. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
-6. LK commercial and launch decisions: formula/FX/rounding/versioning, reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
+2. Remaining billing event and organization-isolation coverage. Retained renewal, within-grace recovery and delayed failure remain accepted; do not advance their retained clocks.
+3. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
+4. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
+5. LK commercial and launch decisions: formula/FX/rounding/versioning, reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
 
 ## Outside R5 by owner decision
 - Natural seven-day grace expiry and later recovery. [PR #672](https://github.com/WasanthaK/khrental/pull/672) holds a prepared harness (start, inspect, expiry-recovery, cleanup); it is unmerged and has not been run. Start it only on an owner instruction, for field testing. Never advance accepted retained clocks.
