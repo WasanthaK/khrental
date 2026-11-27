@@ -1,5 +1,7 @@
 # R5 Sri Lanka commercial, tax and privacy readiness — 16 November 2026
 
+**Current R5 scope.** The [R5 Sri Lanka closure checklist](R5-LK-CLOSURE.md) controls remaining work, dependencies, deferrals and sign-off. Earlier matrices preserve the evidence and earlier scope decisions.
+
 **Status: research and proposals prepared for review; commercial approval and launch acceptance remain open.** This record advances CM01.3–CM01.7 and CM02.1/2/4/5. It does not publish customer terms, enable charging or establish tax compliance. The controlling project status remains in the [Execution Plan](EXECUTION-PLAN.md#development-progress-and-remaining-acceptance--controlling-queue) and [task ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions).
 
 The owner requested this commercial lane in parallel with engineering. Its scope is this decision record and documentation integration. The [self-handoff](R5-SELF-HANDOFF-20261115.md#remaining-queue-and-exit-criteria) retains its engineering queue; no recovery, cessation, workflow, application or provider change is part of this work. Source baseline: `367274cfd800dd64774d7490c7a58d353e74a039`. External sources were checked on 16 November 2026. Dated older decisions remain history; the latest explicit owner decision controls each topic.
@@ -35,7 +37,7 @@ The current [pricing contract](../src/api/managementBilling/contract.js) accepts
 
 ## 2. Commercial proposals ready for an owner decision
 
-Every recommendation in this section is **proposed**, including the suggested notice period and rent basis. None is a newly approved fee or legal minimum.
+These dated proposals are historical. The 26 November country decisions govern rent basis and rounding. The closure checklist identifies the decisions still required for LK.
 
 ### Historical USD conversion proposal — superseded for Sri Lanka on 26 November
 
