@@ -272,7 +272,11 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,otherAdmin,actorId
   app.use(express.json());
   app.use(createManagementBillingRouter({env:{...env,MANAGEMENT_BILLING_SCHEMA_READY:'true'},store,stripe:transport,
     resolveContext:async(req,_res,next)=>{
-      try {Object.assign(req,{tenantId:workspace,user:{id:currentActor()},authSession:{},membership:await membership()});next();}
+      try {
+        const currentMembership = await membership();
+        Object.assign(req,{tenantId:currentMembership.tenant_id,user:{id:currentActor()},authSession:{},membership:currentMembership});
+        next();
+      }
       catch (error) {next(error);}
     }}));
   const http = app.listen(0,'127.0.0.1');
@@ -289,7 +293,10 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,otherAdmin,actorId
     const inspect = () => fetch(base+'/status');
     const retry = () => fetch(base+'/portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:portalId})});
     const baseline = await state(), writeCount=writes.length;
-    const own = (await (await inspect()).json()).data.pendingOperation;
+    const ownerResponse = await inspect();
+    const ownerBody = await ownerResponse.json();
+    assert.equal(ownerResponse.status,200,JSON.stringify(ownerBody));
+    const own = ownerBody.data.pendingOperation;
     assert.equal(own.id.toLowerCase(),portalId);
     assert.equal(own.kind,'portal');
     workspace=otherTenant;
