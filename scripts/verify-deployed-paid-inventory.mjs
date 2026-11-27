@@ -621,7 +621,7 @@ const verifyCessationFinancialObligation=async()=>{
     });
     let attemptedWrites = 0;
     const guarded = createBillingService({store, env, stripe:{...stripe, request(method, ...args) {
-      if (method !== 'GET') attemptedWrites++;
+      if (method !== 'GET') { attemptedWrites++; }
       assert.equal(method, 'GET', 'Refusal must precede any provider write');
       return stripe.request(method, ...args);
     }}});
