@@ -1,3 +1,4 @@
+import {previewWorkspaceFee} from './localMarketFee.js';
 import {listIssuerAssignments,saveIssuerDraft,scheduleIssuer} from './issuerAdministration.js';
 import express from 'express';
 import {createTenantContextMiddleware} from '../tenant/context.js';
@@ -41,6 +42,12 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   }));
   router.get('/admin/pricing',globalAdmin,wrap(async(_req,res)=>send(res,{versions:await store.listPricing(),sandboxConfigured:stripe.configured(),liveChargingEnabled:false})));
   router.post('/admin/pricing/preview',globalAdmin,wrap(async(req,res)=>{
+    if (req.body?.workspaceId!==undefined) {
+      const saved=req.body.versionId!==undefined;
+      exact(req.body,[saved?'versionId':'rules','workspaceId']);
+      const pricing=saved?{versionId:identifier(req.body.versionId)}:{rules:parsePricing(req.body.rules)};
+      return send(res,await previewWorkspaceFee(store,{...pricing,tenantId:identifier(req.body.workspaceId)}));
+    }
     exact(req.body,['rules','quantity']);send(res,pricingPreview(parsePricing(req.body.rules),req.body.quantity));
   }));
   router.post('/admin/pricing',globalAdmin,wrap(async(req,res)=>{

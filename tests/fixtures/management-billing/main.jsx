@@ -15,8 +15,10 @@ const issuerRequest = async (path, options) => {
   }
   return {id:'fixture-issuer'};
 };
+const localForm={...initial,billingCurrency:'LKR',baseFee:'',includedRent:'25000',excessPolicy:'agreed_rent_excess',excessRate:'2.00'};
 function Fixture(){
- const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('12'),[preview,setPreview]=useState(null),[notice,setNotice]=useState('');
+ const [previewWorkspace,setPreviewWorkspace]=useState('');
+ const [form,setForm]=useState(new URLSearchParams(location.search).get('screen')==='local-pricing'?localForm:initial),[quantity,setQuantity]=useState('12'),[preview,setPreview]=useState(null),[notice,setNotice]=useState('');
  const [compMode,setCompMode]=useState('fixed'),[expiry,setExpiry]=useState('2027-01-01T00:00'),[note,setNote]=useState('Synthetic complimentary acceptance decision.');
  const [stockDraft,setStockDraft]=useState({id:'11111111-1111-4111-8111-111111111111',name:'',country:'LK',type:'house'});
  const [restorationReason,setRestorationReason]=useState('');
@@ -60,6 +62,14 @@ function Fixture(){
       if(kind==='stock/split-preview'){return {to:2,from:1,mode:scenario==='split-complimentary'?'complimentary':'active',inventoryHash:'a'.repeat(64)};}
       if(kind==='stock/split'){window.splitPayload=payload;return {splitCompleted:true};}
     }} onReload={()=>{}}/>;
+ }
+ if(screen==='local-pricing'){
+  const previewFee=()=>setPreview({currency:'LKR',quantity:2,monthlyTotalMinor:170000,
+    lines:[{key:'vacant',label:'Vacant fixture',rentBasis:'vacant',monthlyRentMinor:0,monthlyFeeMinor:10000},
+      {key:'leased',label:'Active fixture',rentBasis:'active_agreement',monthlyRentMinor:10000000,monthlyFeeMinor:160000}]});
+  return <ManagementPricingView {...{form,setForm,quantity,setQuantity,preview,previewWorkspace}} onPreviewWorkspace={setPreviewWorkspace}
+    enrollment={{workspaces:[{id:'fixture',name:'Example test workspace'}],value:{},update:()=>{},submit:()=>{}}}
+    onPreview={previewFee} onSave={e=>e.preventDefault()} onReload={()=>{}}/>;
  }
  if(screen==='complimentary'){return <><h1 className="mx-auto max-w-6xl p-6 text-3xl font-semibold">Management access</h1><ManagementComplimentaryView
   workspaces={[{id:'fixture',name:'Example test workspace'}]} tenantId="fixture" status={{version:1,mode:null,entitlement:{state:'payment_pending'}}}

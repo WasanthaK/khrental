@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {once} from 'node:events';
 import express from 'express';
-import {createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
+import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
 import {verifyManagementRecovery} from './test-management-recovery-sql.mjs';
@@ -81,7 +81,61 @@ export const verifyManagementBilling=async pool=>{
   assert.equal((await store.listPricing()).length,1,'Failed transaction leaves no partial pricing version.');
   console.log('PASS: management billing double migration, constraint drift denial, concurrent version serialization and atomic audit/rollback');
   await verifyBillingTransactions(pool,store,actor.id);
+  await verifyLocalWorkspaceFee(store,actor.id);
 };
+
+async function verifyLocalWorkspaceFee(store,actorId) {
+  const tenantId=crypto.randomUUID();
+  const fixtureRents=[null,25000,100000,25000.25,25000.25,25000.24];
+  const homes=fixtureRents.map(()=>crypto.randomUUID());
+  await store.locked(tenantId,async q=>{
+    await q("INSERT dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')",
+      {tenantId,slug:'fee-'+tenantId});
+    for(const [index,propertyId] of homes.entries()){
+      await q("INSERT dbo.properties(id,tenant_id,name,propertytype,country_code) VALUES(@propertyId,@tenantId,@name,'house','LK')",
+        {tenantId,propertyId,name:'Fee fixture '+index});
+      if(fixtureRents[index]!==null){
+        await q("INSERT dbo.agreements(id,tenant_id,propertyid,status,rentamount) VALUES(@id,@tenantId,@propertyId,'active',CAST(@rent AS DECIMAL(18,2)))",
+          {id:crypto.randomUUID(),tenantId,propertyId,rent:String(fixtureRents[index])});
+      }
+    }
+  });
+  const rules={market:'LK',billingCurrency:'LKR',rentCurrency:'LKR',baseFeeMinor:10000,includedRentMinor:2500000,
+    excessPolicy:'agreed_rent_excess',excessRateBasisPoints:200,effectiveAt:null,reason:'Synthetic Rs 100 acceptance fee only.'};
+  const app=express();
+  app.use(express.json());
+  let allowed=true;
+  app.use(createManagementBillingRouter({store,env:{MANAGEMENT_BILLING_SCHEMA_READY:'true'},
+    resolveContext:(req,_res,next)=>{req.authSession={};req.user={id:actorId};next();},
+    checkPlatformAdmin:async()=>allowed}));
+  const server=app.listen(0,'127.0.0.1');
+  try {
+    await once(server,'listening');
+    const post=async(path,body)=>{
+      const response=await fetch('http://127.0.0.1:'+server.address().port+'/admin/pricing'+path,
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      return {status:response.status,body:await response.json()};
+    };
+    const versions=await store.listPricing();
+    const expectedVersion=Math.max(0,...versions.filter(v=>v.market==='LK').map(v=>v.version));
+    const saved=await post('',{rules,expectedVersion});
+    assert.equal(saved.status,200,JSON.stringify(saved.body));
+    const versionId=saved.body.data.id;
+    const quote=await post('/preview',{workspaceId:tenantId,versionId});
+    assert.equal(quote.status,200,JSON.stringify(quote.body));
+    const {lines,monthlyTotalMinor,currency,pricingVersionId}=quote.body.data;
+    assert.equal(pricingVersionId,versionId.toLowerCase());
+    assert.equal(currency,'LKR');assert.equal(lines.length,homes.length);
+    const ordered=homes.map(id=>lines.find(line=>line.key==='property:'+id));
+    assert.equal(ordered[0].rentBasis,'vacant');
+    assert.deepEqual(ordered.map(line=>line.monthlyFeeMinor),[10000,10000,160000,10001,10001,10000]);
+    assert.equal(monthlyTotalMinor,210002);
+    allowed=false;
+    assert.equal((await post('/preview',{versionId,workspaceId:tenantId})).status,403);
+    assert.equal(await store.account(tenantId),null);
+    console.log('R5_30_LOCAL_FEE_PREVIEW=PASS stored_LKR_version active_agreed_rent vacant threshold 1500_excess half_cent_per_dwelling authorized_preview_no_charge');
+  } finally {await new Promise(resolve=>server.close(resolve));}
+}
 
 // Real SQL transaction/uniqueness/locking proof. Stripe transport is explicitly a synthetic provider;
 // this does not claim a real Checkout payment, webhook delivery, or merchant acceptance.

@@ -38,6 +38,25 @@ try{
   await page.screenshot({path:path.join(output,'issuers-'+width+'.png'),fullPage:true});
   await page.close();
  }
+ for(const width of [390,1440]){
+  const page=await browser.newPage();
+  await page.setViewport({width,height:1000});
+  await page.goto(origin+'/tests/fixtures/management-billing/index.html?screen=local-pricing',{waitUntil:'networkidle2'});
+  const fee=await page.waitForSelector('input[aria-label="Monthly fee per dwelling (LKR)"]');
+  assert.equal(await fee.evaluate(el=>el.value),'');
+  await fee.type('100');
+  await page.select('aside select','fixture');
+  await page.focus('form button[type=button]');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('aside')?.innerText.includes('Vacant fixture'));
+  const text=await page.$eval('aside',el=>el.innerText.replace(/\s/g,' '));
+  assert.match(text,/LKR\s*1,700.00/);
+  assert.match(text,/Active fixture.+LKR\s*100,000.00 agreed rent/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await page.screenshot({path:path.join(output,'local-fee-'+width+'.png'),fullPage:true});
+  await page.close();
+  console.log('PASS: LKR workspace fee preview with vacant and active rent at '+width+'px');
+ }
  for(const screen of ['pricing','subscription','complimentary']){for(const width of [390,1440]){
   const page=await browser.newPage();const errors=[];
   page.on('pageerror',error=>errors.push(error.message));
