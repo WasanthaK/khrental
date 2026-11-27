@@ -183,6 +183,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
     send(res,await service.splitStock({tenantId:req.tenantId,actorId:req.user.id,id:identifier(req.body.requestId),propertyId:identifier(req.body.propertyId),
       units:req.body.units,inventoryHash:req.body.inventoryHash,reason:reason(req.body.reason)}));
   }));
+  router.get('/invoices/:id/local-fee',orgAdmin,wrap(async(req,res)=>send(res,await service.localInvoiceReceipt(req.tenantId,req.params.id))));
   router.post('/refresh',orgAdmin,wrap(async(req,res)=>{exact(req.body,[]);send(res,await service.refresh(req.tenantId));}));
   const command=(kind,extraKeys,run)=>router.post(`/${kind}`,orgAdmin,wrap(async(req,res)=>{
     exact(req.body,['requestId',...extraKeys]);
@@ -211,3 +212,4 @@ export const createManagementBillingWebhook=({env=process.env,store=createBillin
   router.use((error,_req,res,_next)=>res.status(error.status||500).json({error:error.status?error.message:'Webhook reconciliation failed.',code:error.code||'BILLING_WEBHOOK_ERROR'}));
   return router;
 };
+

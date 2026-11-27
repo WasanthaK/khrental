@@ -1,3 +1,4 @@
+import {verifyLocalRenewal} from './test-local-renewal.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -81,6 +82,7 @@ export const verifyManagementBilling=async pool=>{
   assert.equal((await store.listPricing()).length,1,'Failed transaction leaves no partial pricing version.');
   console.log('PASS: management billing double migration, constraint drift denial, concurrent version serialization and atomic audit/rollback');
   await verifyBillingTransactions(pool,store,actor.id);
+  await pool.request().batch(fs.readFileSync('migrations/20261124_01_market_invoice_issuers.sql','utf8'));
   await verifyLocalWorkspaceFee(store,actor.id);
 };
 
@@ -130,6 +132,24 @@ async function verifyLocalWorkspaceFee(store,actorId) {
     assert.equal(ordered[0].rentBasis,'vacant');
     assert.deepEqual(ordered.map(line=>line.monthlyFeeMinor),[10000,10000,160000,10001,10001,10000]);
     assert.equal(monthlyTotalMinor,210002);
+    const rollback=new Error('Discard isolated issuer and price bindings');
+    await assert.rejects(store.locked(tenantId,async q=>{
+      await q(`UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id='price_fixtureLK',
+        published_at=SYSUTCDATETIME() WHERE id=@versionId`,{versionId});
+      await q(`INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
+        SELECT 'LK',id,DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic only' FROM dbo.management_invoice_issuers
+        WHERE country_code='US' AND legal_name='Quixo Inc.'`);
+      const laterIssuer=async()=>{
+        await q(`DECLARE @issuer UNIQUEIDENTIFIER=NEWID();
+          INSERT dbo.management_invoice_issuers(id,country_code,legal_name) VALUES(@issuer,'LK','Later synthetic issuer');
+          INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
+          VALUES('LK',@issuer,SYSUTCDATETIME(),'Synthetic cutover')`);
+        const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('LK',SYSUTCDATETIME())");
+        assert.equal(now.legal_name,'Later synthetic issuer');
+      };
+      await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer});
+      throw rollback;
+    }),error=>error===rollback);
     allowed=false;
     assert.equal((await post('/preview',{versionId,workspaceId:tenantId})).status,403);
     assert.equal(await store.account(tenantId),null);
@@ -615,3 +635,4 @@ const verifyCessation=async(pool,{tenantId,actorId,parent,unit1,stripe,sub,calls
   }finally{stripe.request=normal;}
   console.log('PASS: atomic audited cessation, real domain obligation denials, competing obligation lock, future quantity reduction, zero-stock cancellation, immutable history, database bypass denial and response-loss retry; synthetic provider');
 };
+

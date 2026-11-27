@@ -46,7 +46,7 @@ export function localMarketFee(rules,inventory,agreements) {
   return {currency:rules.billingCurrency,quantity:lines.length,monthlyTotalMinor:Number(total),lines,taxIncluded:false};
 }
 
-export const previewWorkspaceFee=(store,{rules,versionId,tenantId})=>store.locked(tenantId,async q=>{
+export async function workspaceFee(store,q,{rules,versionId,tenantId}) {
   if(versionId) {
     const [version]=await q('SELECT rules_json FROM dbo.management_pricing_versions WHERE id=@versionId',{versionId});
     if(!version){throw problem(404,'BILLING_PRICING_NOT_FOUND','Pricing version not found.');}
@@ -62,4 +62,6 @@ export const previewWorkspaceFee=(store,{rules,versionId,tenantId})=>store.locke
   }
   const agreements=await q("SELECT propertyid,unitid,rentamount,terms FROM dbo.agreements WHERE tenant_id=@tenantId AND status='active'",{tenantId});
   return {...localMarketFee(rules,inventory,agreements),pricingVersionId:versionId??null};
-});
+}
+
+export const previewWorkspaceFee=(store,input)=>store.locked(input.tenantId,q=>workspaceFee(store,q,input));
