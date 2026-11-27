@@ -31,6 +31,7 @@ jobs:
     env:
       AZURE_RESOURCE_GROUP: khrental-prod-rg
       AZURE_CONTAINER_APP_NAME: khrental-app
+      AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       OPERATION_ID: ${{ inputs.operation_id }}
       CONFIRMATION: ${{ inputs.confirmation }}
@@ -87,17 +88,79 @@ jobs:
             jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
       - name: Verify genuine renewal, signed receiver and historical issuer
         shell: bash
+        env:
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+          STRIPE_SANDBOX_WEBHOOK_SECRET: ${{ secrets.STRIPE_SANDBOX_WEBHOOK_SECRET }}
         run: |
           set -euo pipefail
-          revision=$(jq -r '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-window.json")
-          command="R5_LK_ISSUER_OPERATION=$OPERATION_ID node /app/scripts/verify-deployed-lk-issuer-cutover.mjs"
-          printf -v invocation '%q ' az containerapp exec -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" --revision "$revision" --command "$command"
-          script -q -e -c "$invocation" /dev/null | tee lk-issuer-cutover.txt
+          for required in STRIPE_SANDBOX_SECRET_KEY STRIPE_SANDBOX_WEBHOOK_SECRET; do
+            test -n "${!required:-}"
+          done
+          job=$(az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" -o json)
+          test "$(jq -r '.properties.template.containers[0].args[0]' <<<"$job")" = scripts/run-production-migration-plan.sh
+          jq -S '.properties.template' <<<"$job" > "$RUNNER_TEMP/migrator-template-before.json"
+          container=$(jq -c '.properties.template.containers[0]' <<<"$job")
+          container_name=$(jq -er '.name' <<<"$container")
+          cpu=$(jq -er '.resources.cpu' <<<"$container")
+          memory=$(jq -er '.resources.memory' <<<"$container")
+          server=$(jq -er '.env[] | select(.name=="MSSQL_SERVER") | .value' <<<"$container")
+          database=$(jq -er '.env[] | select(.name=="MSSQL_DATABASE") | .value' <<<"$container")
+          app_server=$(jq -er '.properties.template.containers[0].env[] | select(.name=="MSSQL_SERVER") | .value' \
+            "$RUNNER_TEMP/app-window.json")
+          app_database=$(jq -er '.properties.template.containers[0].env[] | select(.name=="MSSQL_DATABASE") | .value' \
+            "$RUNNER_TEMP/app-window.json")
+          test "${server,,}" = "${app_server,,}"
+          test "$database" = "$app_database"
+          revision=$(jq -er '.properties.latestReadyRevisionName' "$RUNNER_TEMP/app-window.json")
+          image=$(az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          active=$(az containerapp job execution list -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+            --query "[?properties.status=='Running' || properties.status=='Pending' || properties.status=='Processing'] | length(@)" -o tsv)
+          test "$active" = 0
+          execution=$(az containerapp job start -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+            --container-name "$container_name" --image "$image" --cpu "$cpu" --memory "$memory" \
+            --command node --args /app/scripts/verify-deployed-lk-issuer-cutover.mjs --env-vars \
+              NODE_ENV=production MSSQL_SERVER="$server" MSSQL_DATABASE="$database" MSSQL_AUTHENTICATION=managed-identity \
+              MANAGEMENT_BILLING_SCHEMA_READY=true MANAGEMENT_BILLING_SANDBOX_ENABLED=true \
+              STRIPE_SANDBOX_ACCOUNT_ID=acct_1UTgcdQ4sARuLNQa \
+              STRIPE_SANDBOX_SECRET_KEY="$STRIPE_SANDBOX_SECRET_KEY" \
+              STRIPE_SANDBOX_WEBHOOK_SECRET="$STRIPE_SANDBOX_WEBHOOK_SECRET" \
+              MANAGEMENT_LK_SANDBOX_INVOICE_TENANT="$OPERATION_ID" MANAGEMENT_LK_SANDBOX_ISSUER_MARKET=XZ \
+              R5_LK_ISSUER_OPERATION="$OPERATION_ID" --query name -o tsv)
+          test -n "$execution"
+          printf '%s\n' "$execution" > lk-issuer-cutover-execution.txt
+          status=
+          for attempt in $(seq 1 120); do
+            status=$(az containerapp job execution show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+              --job-execution-name "$execution" --query properties.status -o tsv)
+            case "$status" in
+              Succeeded|Failed|Stopped) break ;;
+            esac
+            sleep 5
+          done
+          case "$status" in Succeeded|Failed|Stopped) ;; *) echo 'Acceptance job did not reach a terminal state.' >&2; exit 1 ;; esac
+          raw_log=$(mktemp)
+          found=0
+          for attempt in $(seq 1 12); do
+            if az containerapp job logs show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+              --execution "$execution" --container "$container_name" --tail 200 --format text > "$raw_log" 2>/dev/null \
+              && grep -Eq 'LK_ISSUER_(PASS|FAILED|CLEANUP_FAILED)=' "$raw_log"; then found=1; break; fi
+            sleep 5
+          done
+          test "$found" = 1
+          grep -Eo 'LK_ISSUER_(CHECK|FAILED|CLEANUP|CLEANUP_FAILED|PASS)=.*' "$raw_log" > lk-issuer-cutover.txt
+          rm -f "$raw_log"
+          test "$status" = Succeeded
           if grep -Eq 'LK_ISSUER_FAILED=|LK_ISSUER_CLEANUP_FAILED=' lk-issuer-cutover.txt; then exit 1; fi
           grep -Eo 'LK_ISSUER_PASS=\{[^}]+\}' lk-issuer-cutover.txt | tr -d '\r' | sed 's/^LK_ISSUER_PASS=//' > lk-issuer-cutover-summary.json
           jq -e '.passed and .signedDelivery and .authenticatedReadback and .viewerDenied and
             .sharedLkCalendarUnchanged and .protectedBillingUnchanged and .providerClean and .sqlClean and
             .sessionRevoked and .liveChargingEnabled==false and .currency=="lkr" and .totalMinor==300000' lk-issuer-cutover-summary.json
+          az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" -o json > "$RUNNER_TEMP/migrator-after.json"
+          test "$(jq -r '.properties.template.containers[0].args[0]' "$RUNNER_TEMP/migrator-after.json")" = scripts/run-production-migration-plan.sh
+          jq -S '.properties.template' "$RUNNER_TEMP/migrator-after.json" > "$RUNNER_TEMP/migrator-template-after.json"
+          diff -u "$RUNNER_TEMP/migrator-template-before.json" "$RUNNER_TEMP/migrator-template-after.json"
       - name: Restore the exact serving configuration and verify health
         if: always() && steps.window.outputs.mutated == 'true'
         shell: bash
@@ -119,6 +182,13 @@ jobs:
             jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
           curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health |
             jq -e '.ok and .connection=="ready"'
+          test "$(az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+            --query 'properties.template.containers[0].args[0]' -o tsv)" = scripts/run-production-migration-plan.sh
+          if [ -f "$RUNNER_TEMP/migrator-template-before.json" ]; then
+            az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" -o json |
+              jq -S '.properties.template' > "$RUNNER_TEMP/migrator-template-restored.json"
+            diff -u "$RUNNER_TEMP/migrator-template-before.json" "$RUNNER_TEMP/migrator-template-restored.json"
+          fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -126,5 +196,6 @@ jobs:
           path: |
             lk-issuer-cutover.txt
             lk-issuer-cutover-summary.json
+            lk-issuer-cutover-execution.txt
           if-no-files-found: ignore
           retention-days: 30
