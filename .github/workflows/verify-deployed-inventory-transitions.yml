@@ -29,7 +29,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: Production
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
       id-token: write
@@ -80,14 +80,22 @@ jobs:
           image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/enforcement-before.json")
           test "${image##*:}" = "$EXPECTED_BUILD"
           echo 'RESTORE_ENFORCEMENT=true' >> "$GITHUB_ENV"
-          az containerapp update -g khrental-prod-rg -n khrental-app --set-env-vars "MANAGEMENT_INVENTORY_SCHEMA_READY=true" "MANAGEMENT_CESSATION_SCHEMA_READY=true" "MANAGEMENT_RESTORATION_SCHEMA_READY=true" "MANAGEMENT_SPLIT_SCHEMA_READY=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS=$OPERATION_ID" -o none
+          az containerapp update -g khrental-prod-rg -n khrental-app --no-wait --set-env-vars "MANAGEMENT_INVENTORY_SCHEMA_READY=true" "MANAGEMENT_CESSATION_SCHEMA_READY=true" "MANAGEMENT_RESTORATION_SCHEMA_READY=true" "MANAGEMENT_SPLIT_SCHEMA_READY=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS=$OPERATION_ID" -o none
           ready=false
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 120); do
             az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-ready.json"
             if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null; then ready=true; break; fi
             sleep 5
           done
-          test "$ready" = true
+          if [ "$ready" != true ]; then
+            az containerapp revision list -g khrental-prod-rg -n khrental-app -o json > enforcement-revisions.json || true
+            jq '{latestRevisionName:.properties.latestRevisionName,latestReadyRevisionName:.properties.latestReadyRevisionName,provisioningState:.properties.provisioningState}' "$RUNNER_TEMP/enforcement-ready.json" | tee enforcement-config.txt
+            {
+              echo 'Inventory acceptance revision did not become ready.'
+              jq -r '.[] | [.name,.properties.provisioningState,.properties.runningState,.properties.replicas] | @tsv' enforcement-revisions.json 2>/dev/null || true
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           jq -e --arg id "$OPERATION_ID" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" and .value=="true") and any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS" and .value==$id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null
           jq -r '"HTTP_SCOPE_ENABLED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" > enforcement-config.txt
       - name: Hold protected owner browser acceptance window
@@ -199,5 +207,6 @@ jobs:
             comp-evidence.txt
             comp-result.json
             enforcement-config.txt
+            enforcement-revisions.json
             owner-browser-window.txt
           retention-days: 30
