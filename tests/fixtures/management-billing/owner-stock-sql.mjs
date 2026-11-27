@@ -76,6 +76,9 @@ export async function verifyOwnerStockScreen({store, tenantId, actorId, stripe, 
       await (await page.$('input[type=file]')).uploadFile(filename);
       await waitForText(expected);
     };
+    const waitForImportReadback = () => page.waitForFunction(() =>
+      document.querySelector('input[type=file]').files.length === 0 &&
+      document.querySelectorAll('#prepared-stock-title ~ div ul li').length === 4);
     const submit = async () => {
       await page.focus('form[aria-label="Import properties and units"] button');
       await page.keyboard.press('Enter');
@@ -87,6 +90,7 @@ export async function verifyOwnerStockScreen({store, tenantId, actorId, stripe, 
     await upload(csv, 'Review 3 records');
     await submit();
     await waitForText('Inventory prepared for billing confirmation (3 records)');
+    await waitForImportReadback();
     const labels = ['Garden cottage · Property', 'Garden House · Property', 'Lake Apartments · Property', 'Lake Apartment 1 · Unit'].sort();
     assert.deepEqual(await staged(), labels);
     const before = await pendingRows();
@@ -103,6 +107,7 @@ export async function verifyOwnerStockScreen({store, tenantId, actorId, stripe, 
     await upload(csv, 'Review 3 records');
     await submit();
     await waitForText('Inventory prepared for billing confirmation (3 records)');
+    await waitForImportReadback();
     assert.deepEqual(await pendingRows(), before);
     const conflict = header + '\nnew-home,Would be staged first,house,LK,\nhome-01,Changed name,house,LK,';
     await upload(conflict, 'Review 2 records');
