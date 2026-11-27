@@ -1,5 +1,9 @@
 import {loadRentalReservationReadiness} from '../src/api/platform/tenancyActivation.js';
 import assert from 'node:assert/strict';
+import express from 'express';
+import {once} from 'node:events';
+import puppeteer from 'puppeteer';
+import {createPublicListingsRouter} from '../src/api/publicListings/router.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import sql from 'mssql';
@@ -9,7 +13,7 @@ import {createApplicationStore} from '../src/api/enquiries/applicationStore.js';
 import {parseOfferAction} from '../src/api/enquiries/offerContract.js';
 import {parseEnquiry} from '../src/api/enquiries/contract.js';
 import {parseApplicationAction} from '../src/api/enquiries/applicationContract.js';
-import {PUBLIC_LISTING_ELIGIBILITY_SQL} from '../src/api/publicListings/store.js';
+import {PUBLIC_LISTING_ELIGIBILITY_SQL,PUBLIC_LISTING_SELECT_SQL} from '../src/api/publicListings/store.js';
 import {PUBLIC_MEDIA_ELIGIBILITY_SQL} from '../src/api/publicListings/media.js';
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 
@@ -287,5 +291,72 @@ export const verifyRentalOffers=async({pool,query:q,owner,foreignOwner,denyExpir
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>[51101,51103].includes(e.number));
  await store.change(repeat.actor,repeat.id,request('withdraw',7));
  await assert.rejects(q("UPDATE agreements SET status='active' WHERE id=@id",{id:firstAgreement.offer.agreementId}),e=>e.number===51103);
+ const catalogFixture=await property(),catalogControl=await property(),catalogRenter=await candidate(catalogFixture);
+ await verifyRenderedAvailability(q,owner.tenantId,catalogFixture,catalogControl,async()=>{
+  const offer=await store.change(owner,catalogRenter.id,request('issue',0,true,terms()),true);
+  const hold=await store.change(catalogRenter.actor,catalogRenter.id,request('accept',offer.offer.version,false,{consent:true}));
+  assert.equal(hold.offer.status,'accepted');
+  return ()=>store.change(catalogRenter.actor,catalogRenter.id,request('withdraw',hold.offer.version));
+ });
  console.log('RENTAL_OFFERS_SQL=PASS exact_schema drift_denial consent version concurrent_replay whole_unit_race partial_unit_availability active_occupancy_race legacy_nonoccupancy_edit catalog_media_hold expiry_audit withdrawal_invalidation existing_identity renter_only history revocation signature_deposit_checklist_explicit_activation');
 };
+
+async function verifyRenderedAvailability(q,tenantId,fixture,control,reserve) {
+ const app=express();
+ app.use('/api/public-listings',createPublicListingsRouter({
+  env:{PUBLIC_LISTING_READ_ENABLED:'true',PUBLIC_LISTING_SHARED_RATE_LIMIT_READY:'true'},
+  rateLimit:async()=>true,
+  list:country=>q(`SELECT ${PUBLIC_LISTING_SELECT_SQL} ${PUBLIC_LISTING_ELIGIBILITY_SQL}
+    AND pref.country_code=@country ORDER BY pref.public_id`,{country})
+ }));
+ app.use(express.static('marketing'));
+ const server=app.listen(0,'127.0.0.1');
+ let browser;
+ try {
+  await once(server,'listening');
+  const origin='http://127.0.0.1:'+server.address().port;
+  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+  const page=await browser.newPage();
+  await page.setViewport({width:1100,height:820});
+  await page.setRequestInterception(true);
+  page.on('request',async request=>{
+   const url=new URL(request.url());
+   if(request.method()==='GET' && url.origin==='https://app.quixo.homes' && url.pathname==='/api/public-listings'){
+    try {
+     const response=await fetch(origin+url.pathname+url.search);
+     await request.respond({status:response.status,contentType:'application/json',
+      headers:{'Access-Control-Allow-Origin':origin},body:await response.text()});
+    } catch {await request.abort();}
+   } else if (url.origin===origin && request.method()==='GET'){await request.continue();}
+   else {await request.abort();}
+  });
+  await q("UPDATE public_listing_preferences SET public_headline=CASE WHEN property_id=@id THEN 'R5 catalog dwelling' ELSE 'R5 catalog control' END WHERE tenant_id=@tenantId AND property_id IN (@id,@control)",
+   {id:fixture.id,control:control.id,tenantId});
+  const params={property:fixture.id,tenantId};
+  fs.mkdirSync('enquiry-browser-proof',{recursive:true});
+  const verify=async(stage,expected)=>{
+   await page.goto(origin+'/lk/search/?type=residential&location=R5+catalog',{waitUntil:'networkidle2'});
+   await page.waitForFunction(()=>document.querySelector('[data-public-listing-cards]')?.innerText.includes('R5 catalog control'));
+   const ids=await page.$$eval('[data-public-listing-cards] article a[href*="/property/?id="]',links=>
+    links.map(link=>new URL(link.href).searchParams.get('id').toLowerCase()));
+   assert.ok(ids.includes(control.listingId.toLowerCase()),'Control must stay visible at '+stage);
+   assert.equal(ids.includes(fixture.listingId.toLowerCase()),expected,'Fixture at '+stage);
+   assert.equal(await page.$$eval('[data-public-listing-cards] article',cards=>cards.length),expected?2:1);
+   await page.screenshot({path:'enquiry-browser-proof/catalog-'+stage+'.png',fullPage:true});
+  };
+  await verify('available',true);
+  await q("UPDATE properties SET status='inactive' WHERE id=@property AND tenant_id=@tenantId",params);
+  await verify('withdrawn',false);
+  await q("UPDATE properties SET status='available' WHERE id=@property AND tenant_id=@tenantId",params);
+  await verify('relisted',true);
+  await q('UPDATE public_listing_preferences SET opted_out=1 WHERE property_id=@property AND tenant_id=@tenantId',params);
+  await verify('opted-out',false);
+  await q('UPDATE public_listing_preferences SET opted_out=0 WHERE property_id=@property AND tenant_id=@tenantId',params);
+  await verify('opted-in',true);
+  const release=await reserve();
+  await verify('reserved',false);
+  await release();
+  await verify('released',true);
+  console.log('R5_20_21_22_RENDERED_SEARCH=PASS sql_and_public_route inactive_relisted optout_optin accepted_hold_released control_visible_every_state');
+ } finally {await browser?.close();await new Promise(resolve=>server.close(resolve));}
+}
