@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import {inspectManagementRecovery} from './inspect-management-billing-schema.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
+import {createRecoveryRunner} from '../src/api/managementBilling/recovery.js';
 import {createRecoveryJournal} from '../src/api/managementBilling/recoveryJournal.js';
 import {createRecoveryWorker} from '../src/api/managementBilling/recoveryWorker.js';
 import {createBillingInvariantInspector,readOnlyStripe} from '../src/api/managementBilling/invariants.js';
@@ -157,12 +158,32 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   assert.equal((await store.read('SELECT state FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId}))[0].state,'running');
   await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
   await assert.rejects(journal.finish({...claimArgs,token:next.token,result:{}}),{code:'BILLING_ADMIN_REQUIRED'});
-  await store.locked(tenantId,async q=>{
-    await q("UPDATE dbo.tenant_memberships SET status='active' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId});
-    await q('UPDATE dbo.management_billing_recovery SET attempts=8,lease_until=NULL WHERE command_id=@id',{id:leaseId});
-  });
-  assert.deepEqual(await journal.claim(claimArgs),{review:true});
-  await assert.rejects(journal.claim(claimArgs),{code:'BILLING_RECOVERY_REVIEW'});
+  await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='active' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
+  await journal.fail({...claimArgs,token:next.token,review:false,code:'SYNTHETIC_INTERRUPTION',delaySeconds:0});
+  let executions = 0;
+  const alerts = [];
+  const interrupted = createRecoveryRunner({journal, logger:{error:(message,fields)=>alerts.push({message,...fields})},
+    handlers:{cancellation:async () => {
+      executions++;
+      throw Object.assign(Error('Disposable interruption before provider effect'), {status:503,code:'SYNTHETIC_INTERRUPTION'});
+    }}});
+  const limitBefore = await store.read('SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId ORDER BY id',{tenantId});
+  const writesBefore = calls.filter(call => call.method !== 'GET').length;
+  for (let attempt=3; attempt<=8; attempt++) {
+    await store.locked(tenantId,q=>q('UPDATE dbo.management_billing_recovery SET next_attempt_at=SYSUTCDATETIME() WHERE command_id=@id',{id:leaseId}));
+    await assert.rejects(interrupted.run(claimArgs), {code:'SYNTHETIC_INTERRUPTION'});
+    const [row] = await store.read('SELECT attempts,state,last_error FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId});
+    assert.equal(row.attempts, attempt);
+    assert.equal(row.state, attempt===8 ? 'failed_needs_review' : 'pending');
+    assert.equal(row.last_error,'SYNTHETIC_INTERRUPTION');
+  }
+  await assert.rejects(interrupted.run(claimArgs),{code:'BILLING_RECOVERY_REVIEW'});
+  assert.equal(executions,6);
+  assert.equal(alerts.length,1);
+  assert.equal(alerts[0].commandId,leaseId);
+  assert.deepEqual(await store.read('SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId ORDER BY id',{tenantId}),limitBefore);
+  assert.equal(calls.filter(call => call.method !== 'GET').length,writesBefore);
+  console.log('R5_06_RETRY_LIMIT=PASS eight_attempts durable_review original_command_no_provider_effect');
   const savedBefore=await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId});
   const dryRun=await createRecoveryWorker({store,service:null,env:{...env,MANAGEMENT_RECOVERY_TENANT_IDS:tenantId}}).run();
   assert.equal(dryRun.dryRun,true);assert.equal(dryRun.candidates.length,1);assert.equal(dryRun.candidates[0].due,0);
@@ -173,14 +194,14 @@ export const verifyManagementRecovery=async(pool,{tenantId,otherTenant,actorId,s
   assert.deepEqual(await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id:leaseId}),savedBefore,'Invariant inspection changes no recovery metadata');
   console.log('PASS: recovery schema replay/drift, durable intent, aged provider readback, tenant isolation, atomic result/audit, exclusive leases, fencing, revoked actor and attempt cap');
   await verifyQuantityRecovery(pool,{tenantId,actorId,stripe,remote,calls,retiredFixtureId:leaseId});
-  await verifyProviderRecovery(pool,{tenantId,otherTenant,actorId,stripe,remote,calls});
+  await verifyProviderRecovery(pool,{tenantId,otherTenant,otherAdmin,actorId,stripe,remote,calls});
   await verifyCessationCleanup(pool,actorId);
   await verifyRestoration(pool,actorId);
   await verifySplits(pool,actorId);
 };
 
 // Extends the existing disposable fixture only; never called by production jobs.
-const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,remote})=>{
+const verifyProviderRecovery=async(pool,{tenantId,otherTenant,otherAdmin,actorId,stripe,remote})=>{
   const env={MANAGEMENT_RECOVERY_SCHEMA_READY:'true',MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',PUBLIC_APP_URL:'https://app.example.test'};
   const store=createBillingStore({getPool:async()=>pool,env}),original=await store.account(tenantId);
   const propertyIds=[crypto.randomUUID(),crypto.randomUUID()];
@@ -242,12 +263,81 @@ const verifyProviderRecovery=async(pool,{tenantId,otherTenant,actorId,stripe,rem
   await assert.rejects(service.recoverOperation({tenantId:otherTenant,id:checkoutId}),{code:'BILLING_COMMAND_NOT_FOUND'});
   const reused=await service.checkout({...checkoutArgs,id:crypto.randomUUID()});assert.equal(reused.sessionId,checkout.sessionId);assert.equal(sessions.length,1);
   const portalId=crypto.randomUUID();fault='/v1/billing_portal/sessions';
-  await assert.rejects(service.portal({tenantId,actorId,id:portalId}),{code:'STRIPE_UNAVAILABLE'});await due(portalId);
-  assert.equal((await service.portal({tenantId,actorId,id:portalId})).url,'https://billing.stripe.com/p/recovery');
+  await assert.rejects(service.portal({tenantId,actorId,id:portalId}),{code:'STRIPE_UNAVAILABLE'});
+  await due(portalId);
+  let workspace = tenantId;
+  const currentActor = () => workspace === otherTenant ? otherAdmin : actorId;
+  const membership = async () => (await store.read('SELECT status,role,tenant_id FROM dbo.tenant_memberships WHERE tenant_id=@workspace AND app_user_id=@actorId',{workspace,actorId:currentActor()}))[0];
+  const app = express();
+  app.use(express.json());
+  app.use(createManagementBillingRouter({env:{...env,MANAGEMENT_BILLING_SCHEMA_READY:'true'},store,stripe:transport,
+    resolveContext:async(req,_res,next)=>{
+      try {Object.assign(req,{tenantId:workspace,user:{id:currentActor()},authSession:{},membership:await membership()});next();}
+      catch (error) {next(error);}
+    }}));
+  const http = app.listen(0,'127.0.0.1');
+  const state = async () => ({
+    account:await store.account(tenantId), otherAccount:await store.account(otherTenant),
+    commands:await store.read('SELECT * FROM dbo.management_billing_commands WHERE tenant_id IN (@tenantId,@otherTenant) ORDER BY id',{tenantId,otherTenant}),
+    journal:await store.read('SELECT * FROM dbo.management_billing_recovery WHERE command_id=@id',{id:portalId}),
+    steps:await store.read('SELECT * FROM dbo.management_billing_steps WHERE command_id=@id ORDER BY name',{id:portalId}),
+    audits:await store.read('SELECT * FROM dbo.management_billing_audit WHERE tenant_id IN (@tenantId,@otherTenant) ORDER BY id',{tenantId,otherTenant})
+  });
+  try {
+    await once(http,'listening');
+    const base = 'http://127.0.0.1:'+http.address().port;
+    const inspect = () => fetch(base+'/status');
+    const retry = () => fetch(base+'/portal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requestId:portalId})});
+    const baseline = await state(), writeCount=writes.length;
+    const own = (await (await inspect()).json()).data.pendingOperation;
+    assert.equal(own.id.toLowerCase(),portalId);
+    assert.equal(own.kind,'portal');
+    workspace=otherTenant;
+    assert.equal((await membership()).role,'admin');
+    const foreignSummary = await inspect();
+    assert.equal(foreignSummary.status,200);
+    assert.notEqual((await foreignSummary.json()).data.pendingOperation?.id?.toLowerCase(),portalId);
+    const foreignRetry = await retry();
+    assert.equal(foreignRetry.status,409);
+    assert.equal((await foreignRetry.json()).code,'BILLING_REQUEST_CONFLICT');
+    assert.deepEqual(await state(),baseline);
+    assert.equal(writes.length,writeCount);
+    console.log('R5_04_OTHER_ORG=PASS hidden_from_status original_retry_denied journal_billing_unchanged');
+    workspace=tenantId;
+    await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
+    try {
+      assert.equal((await inspect()).status,403);
+      assert.equal((await retry()).status,403);
+      assert.equal(writes.length,writeCount);
+      assert.deepEqual(await state(),baseline);
+    } finally {
+      await store.locked(tenantId,q=>q("UPDATE dbo.tenant_memberships SET status='active' WHERE tenant_id=@tenantId AND app_user_id=@actorId",{tenantId,actorId}));
+    }
+    const recovered = await retry();
+    assert.equal(recovered.status,200);
+    assert.equal((await recovered.json()).data.url,'https://billing.stripe.com/p/recovery');
+    assert.equal(writes.length,writeCount);
+    console.log('R5_03_ORG_ADMIN=PASS pending_inspection revoked_denied_without_write authorized_original_recovery');
+  } finally {
+    await new Promise(resolve=>http.close(resolve));
+  }
   assert.equal(writes.filter(w=>w.path==='/v1/billing_portal/sessions').length,1);
   const stalePortal=crypto.randomUUID();fault='/v1/billing_portal/sessions';
   await assert.rejects(service.portal({tenantId,actorId,id:stalePortal}),{code:'STRIPE_UNAVAILABLE'});
   await store.locked(tenantId,q=>q('UPDATE dbo.management_billing_commands SET created_at=DATEADD(minute,-10,SYSUTCDATETIME()) WHERE id=@id',{id:stalePortal}));await due(stalePortal);
+  const foreignJob = crypto.randomUUID();
+  await store.beginCommand({tenantId:otherTenant,actorId:otherAdmin,id:foreignJob,kind:'portal',payload:{},recovery:true,prepareRecovery:async()=>({})});
+  const foreignState = () => store.read(`SELECT c.status,r.* FROM dbo.management_billing_commands c
+    JOIN dbo.management_billing_recovery r ON r.command_id=c.id WHERE c.id=@foreignJob AND c.tenant_id=@otherTenant`,{foreignJob,otherTenant});
+  const foreignBefore = await foreignState();
+  assert.equal(foreignBefore[0].attempts,0);
+  const worker = createRecoveryWorker({store,service,env:{...env,MANAGEMENT_RECOVERY_TENANT_IDS:tenantId,MANAGEMENT_RECOVERY_WORKER_ENABLED:'true'}});
+  const selected = await worker.run();
+  assert.deepEqual(selected.candidates.filter(row=>row.due).map(row=>row.id.toLowerCase()),[stalePortal]);
+  const workerResult = await worker.run({dryRun:false});
+  assert.deepEqual(workerResult.outcomes.map(row=>[row.id.toLowerCase(),row.status]),[[stalePortal,'completed']]);
+  assert.deepEqual(await foreignState(),foreignBefore);
+  console.log('R5_05_WORKER_SCOPE=PASS configured_orgs=1 due_in_scope=1 outside_job_untouched=true');
   await assert.rejects(service.portal({tenantId,actorId,id:stalePortal}),{code:'BILLING_REVIEW_EXPIRED'});
   assert.equal((await store.read('SELECT status FROM dbo.management_billing_commands WHERE id=@id',{id:stalePortal}))[0].status,'completed','Expired link frees the command without another provider write');
   assert.equal(writes.filter(w=>w.path==='/v1/billing_portal/sessions').length,2);
