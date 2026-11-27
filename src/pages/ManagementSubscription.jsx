@@ -1,4 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
+import StockImportForm from '../components/properties/StockImportForm';
+import {buildRequestContextHeaders} from '../services/requestContext';
 import {useAuth} from '../hooks/useAuth';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 
@@ -7,9 +9,10 @@ const PreparedStockForm=({busy,onAction,draft,onChange})=>{
   const {id,name,country,type}=draft;
   return <form className="space-y-3" onSubmit={async event=>{
     event.preventDefault();
-    await onAction('stock/prepare',{records:[{kind:'property',payload:{id,name,
+    const result=await onAction('stock/prepare',{records:[{kind:'property',payload:{id,name,
       propertytype:type,country_code:country,rentalvalues:{listingCategory:'residential'}}}],
       reason:'Organization administrator prepared a dwelling for billing review.'});
+    if(result){onChange({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});}
   }}>
     <div className="grid gap-3 sm:grid-cols-3">
       <label className="text-sm">Property name<input className="mt-1 w-full rounded-lg border p-2" disabled={busy} required maxLength={255} value={name} onChange={e=>onChange({...draft,name:e.target.value})}/></label>
@@ -36,7 +39,7 @@ const SplitForm=({item,busy,onAction})=>{
     </>}
   </form>;
 };
-export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview,onReload,onAction,stockDraft,onStockDraftChange,cessation,cessationReason='',onCessationReason,restoration,restorationReason='',onRestorationReason})=>{
+export const ManagementSubscriptionView=({tenantId,data,loading,error,busy,notice,preview,onReload,onAction,stockDraft,onStockDraftChange,cessation,cessationReason='',onCessationReason,restoration,restorationReason='',onRestorationReason})=>{
   const reductionScheduled=Number.isSafeInteger(data?.pendingQuantity)&&data.pendingQuantity>0
     &&data.pendingQuantity<data.billedQuantity&&!data.cancelAtPeriodEnd;
   const renewalTime=data?.paidThrough?Date.parse(data.paidThrough):NaN;
@@ -53,6 +56,7 @@ export const ManagementSubscriptionView=({data,loading,error,busy,notice,preview
       <h2 id="prepared-stock-title" className="text-xl font-semibold">Prepare additions</h2>
       <p className="text-sm text-slate-600">Prepare a dwelling before billing is set up. It stays private and unavailable for tenancy until billing is confirmed. No payment or subscription change is made by preparing it.</p>
       <PreparedStockForm busy={busy} onAction={onAction} draft={stockDraft} onChange={onStockDraftChange}/>
+      {tenantId&&<StockImportForm key={tenantId} tenantId={tenantId} busy={busy} onAction={onAction}/>}
       {data.pendingStock?.length>0&&<div><h3 className="font-semibold">Awaiting billing confirmation</h3><ul className="mt-2 space-y-2 text-sm">{data.pendingStock.map(item=><li key={item.id}>{item.label} · {item.kind==='property'?'Property':'Unit'}</li>)}</ul>
         <button className={`${button} mt-3`} disabled={busy} onClick={()=>onAction('stock/withdraw',{ids:data.pendingStock.map(item=>item.id),reason:'Organization administrator withdrew prepared additions before management activation.'})}>Withdraw prepared additions</button>
         <p className="mt-3 text-sm">Your reviewed total will be {data.proposedInventoryQuantity} managed {data.proposedInventoryQuantity===1?'dwelling':'dwellings'}. {data.enrolled?'Use the billing actions below to review and confirm the change.':'A platform administrator must enroll this test workspace before checkout.'}</p>
@@ -136,7 +140,16 @@ export default function ManagementSubscription(){
     let requestId=resumeId || requests.current.get(key);
     if(!requestId){requestId=crypto.randomUUID();requests.current.set(key,requestId);}
     try{
-      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',body:kind==='refresh'?{}:kind.startsWith('stock/')&&!['stock/cessation','stock/restore','stock/split'].includes(kind)?payload:{...payload,requestId}});
+      let headers;
+      if(kind==='stock/prepare'){
+        headers=buildRequestContextHeaders();
+        const selected=headers['x-tenant-id'];
+        if(!tenantId || (selected && selected.toLowerCase()!==tenantId.toLowerCase())){
+          throw new Error('Your workspace changed. Open the inventory in the selected workspace and try again.');
+        }
+        headers['x-tenant-id']=tenantId;
+      }
+      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',headers,body:kind==='refresh'?{}:kind.startsWith('stock/')&&!['stock/cessation','stock/restore','stock/split'].includes(kind)?payload:{...payload,requestId}});
       if(context.current!==scope){return;}
       requests.current.delete(key);
       if(result.url){window.location.assign(result.url);return;}
@@ -144,14 +157,13 @@ export default function ManagementSubscription(){
       if(kind==='stock/restoration-preview'){setRestoration(result);setRestorationReason('');setCessation(null);setPreview(null);}
       else if(kind==='stock/cessation-preview'){setRestoration(null);setCessation(result);setCessationReason('');setPreview(null);}
       else if(kind==='quantity-preview'){setRestoration(null);setPreview(result);setCessation(null);}
-      else{setRestoration(null);setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?'Dwelling prepared. Billing confirmation is still required before it becomes managed.':kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
+      else{setRestoration(null);setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?`Inventory prepared for billing confirmation (${payload.records.length} ${payload.records.length===1?'record':'records'}).`:kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
       if(kind==='stock/split'){setNotice('Units are now managed. The original property and rental history remain available.');}
       if(kind==='stock/restore'){setNotice('Management restored from now. Previous records remain available; no billing was backdated.');}
-      if(kind==='stock/prepare'){setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});}
       if(kind==='stock/cessation'){setNotice(result.cleanupMode?'Management ended. Existing invoices remain payable; no new charge or credit was created. Historical records remain available.':result.billingUnchanged?'Management ended. Subscription and existing invoices are unchanged; historical records remain available.':'Management ended. Billing changes apply at renewal; historical records remain available.');}
       await load();
-      return result;
+      return context.current===scope?result:undefined;
     }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500){requests.current.delete(key);}await load();}}finally{if(context.current===scope){setBusy(false);}}
   };
-  return <ManagementSubscriptionView {...{data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason,restoration,restorationReason}} onRestorationReason={setRestorationReason} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;
+  return <ManagementSubscriptionView key={context.current} {...{tenantId,data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason,restoration,restorationReason}} onRestorationReason={setRestorationReason} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;
 }

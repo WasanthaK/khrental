@@ -6,6 +6,7 @@ import express from 'express';
 import {createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
+import {verifyOwnerStockScreen} from '../tests/fixtures/management-billing/owner-stock-sql.mjs';
 import {verifyManagementRecovery} from './test-management-recovery-sql.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
@@ -365,6 +366,9 @@ const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{
     await q(`INSERT INTO dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')`,{tenantId,slug:`staged-${tenantId}`});
     await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role) VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});
   });
+  const browserRows=await verifyOwnerStockScreen({store,tenantId,actorId,stripe});
+  await store.withdrawStock({tenantId,actorId,ids:browserRows,reason:'Withdraw disposable browser additions after readback.'});
+  assert.equal((await store.pendingStock(tenantId)).length,0);
   const metadata={address:'Fixture address',description:'Retained prepared description',unitconfiguration:'Two units',
     bank_name:'Fixture Bank',bank_branch:'Fixture Branch',bank_account_number:'000123',
     checklistitems:['Keys'],terms:{notice:'One month'},images:[{image_url:`/storage/images/tenants/${tenantId}/properties/front.gif`,image_type:'exterior',order:0}],

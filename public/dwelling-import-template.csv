@@ -1,0 +1,4 @@
+reference,name,type,country,parent_reference
+home-01,Garden House,house,LK,
+building-01,Lake Apartments,apartment,LK,
+unit-01,Lake Apartment 1,unit,,building-01
