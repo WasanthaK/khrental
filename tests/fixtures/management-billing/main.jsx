@@ -1,4 +1,5 @@
 import MarketInvoiceIssuers from '../../../src/components/admin/MarketInvoiceIssuers';
+import MarketSandboxCollectors from '../../../src/components/admin/MarketSandboxCollectors';
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ManagementPricingView,ManagementComplimentaryView} from '../../../src/pages/ManagementPricing';
@@ -6,6 +7,13 @@ import {ManagementSubscriptionView} from '../../../src/pages/ManagementSubscript
 import '../../../src/index.css';
 const initial={market:'LK',billingCurrency:'USD',baseFee:'5.00',rentCurrency:'LKR',includedRent:'',excessPolicy:'pending',effectiveDate:'',reason:'Synthetic screen review. No commercial approval.'};
 const fixtureIssuers = [];
+const fixtureCollectors = [];
+const collectorRequest = async (_path, options) => {
+  if (!options) {return [...fixtureCollectors];}
+  const saved = {...options.body,id:'fixture-collector'};
+  fixtureCollectors.push(saved);
+  return {id:saved.id};
+};
 const issuerRequest = async (path, options) => {
   if (!options) {return [...fixtureIssuers];}
   if (path.endsWith('/schedule')) {
@@ -15,8 +23,10 @@ const issuerRequest = async (path, options) => {
   }
   return {id:'fixture-issuer'};
 };
+const localForm={...initial,billingCurrency:'LKR',baseFee:'',includedRent:'25000',excessPolicy:'agreed_rent_excess',excessRate:'2.00'};
 function Fixture(){
- const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('12'),[preview,setPreview]=useState(null),[notice,setNotice]=useState('');
+ const [previewWorkspace,setPreviewWorkspace]=useState('');
+ const [form,setForm]=useState(new URLSearchParams(location.search).get('screen')==='local-pricing'?localForm:initial),[quantity,setQuantity]=useState('12'),[preview,setPreview]=useState(null),[notice,setNotice]=useState('');
  const [compMode,setCompMode]=useState('fixed'),[expiry,setExpiry]=useState('2027-01-01T00:00'),[note,setNote]=useState('Synthetic complimentary acceptance decision.');
  const [stockDraft,setStockDraft]=useState({id:'11111111-1111-4111-8111-111111111111',name:'',country:'LK',type:'house'});
  const [restorationReason,setRestorationReason]=useState('');
@@ -25,6 +35,7 @@ function Fixture(){
  const data={enrolled:true,configured:true,inventoryQuantity:12,billedQuantity:12,status:'active',entitlement:{state:'active'},cancelAtPeriodEnd:false,
    inventory:Array.from({length:12},(_,i)=>({key:`unit:${i}`,label:`Example residence · Unit ${i+1}`}))};
  if(screen==='issuers'){return <MarketInvoiceIssuers request={issuerRequest}/>;}
+ if(screen==='collectors'){return <MarketSandboxCollectors request={collectorRequest}/>;}
  if(screen==='subscription'){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
   if(['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(data,{status:scenario==='cessation-grace'?'past_due':'trialing',entitlement:{state:scenario==='cessation-grace'?'grace':'payment_pending'},pendingQuantity:null});}
@@ -60,6 +71,14 @@ function Fixture(){
       if(kind==='stock/split-preview'){return {to:2,from:1,mode:scenario==='split-complimentary'?'complimentary':'active',inventoryHash:'a'.repeat(64)};}
       if(kind==='stock/split'){window.splitPayload=payload;return {splitCompleted:true};}
     }} onReload={()=>{}}/>;
+ }
+ if(screen==='local-pricing'){
+  const previewFee=()=>setPreview({currency:'LKR',quantity:2,monthlyTotalMinor:170000,
+    lines:[{key:'vacant',label:'Vacant fixture',rentBasis:'vacant',monthlyRentMinor:0,monthlyFeeMinor:10000},
+      {key:'leased',label:'Active fixture',rentBasis:'active_agreement',monthlyRentMinor:10000000,monthlyFeeMinor:160000}]});
+  return <ManagementPricingView {...{form,setForm,quantity,setQuantity,preview,previewWorkspace}} onPreviewWorkspace={setPreviewWorkspace}
+    enrollment={{workspaces:[{id:'fixture',name:'Example test workspace'}],value:{},update:()=>{},submit:()=>{}}}
+    onPreview={previewFee} onSave={e=>e.preventDefault()} onReload={()=>{}}/>;
  }
  if(screen==='complimentary'){return <><h1 className="mx-auto max-w-6xl p-6 text-3xl font-semibold">Management access</h1><ManagementComplimentaryView
   workspaces={[{id:'fixture',name:'Example test workspace'}]} tenantId="fixture" status={{version:1,mode:null,entitlement:{state:'payment_pending'}}}

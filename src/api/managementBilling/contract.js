@@ -25,15 +25,21 @@ export const reason = value => {
 };
 export const parsePricing = input => {
   const keys=['market','billingCurrency','baseFeeMinor','rentCurrency','includedRentMinor','excessPolicy','effectiveAt','reason'];
+  const localRate=input?.market==='LK' && input?.billingCurrency==='LKR';
+  if(localRate){keys.push('excessRateBasisPoints');}
   if(!input || typeof input!=='object' || Array.isArray(input) || Object.keys(input).some(key=>!keys.includes(key)) || keys.some(key=>!(key in input)))
     {throw problem(400,'BILLING_FIELDS_INVALID','Submit the complete pricing rule without additional fields.');}
   if (!input || !['LK','BN'].includes(input.market))
     {throw problem(400, 'BILLING_MARKET_INVALID', 'Select Sri Lanka or Brunei.');}
-  // Additional billing currencies/FX and surcharges need an explicit commercial contract.
-  if (input.billingCurrency !== 'USD' || input.rentCurrency !== ({LK:'LKR',BN:'BND'})[input.market])
-    {throw problem(400, 'BILLING_CURRENCY_INVALID', 'Use USD billing and the selected market’s rent currency.');}
-  if (!['pending','none'].includes(input.excessPolicy))
-    {throw problem(400, 'BILLING_EXCESS_UNAPPROVED', 'Percentage and FX adjustments are not approved for launch.');}
+  if ((!localRate && input.billingCurrency !== 'USD') || input.rentCurrency !== ({LK:'LKR',BN:'BND'})[input.market])
+    {throw problem(400, 'BILLING_CURRENCY_INVALID', 'Select a supported billing and rent currency for this market.');}
+  if (localRate) {
+    if (input.excessPolicy !== 'agreed_rent_excess' || input.includedRentMinor === null)
+      {throw problem(400,'BILLING_EXCESS_UNAPPROVED','Local pricing needs an agreed-rent threshold and excess rate.');}
+    integer(input.excessRateBasisPoints,0,10000,'Excess rate in basis points');
+  } else if (!['pending','none'].includes(input.excessPolicy)) {
+    throw problem(400,'BILLING_EXCESS_UNAPPROVED','Use a supported policy for this billing currency.');
+  }
   if (input.effectiveAt !== null && (typeof input.effectiveAt !== 'string' ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(input.effectiveAt) ||
       !Number.isFinite(Date.parse(input.effectiveAt)) || new Date(input.effectiveAt).toISOString().replace('.000Z','Z')!==input.effectiveAt.replace('.000Z','Z')))
@@ -45,6 +51,7 @@ export const parsePricing = input => {
     rentCurrency:input.rentCurrency,
     includedRentMinor:input.includedRentMinor === null ? null : integer(input.includedRentMinor, 0, 100000000000, 'Included monthly rent'),
     excessPolicy:input.excessPolicy,
+    ...(localRate?{excessRateBasisPoints:input.excessRateBasisPoints}:{}),
     effectiveAt:input.effectiveAt === null ? null : new Date(input.effectiveAt).toISOString(),
     reason:reason(input.reason)
   };

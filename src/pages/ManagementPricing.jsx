@@ -1,10 +1,14 @@
+import MarketSandboxCollectors from '../components/admin/MarketSandboxCollectors';
 import MarketInvoiceIssuers from '../components/admin/MarketInvoiceIssuers';
 import React,{useEffect,useRef,useState} from 'react';
 import usePlatformAdminStatus from '../hooks/usePlatformAdminStatus';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 import {listAdminTenants} from '../services/tenantAdminService';
 
-const initial={market:'LK',billingCurrency:'USD',baseFee:'5.00',rentCurrency:'LKR',includedRent:'',excessPolicy:'pending',effectiveDate:'',reason:''};
+const marketDefaults=market=>market==='LK'
+  ? {market,billingCurrency:'LKR',rentCurrency:'LKR',baseFee:'',includedRent:'25000',excessPolicy:'agreed_rent_excess',excessRate:'2.00'}
+  : {market,billingCurrency:'USD',rentCurrency:'BND',baseFee:'5.00',includedRent:'',excessPolicy:'pending'};
+const initial={...marketDefaults('LK'),effectiveDate:'',reason:''};
 const money=(minor,currency='USD')=>new Intl.NumberFormat('en',{style:'currency',currency}).format(minor/100);
 const minor=value=>{
   if(!/^\d+(\.\d{1,2})?$/.test(value)) {throw new Error('Use an amount with no more than two decimal places.');}
@@ -12,6 +16,7 @@ const minor=value=>{
 };
 const rulesFrom=form=>({market:form.market,billingCurrency:form.billingCurrency,baseFeeMinor:minor(form.baseFee),rentCurrency:form.rentCurrency,
   includedRentMinor:form.includedRent===''?null:minor(form.includedRent),excessPolicy:form.excessPolicy,
+  ...(form.excessPolicy==='agreed_rent_excess'?{excessRateBasisPoints:minor(form.excessRate)}:{}),
   effectiveAt:form.effectiveDate?new Date(`${form.effectiveDate}T00:00:00.000Z`).toISOString():null,reason:form.reason});
 const field='mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900';
 const button='rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40';
@@ -62,8 +67,8 @@ const ComplimentaryAccess=({workspaces})=>{
   return <ManagementComplimentaryView {...{workspaces,tenantId,status,mode,expiry,note,busy,error,notice}} onSelect={load} onMode={setMode} onExpiry={setExpiry} onNote={setNote} onSave={save} onReload={()=>load(tenantId)}/>;
 };
 
-export const ManagementPricingView=({versions=[],ready=false,loading=false,error='',notice='',form,setForm,preview,quantity,setQuantity,busy=false,onPreview,onSave,onPublish,onReload,enrollment})=>{
-  const update=(key,value)=>setForm(previous=>({...previous,[key]:value,...(key==='market'?{rentCurrency:value==='LK'?'LKR':'BND',includedRent:'',reason:''}:{})}));
+export const ManagementPricingView=({versions=[],ready=false,loading=false,error='',notice='',form,setForm,preview,quantity,setQuantity,busy=false,onPreview,onSave,onPublish,onReload,enrollment,previewWorkspace='',onPreviewWorkspace,onPreviewVersion})=>{
+  const update=(key,value)=>setForm(previous=>({...previous,[key]:value,...(key==='market'?{...marketDefaults(value),effectiveDate:'',reason:''}:{})}));
   return <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
     <header><p className="text-sm font-semibold uppercase tracking-wider text-teal-700">Platform administration</p><h1 className="mt-1 text-3xl font-semibold text-slate-950">Management pricing</h1>
       <p className="mt-2 max-w-3xl text-slate-600">Set monthly fees by market. Each saved change creates a version; existing subscriptions keep their agreed price.</p></header>
@@ -75,9 +80,10 @@ export const ManagementPricingView=({versions=[],ready=false,loading=false,error
         <h2 className="text-xl font-semibold">Create a pricing version</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-medium">Market<select className={field} value={form.market} onChange={e=>update('market',e.target.value)}><option value="LK">Sri Lanka</option><option value="BN">Brunei</option></select></label>
-          <label className="text-sm font-medium">Monthly fee per dwelling (USD)<input className={field} inputMode="decimal" value={form.baseFee} onChange={e=>update('baseFee',e.target.value)} required/></label>
+          <label className="text-sm font-medium">Monthly fee per dwelling ({form.billingCurrency})<input aria-label={'Monthly fee per dwelling ('+form.billingCurrency+')'} className={field} inputMode="decimal" value={form.baseFee} onChange={e=>update('baseFee',e.target.value)} required/></label>
           <label className="text-sm font-medium">Included monthly rent ({form.rentCurrency})<input className={field} inputMode="decimal" placeholder="Awaiting market decision" value={form.includedRent} onChange={e=>update('includedRent',e.target.value)}/></label>
-          <label className="text-sm font-medium">Above-threshold policy<select className={field} value={form.excessPolicy} onChange={e=>update('excessPolicy',e.target.value)}><option value="pending">Decision pending</option><option value="none">No additional fee</option></select></label>
+          {form.billingCurrency==='LKR'?<label className="text-sm font-medium">Fee on agreed rent above the threshold (%)<input className={field} required inputMode="decimal" value={form.excessRate} onChange={e=>update('excessRate',e.target.value)}/></label>:
+          <label className="text-sm font-medium">Above-threshold policy<select className={field} value={form.excessPolicy} onChange={e=>update('excessPolicy',e.target.value)}><option value="pending">Decision pending</option><option value="none">No additional fee</option></select></label>}
           <label className="text-sm font-medium">Effective date (00:00 UTC)<input className={field} type="date" value={form.effectiveDate} onChange={e=>update('effectiveDate',e.target.value)}/></label>
         </div>
         <label className="block text-sm font-medium">Research or decision note<textarea className={field} rows={3} minLength={10} maxLength={1000} required value={form.reason} onChange={e=>update('reason',e.target.value)} placeholder="Record the source, date and reasoning behind this version."/></label>
@@ -85,12 +91,15 @@ export const ManagementPricingView=({versions=[],ready=false,loading=false,error
         <div className="flex flex-wrap gap-3"><button className={button} disabled={busy||Boolean(error)} type="submit">Save new draft</button><button className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold disabled:opacity-40" disabled={busy||Boolean(error)} type="button" onClick={onPreview}>Preview price</button></div>
       </form>
       <aside className="self-start rounded-2xl border border-slate-200 bg-slate-50 p-5"><h2 className="text-xl font-semibold">Customer price preview</h2>
-        <label className="mt-4 block text-sm font-medium">Managed dwellings<input className={field} type="number" min="1" max="10000" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label>
-        {preview?<><p className="mt-5 text-4xl font-semibold text-slate-950">{money(preview.monthlyBaseMinor,preview.currency)}<span className="ml-2 text-base font-normal text-slate-500">/ month</span></p><p className="mt-2 text-sm text-slate-600">{preview.quantity} dwelling{preview.quantity===1?'':'s'} · monthly · no trial</p><p className="mt-4 text-sm text-slate-600">Base fee only. Tax is not included in this preview. No above-threshold adjustment has been applied.</p><p className="mt-3 text-sm font-medium">{preview.ready?'Complete for sandbox publication.':'Complete the missing commercial fields before publication.'}</p></>:<p className="mt-4 text-sm text-slate-600">Preview the draft to see the monthly base fee. Saving alone does not change any customer’s bill.</p>}
+        {form.billingCurrency==='LKR'?<label className="mt-4 block text-sm font-medium">Sandbox workspace for this preview<select className={field} value={previewWorkspace} onChange={e=>onPreviewWorkspace(e.target.value)}><option value="">Choose a development workspace</option>{(enrollment?.workspaces||[]).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>:
+        <label className="mt-4 block text-sm font-medium">Managed dwellings<input className={field} type="number" min="1" max="10000" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label>}
+        {preview?.lines?<><p className="mt-5 text-4xl font-semibold">{money(preview.monthlyTotalMinor,preview.currency)}</p><p>Monthly fee before tax for {preview.quantity} managed dwellings.</p>
+          <ul className="mt-3 space-y-2">{preview.lines.map(line=><li className="text-sm" key={line.key}>{line.label} · {line.rentBasis==='vacant'?'Vacant':money(line.monthlyRentMinor,preview.currency)+' agreed rent'} · {money(line.monthlyFeeMinor,preview.currency)} fee</li>)}</ul></>:
+          preview?<><p className="mt-5 text-4xl font-semibold text-slate-950">{money(preview.monthlyBaseMinor,preview.currency)}<span className="ml-2 text-base font-normal text-slate-500">/ month</span></p><p className="mt-2 text-sm text-slate-600">{preview.quantity} dwelling{preview.quantity===1?'':'s'} · monthly · no trial</p><p className="mt-4 text-sm text-slate-600">Base fee only. Tax is not included in this preview. No above-threshold adjustment has been applied.</p><p className="mt-3 text-sm font-medium">{preview.ready?'Complete for sandbox publication.':'Complete the missing commercial fields before publication.'}</p></>:<p className="mt-4 text-sm text-slate-600">{form.billingCurrency==='LKR'?'Choose a workspace to preview each dwelling using its active agreement. A vacant dwelling incurs the base fee.':'Preview the draft to see the monthly base fee.'}</p>}
       </aside>
     </div>}
     <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Pricing history</h2><p className="mt-1 text-sm text-slate-500">{ready?'Sandbox connection configured.':'Sandbox connection is not yet configured.'}</p>
-      {!versions.length?<p className="mt-4 text-slate-600">No market pricing versions have been saved.</p>:<div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b text-slate-500"><tr>{['Market / version','Base fee','Included rent','Effective date','Status',''].map((label,index)=><th key={index} className="whitespace-nowrap px-2 py-3">{label}</th>)}</tr></thead><tbody>{versions.map(version=><tr key={version.id} className="border-b last:border-0"><td className="px-2 py-3">{version.market} · v{version.version}</td><td className="px-2 py-3">{money(version.rules.baseFeeMinor)}</td><td className="px-2 py-3">{version.rules.includedRentMinor===null?'Pending':money(version.rules.includedRentMinor,version.rules.rentCurrency)}</td><td className="px-2 py-3">{version.rules.effectiveAt?.slice(0,10)||'Pending'}</td><td className="px-2 py-3">{version.status==='sandbox_published'?'Published to sandbox':'Draft'}</td><td className="px-2 py-3">{version.status==='draft'&&<button className="font-semibold text-teal-800 underline disabled:text-slate-400" disabled={busy||!ready} onClick={()=>onPublish(version.id)}>Publish to sandbox</button>}</td></tr>)}</tbody></table></div>}
+      {!versions.length?<p className="mt-4 text-slate-600">No market pricing versions have been saved.</p>:<div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b text-slate-500"><tr>{['Market / version','Base fee','Included rent','Effective date','Status',''].map((label,index)=><th key={index} className="whitespace-nowrap px-2 py-3">{label}</th>)}</tr></thead><tbody>{versions.map(version=><tr key={version.id} className="border-b last:border-0"><td className="px-2 py-3">{version.market} · v{version.version}</td><td className="px-2 py-3">{money(version.rules.baseFeeMinor,version.rules.billingCurrency)}</td><td className="px-2 py-3">{version.rules.includedRentMinor===null?'Pending':money(version.rules.includedRentMinor,version.rules.rentCurrency)}</td><td className="px-2 py-3">{version.rules.effectiveAt?.slice(0,10)||'Pending'}</td><td className="px-2 py-3">{version.status==='sandbox_published'?'Published to sandbox':'Draft'}</td><td className="px-2 py-3">{version.status==='draft'&&version.rules.billingCurrency==='LKR'?<button className="font-semibold text-teal-800 underline disabled:text-slate-400" disabled={busy||!previewWorkspace} onClick={()=>onPreviewVersion(version.id)}>Preview saved fee</button>:version.status==='draft'&&<button className="font-semibold text-teal-800 underline disabled:text-slate-400" disabled={busy||!ready} onClick={()=>onPublish(version.id)}>Publish to sandbox</button>}</td></tr>)}</tbody></table></div>}
     </section>
     {enrollment&&<section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Sandbox workspace enrollment</h2><p className="text-sm text-slate-600">Choose a development workspace for billing acceptance. Its existing development access stays available during testing.</p>
       <form className="grid gap-4 sm:grid-cols-2" onSubmit={event=>{event.preventDefault();enrollment.submit();}}>
@@ -108,16 +117,22 @@ export default function ManagementPricing(){
   const {isPlatformAdmin,loading:authorityLoading}=usePlatformAdminStatus();
   const [versions,setVersions]=useState([]),[ready,setReady]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [form,setForm]=useState(initial),[quantity,setQuantity]=useState('1'),[preview,setPreview]=useState(null),[busy,setBusy]=useState(false);
+  const [previewWorkspace,setPreviewWorkspace]=useState('');
   const [workspaces,setWorkspaces]=useState([]),[enrollment,setEnrollment]=useState({tenantId:'',market:'LK',useApprovedSandboxBaseline:false,reason:''});
   const load=async()=>{setLoading(true);setError('');try{const [data,tenants]=await Promise.all([requestMssqlApi('/api/management-billing/admin/pricing'),listAdminTenants({pageSize:100})]);setVersions(data.versions);setReady(data.sandboxConfigured);setWorkspaces((Array.isArray(tenants)?tenants:tenants.items||[]).filter(t=>t.plan==='development-testing'&&t.status==='active'));}catch(e){setError(e.message);}finally{setLoading(false);}};
   useEffect(()=>{if(isPlatformAdmin){load();}},[isPlatformAdmin]);
-  useEffect(()=>setPreview(null),[form,quantity]);
+  useEffect(()=>setPreview(null),[form,quantity,previewWorkspace]);
   const run=async action=>{setBusy(true);setNotice('');try{await action();}catch(e){setNotice(e.message);}finally{setBusy(false);}};
   if(authorityLoading){return <p className="p-6">Checking platform access…</p>;}
   if(!isPlatformAdmin){return <p role="alert" className="p-6">Platform administrator access is required.</p>;}
-  return <><ManagementPricingView {...{versions,ready,loading,error,notice,form,setForm,quantity,setQuantity,preview,busy}} onReload={load}
+  return <><ManagementPricingView {...{versions,ready,loading,error,notice,form,setForm,quantity,setQuantity,preview,busy}} onReload={load} previewWorkspace={previewWorkspace} onPreviewWorkspace={setPreviewWorkspace}
     enrollment={{workspaces,value:enrollment,update:(key,value)=>setEnrollment(previous=>({...previous,[key]:value})),submit:()=>run(async()=>{await requestMssqlApi('/api/management-billing/admin/enroll',{method:'POST',body:enrollment});setNotice('Workspace enrolled. Its administrator can open Management subscription to test checkout.');})}}
-    onPreview={()=>run(async()=>setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body:{rules:rulesFrom(form),quantity:Number(quantity)}})))}
+    onPreview={()=>run(async()=>{
+      if (form.billingCurrency==='LKR' && !previewWorkspace){throw new Error('Choose a sandbox workspace to preview its managed dwellings.');}
+      const body={rules:rulesFrom(form),...(form.billingCurrency==='LKR'?{workspaceId:previewWorkspace}:{quantity:Number(quantity)})};
+      setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body}));
+    })}
+    onPreviewVersion={id=>run(async()=>setPreview(await requestMssqlApi('/api/management-billing/admin/pricing/preview',{method:'POST',body:{versionId:id,workspaceId:previewWorkspace}})))}
     onSave={event=>{event.preventDefault();run(async()=>{await requestMssqlApi('/api/management-billing/admin/pricing',{method:'POST',body:{rules:rulesFrom(form),expectedVersion:Math.max(0,...versions.filter(v=>v.market===form.market).map(v=>v.version))}});await load();setNotice('New draft saved. Existing subscriptions are unchanged.');});}}
-    onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/><MarketInvoiceIssuers/><ComplimentaryAccess workspaces={workspaces}/></>;
+    onPublish={id=>run(async()=>{await requestMssqlApi(`/api/management-billing/admin/pricing/${id}/publish-sandbox`,{method:'POST',body:{}});await load();setNotice('Published to the sandbox catalogue. Existing subscriptions retain their price.');})}/><MarketInvoiceIssuers/><MarketSandboxCollectors/><ComplimentaryAccess workspaces={workspaces}/></>;
 }

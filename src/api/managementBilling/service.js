@@ -1,3 +1,4 @@
+import {applyLocalRenewal,issuedLocalReceipt} from './localRenewal.js';
 import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, restorationPolicy, splitPolicy, splitUnits, hash, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
 import {requestObjectEvidence,uniqueProviderObject} from './recoveryEvidence.js';
@@ -898,7 +899,9 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
   const webhook=async event=>{
     await stripe.assertAccount();
     const supported=/^(checkout\.session\.(completed|async_payment_succeeded|async_payment_failed)|customer\.subscription\.(created|updated|deleted)|invoice\.(paid|payment_failed)|charge\.(refunded|dispute\.created)|radar\.early_fraud_warning\.created)$/;
-    if(!supported.test(event.type)) {return {received:true,ignored:true};}
+    const localCycle=event.type==='invoice.created' && event.data?.object?.currency==='lkr' &&
+      event.data.object.billing_reason==='subscription_cycle' && Boolean(env.MANAGEMENT_LK_SANDBOX_INVOICE_TENANT);
+    if(!localCycle && !supported.test(event.type)) {return {received:true,ignored:true};}
     // Retrieve using the configured account as well as verifying the signed payload.
     const verified=await stripe.request('GET',`/v1/events/${event.id}`);
     if(verified.type!==event.type || verified.livemode!==false) {throw problem(400,'BILLING_EVENT_MISMATCH','Unexpected Stripe event.');}
@@ -907,12 +910,22 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     if(risk && object.object!=='charge') {object=await stripe.request('GET',`/v1/charges/${objectId(object.charge)}`);}
     const customerId=objectId(object.customer);
     const rows=customerId?await store.read('SELECT tenant_id FROM dbo.management_billing_accounts WHERE stripe_customer_id=@customerId',{customerId}):[];
+    if(localCycle && rows[0]?.tenant_id?.toLowerCase()!==env.MANAGEMENT_LK_SANDBOX_INVOICE_TENANT.toLowerCase()){
+      return {received:true,ignored:true};
+    }
     if(!rows.length) {throw problem(409,'BILLING_EVENT_UNBOUND','The Stripe event has no stored organization binding yet.');}
     const tenantId=rows[0].tenant_id;
     return store.locked(tenantId,async q=>{
       if((await q('SELECT stripe_event_id FROM dbo.management_billing_events WHERE stripe_event_id=@id',{id:event.id})).length)
         {return {received:true,duplicate:true};}
       let account=await requireAccount(tenantId,q);
+      if(localCycle){
+        if(object.object!=='invoice'||object.livemode!==false||invoiceSubscription(object)!==account.stripe_subscription_id){throw problem(409,'BILLING_EVENT_SUBSCRIPTION_MISMATCH','Renewal subscription binding changed.');}
+        const receipt=await applyLocalRenewal({store,q,stripe,account,loadInvoice,invoiceId:object.id});
+        await q('INSERT INTO dbo.management_billing_events(stripe_event_id,tenant_id,event_type) VALUES(@id,@tenantId,@type)',{id:event.id,tenantId,type:event.type});
+        await store.audit(q,{tenantId,action:'sandbox.local_renewal',resourceId:object.id,current:receipt,reason:event.type});
+        return {received:true};
+      }
       account=await reconcileLocked(q,account,{promoteCheckout:!risk});
       const targetSubscription=object.object==='subscription'?object.id:object.object==='invoice'?invoiceSubscription(object):object.object==='checkout.session'?objectId(object.subscription):null;
       if(!risk && (!account.stripe_subscription_id || targetSubscription!==account.stripe_subscription_id))
@@ -923,5 +936,19 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       return {received:true};
     });
   };
-  return {summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,restorationPreview,restoreStock,splitPreview,splitStock,webhook,price};
+  const localInvoiceReceipt=async(tenantId,invoiceId)=>{
+    if(!/^in_[A-Za-z0-9]+$/.test(invoiceId)||
+      tenantId.toLowerCase()!==env.MANAGEMENT_LK_SANDBOX_INVOICE_TENANT?.toLowerCase()){
+      throw problem(404,'BILLING_INVOICE_MISSING','Sandbox invoice not found.');
+    }
+    await stripe.assertAccount();
+    const account=await requireAccount(tenantId);
+    const invoice=await loadInvoice(invoiceId);
+    if(invoice.id!==invoiceId||objectId(invoice.customer)!==account.stripe_customer_id){
+      throw problem(404,'BILLING_INVOICE_MISSING','Sandbox invoice not found.');
+    }
+    return issuedLocalReceipt(invoice,account);
+  };
+  return {localInvoiceReceipt,summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,restorationPreview,restoreStock,splitPreview,splitStock,webhook,price};
 };
+

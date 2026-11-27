@@ -1,3 +1,4 @@
+import {verifyCollectorAdministration} from './test-market-collector-administration-sql.mjs';
 import {verifyIssuerAdministration} from './test-market-issuer-administration-sql.mjs';
 import {inspectRentalOffers} from './inspect-rental-offers-schema.mjs';
 import {PROPERTY_COUNTRIES} from '../src/utils/constants.js';
@@ -62,7 +63,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261112_01_management_recovery',
   '20261112_02_management_restoration',
   '20261112_03_management_splits',
-  '20261124_01_market_invoice_issuers'
+  '20261124_01_market_invoice_issuers',
+  '20261127_01_market_sandbox_collectors'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1100,6 +1102,10 @@ const main = async () => {
       UPDATE dbo.management_invoice_issuers SET legal_name='Edited issuer'
       WHERE country_code='CA' AND legal_name='Fixture issuer B'`), /retained for billing history/i);
     await verifyIssuerAdministration(testPool);
+    const collectorMigration = fs.readFileSync('migrations/20261127_01_market_sandbox_collectors.sql','utf8');
+    await testPool.request().batch(collectorMigration);
+    await testPool.request().batch(collectorMigration);
+    await verifyCollectorAdministration(testPool);
     console.log('PASS: market issuer migration replay, draft exclusion, country isolation, cutover and conflicting date');
 
 

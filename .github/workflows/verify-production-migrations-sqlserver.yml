@@ -14,10 +14,16 @@ on:
       - 'scripts/inspect-management-billing-access.mjs'
       - 'scripts/check-management-billing-release.mjs'
       - 'scripts/test-management-billing-sql.mjs'
+      - 'tests/fixtures/management-billing/owner-stock*'
+      - 'src/pages/ManagementSubscription.jsx'
+      - 'src/components/properties/StockImportForm.jsx'
+      - 'src/components/properties/stockImport.js'
+      - 'public/dwelling-import-template.csv'
       - 'scripts/test-management-recovery-sql.mjs'
       - 'scripts/test-management-quantity-recovery-sql.mjs'
       - 'src/api/managementBilling/**'
       - 'scripts/test-production-migrations-sqlserver.mjs'
+      - 'scripts/test-market-collector-administration-sql.mjs'
       - '.github/workflows/verify-production-migrations-sqlserver.yml'
       - '.github/workflows/run-production-db-migrations.yml'
   push:
@@ -33,10 +39,16 @@ on:
       - 'scripts/inspect-management-billing-access.mjs'
       - 'scripts/check-management-billing-release.mjs'
       - 'scripts/test-management-billing-sql.mjs'
+      - 'tests/fixtures/management-billing/owner-stock*'
+      - 'src/pages/ManagementSubscription.jsx'
+      - 'src/components/properties/StockImportForm.jsx'
+      - 'src/components/properties/stockImport.js'
+      - 'public/dwelling-import-template.csv'
       - 'scripts/test-management-recovery-sql.mjs'
       - 'scripts/test-management-quantity-recovery-sql.mjs'
       - 'src/api/managementBilling/**'
       - 'scripts/test-production-migrations-sqlserver.mjs'
+      - 'scripts/test-market-collector-administration-sql.mjs'
       - '.github/workflows/verify-production-migrations-sqlserver.yml'
       - '.github/workflows/run-production-db-migrations.yml'
   workflow_dispatch:
@@ -68,3 +80,9 @@ jobs:
         env:
           MSSQL_TEST_IMAGE: mcr.microsoft.com/mssql/server:2022-latest
         run: node scripts/test-production-migrations-sqlserver.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: owner-stock-proof
+          path: owner-stock-proof/
+          if-no-files-found: ignore

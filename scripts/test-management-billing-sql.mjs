@@ -1,11 +1,14 @@
+import {verifyLocalRenewal} from './test-local-renewal.mjs';
+import {verifyPricePublicationRecovery} from './test-price-publication-recovery.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {once} from 'node:events';
 import express from 'express';
-import {createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
+import {createManagementBillingRouter,createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
+import {verifyOwnerStockScreen} from '../tests/fixtures/management-billing/owner-stock-sql.mjs';
 import {verifyManagementRecovery} from './test-management-recovery-sql.mjs';
 import {createBillingStore} from '../src/api/managementBilling/store.js';
 import {createBillingService} from '../src/api/managementBilling/service.js';
@@ -81,7 +84,81 @@ export const verifyManagementBilling=async pool=>{
   assert.equal((await store.listPricing()).length,1,'Failed transaction leaves no partial pricing version.');
   console.log('PASS: management billing double migration, constraint drift denial, concurrent version serialization and atomic audit/rollback');
   await verifyBillingTransactions(pool,store,actor.id);
+  await pool.request().batch(fs.readFileSync('migrations/20261124_01_market_invoice_issuers.sql','utf8'));
+  await verifyLocalWorkspaceFee(store,actor.id);
+  await verifyPricePublicationRecovery(store,actor.id);
 };
+
+async function verifyLocalWorkspaceFee(store,actorId) {
+  const tenantId=crypto.randomUUID();
+  const fixtureRents=[null,25000,100000,25000.25,25000.25,25000.24];
+  const homes=fixtureRents.map(()=>crypto.randomUUID());
+  await store.locked(tenantId,async q=>{
+    await q("INSERT dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')",
+      {tenantId,slug:'fee-'+tenantId});
+    for(const [index,propertyId] of homes.entries()){
+      await q("INSERT dbo.properties(id,tenant_id,name,propertytype,country_code) VALUES(@propertyId,@tenantId,@name,'house','LK')",
+        {tenantId,propertyId,name:'Fee fixture '+index});
+      if(fixtureRents[index]!==null){
+        await q("INSERT dbo.agreements(id,tenant_id,propertyid,status,rentamount) VALUES(@id,@tenantId,@propertyId,'active',CAST(@rent AS DECIMAL(18,2)))",
+          {id:crypto.randomUUID(),tenantId,propertyId,rent:String(fixtureRents[index])});
+      }
+    }
+  });
+  const rules={market:'LK',billingCurrency:'LKR',rentCurrency:'LKR',baseFeeMinor:10000,includedRentMinor:2500000,
+    excessPolicy:'agreed_rent_excess',excessRateBasisPoints:200,effectiveAt:null,reason:'Synthetic Rs 100 acceptance fee only.'};
+  const app=express();
+  app.use(express.json());
+  let allowed=true;
+  app.use(createManagementBillingRouter({store,env:{MANAGEMENT_BILLING_SCHEMA_READY:'true'},
+    resolveContext:(req,_res,next)=>{req.authSession={};req.user={id:actorId};next();},
+    checkPlatformAdmin:async()=>allowed}));
+  const server=app.listen(0,'127.0.0.1');
+  try {
+    await once(server,'listening');
+    const post=async(path,body)=>{
+      const response=await fetch('http://127.0.0.1:'+server.address().port+'/admin/pricing'+path,
+        {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      return {status:response.status,body:await response.json()};
+    };
+    const versions=await store.listPricing();
+    const expectedVersion=Math.max(0,...versions.filter(v=>v.market==='LK').map(v=>v.version));
+    const saved=await post('',{rules,expectedVersion});
+    assert.equal(saved.status,200,JSON.stringify(saved.body));
+    const versionId=saved.body.data.id;
+    const quote=await post('/preview',{workspaceId:tenantId,versionId});
+    assert.equal(quote.status,200,JSON.stringify(quote.body));
+    const {lines,monthlyTotalMinor,currency,pricingVersionId}=quote.body.data;
+    assert.equal(pricingVersionId,versionId.toLowerCase());
+    assert.equal(currency,'LKR');assert.equal(lines.length,homes.length);
+    const ordered=homes.map(id=>lines.find(line=>line.key==='property:'+id));
+    assert.equal(ordered[0].rentBasis,'vacant');
+    assert.deepEqual(ordered.map(line=>line.monthlyFeeMinor),[10000,10000,160000,10001,10001,10000]);
+    assert.equal(monthlyTotalMinor,210002);
+    const rollback=new Error('Discard isolated issuer and price bindings');
+    await assert.rejects(store.locked(tenantId,async q=>{
+      await q(`UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id='price_fixtureLK',
+        published_at=SYSUTCDATETIME() WHERE id=@versionId`,{versionId});
+      await q(`INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
+        SELECT 'LK',id,DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic only' FROM dbo.management_invoice_issuers
+        WHERE country_code='US' AND legal_name='Quixo Inc.'`);
+      const laterIssuer=async()=>{
+        await q(`DECLARE @issuer UNIQUEIDENTIFIER=NEWID();
+          INSERT dbo.management_invoice_issuers(id,country_code,legal_name) VALUES(@issuer,'LK','Later synthetic issuer');
+          INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
+          VALUES('LK',@issuer,SYSUTCDATETIME(),'Synthetic cutover')`);
+        const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('LK',SYSUTCDATETIME())");
+        assert.equal(now.legal_name,'Later synthetic issuer');
+      };
+      await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer});
+      throw rollback;
+    }),error=>error===rollback);
+    allowed=false;
+    assert.equal((await post('/preview',{versionId,workspaceId:tenantId})).status,403);
+    assert.equal(await store.account(tenantId),null);
+    console.log('R5_30_LOCAL_FEE_PREVIEW=PASS stored_LKR_version active_agreed_rent vacant threshold 1500_excess half_cent_per_dwelling authorized_preview_no_charge');
+  } finally {await new Promise(resolve=>server.close(resolve));}
+}
 
 // Real SQL transaction/uniqueness/locking proof. Stripe transport is explicitly a synthetic provider;
 // this does not claim a real Checkout payment, webhook delivery, or merchant acceptance.
@@ -365,6 +442,9 @@ const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{
     await q(`INSERT INTO dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')`,{tenantId,slug:`staged-${tenantId}`});
     await q(`INSERT INTO dbo.tenant_memberships(id,tenant_id,app_user_id,status,role) VALUES(@id,@tenantId,@actorId,'active','admin')`,{id:crypto.randomUUID(),tenantId,actorId});
   });
+  const browserRows=await verifyOwnerStockScreen({store,tenantId,actorId,stripe});
+  await store.withdrawStock({tenantId,actorId,ids:browserRows,reason:'Withdraw disposable browser additions after readback.'});
+  assert.equal((await store.pendingStock(tenantId)).length,0);
   const metadata={address:'Fixture address',description:'Retained prepared description',unitconfiguration:'Two units',
     bank_name:'Fixture Bank',bank_branch:'Fixture Branch',bank_account_number:'000123',
     checklistitems:['Keys'],terms:{notice:'One month'},images:[{image_url:`/storage/images/tenants/${tenantId}/properties/front.gif`,image_type:'exterior',order:0}],
@@ -561,3 +641,4 @@ const verifyCessation=async(pool,{tenantId,actorId,parent,unit1,stripe,sub,calls
   }finally{stripe.request=normal;}
   console.log('PASS: atomic audited cessation, real domain obligation denials, competing obligation lock, future quantity reduction, zero-stock cancellation, immutable history, database bypass denial and response-loss retry; synthetic provider');
 };
+
