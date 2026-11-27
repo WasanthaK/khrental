@@ -1,3 +1,4 @@
+import {withSandboxLkrCycle} from './test-sandbox-lkr-cycle.mjs';
 import {verifyLocalRenewal} from './test-local-renewal.mjs';
 import {verifyPricePublicationRecovery} from './test-price-publication-recovery.mjs';
 import assert from 'node:assert/strict';
@@ -136,23 +137,26 @@ async function verifyLocalWorkspaceFee(store,actorId) {
     assert.deepEqual(ordered.map(line=>line.monthlyFeeMinor),[10000,10000,160000,10001,10001,10000]);
     assert.equal(monthlyTotalMinor,210002);
     const rollback=new Error('Discard isolated issuer and price bindings');
-    await assert.rejects(store.locked(tenantId,async q=>{
-      await q(`UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id='price_fixtureLK',
-        published_at=SYSUTCDATETIME() WHERE id=@versionId`,{versionId});
+    const verifyInvoice=provider=>assert.rejects(store.locked(tenantId,async q=>{
+      await q(`UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id=@price,
+        published_at=SYSUTCDATETIME() WHERE id=@versionId`,{versionId,price:provider?.price ?? 'price_fixtureLK'});
       await q(`INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
         SELECT 'LK',id,DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic only' FROM dbo.management_invoice_issuers
         WHERE country_code='US' AND legal_name='Quixo Inc.'`);
-      const laterIssuer=async()=>{
+      const laterIssuer=async effectiveAt=>{
         await q(`DECLARE @issuer UNIQUEIDENTIFIER=NEWID();
           INSERT dbo.management_invoice_issuers(id,country_code,legal_name) VALUES(@issuer,'LK','Later synthetic issuer');
           INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
-          VALUES('LK',@issuer,SYSUTCDATETIME(),'Synthetic cutover')`);
-        const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('LK',SYSUTCDATETIME())");
+          VALUES('LK',@issuer,@effectiveAt,'Synthetic cutover')`,{effectiveAt});
+        const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('LK',@effectiveAt)",{effectiveAt});
         assert.equal(now.legal_name,'Later synthetic issuer');
       };
-      await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer});
+      await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer,provider});
       throw rollback;
     }),error=>error===rollback);
+    await verifyInvoice();
+    const operation=process.env.R5_LKR_SANDBOX_OPERATION;
+    if(operation){await withSandboxLkrCycle(operation,verifyInvoice);}
     allowed=false;
     assert.equal((await post('/preview',{versionId,workspaceId:tenantId})).status,403);
     assert.equal(await store.account(tenantId),null);
