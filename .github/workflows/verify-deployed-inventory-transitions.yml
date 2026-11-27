@@ -14,6 +14,14 @@ on:
         description: VERIFY-INVENTORY-TRANSITIONS
         required: true
         type: string
+      owner_acceptance_window:
+        description: Optional protected browser-acceptance window after readiness is enabled
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - 900
 permissions:
   contents: read
 concurrency:
@@ -32,6 +40,7 @@ jobs:
       EXPECTED_BUILD: ${{ inputs.expected_build }}
       OPERATION_ID: ${{ inputs.operation_id }}
       CONFIRMATION: ${{ inputs.confirmation }}
+      OWNER_ACCEPTANCE_WINDOW: ${{ inputs.owner_acceptance_window }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -44,6 +53,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$CONFIRMATION" = VERIFY-INVENTORY-TRANSITIONS
+          [[ "$OWNER_ACCEPTANCE_WINDOW" == none || "$OWNER_ACCEPTANCE_WINDOW" == 900 ]]
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           curl -fsS --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
@@ -83,6 +93,14 @@ jobs:
           test "$ready" = true
           jq -e --arg id "$OPERATION_ID" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" and .value=="true") and any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS" and .value==$id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null
           jq -r '"HTTP_SCOPE_ENABLED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" > enforcement-config.txt
+      - name: Hold protected owner browser acceptance window
+        if: env.OWNER_ACCEPTANCE_WINDOW == '900'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'OWNER_BROWSER_ACCEPTANCE_WINDOW=900' | tee owner-browser-window.txt
+          sleep 900
+
       - name: Verify deployed inventory transitions and isolation
         shell: bash
         run: |
@@ -184,4 +202,5 @@ jobs:
             comp-evidence.txt
             comp-result.json
             enforcement-config.txt
+            owner-browser-window.txt
           retention-days: 30
