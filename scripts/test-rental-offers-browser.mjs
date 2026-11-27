@@ -141,15 +141,16 @@ try{
  assert.ok(Date.parse(retained.timing.holdUntil)<=Date.parse(retained.timing.expiredSqlTime));
  offer={status:'expired',version:2,currency:'LKR',rent:100,deposit:0,fees:0,
   startDate:'2026-11-14',endDate:'2026-12-14',terms:'Seeded synthetic hold; no participant acceptance, tenancy or payment',
-  holdUntil:retained.timing.holdUntil,agreementId};
+  offerUntil:new Date(Date.parse(retained.timing.holdUntil)-60000).toISOString(),holdUntil:retained.timing.holdUntil,agreementId};
  cancelled=false;
  for(const width of [390,1440]){
   await page.setViewport({width,height:900});
   await page.goto(origin+'/rental-journey',{waitUntil:'networkidle0'});
-  const when=await page.waitForSelector('section[aria-label^="Rental offer"] time');
-  assert.equal(await when.evaluate(el=>el.dateTime),retained.timing.holdUntil);
-  assert.equal(await when.evaluate(el=>el.innerText),'14 Nov 2026, 21:20 (Asia/Colombo)');
-  assert.match(await page.$eval('section[aria-label^="Rental offer"]',el=>el.innerText),/Agreement: draft/);
+  await page.waitForFunction(()=>document.querySelector('section[aria-label^="Rental offer"] strong')?.innerText==='expired');
+  const visible=await page.$eval('section[aria-label^="Rental offer"]',el=>el.innerText);
+  // The public-facing screen displays the hold deadline to the local minute.
+  assert.match(visible,/reservation ends 14 Nov 2026, 21:20 \(Asia\/Colombo\)/);
+  assert.match(visible,/Agreement: draft/);
   await noNewActions();
   assert.equal(await page.$('input[type=checkbox]'),null);
   assert.equal((await buttonLabels()).includes('Withdraw offer or reservation'),false);
