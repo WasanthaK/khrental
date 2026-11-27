@@ -1,0 +1,91 @@
+# R5 Sri Lanka closure checklist
+
+**Baseline: 45 open deliverables, including two release gates.**
+
+This checklist defines the Sri Lanka release boundary from 27 November 2026. The baseline is main at `111f9f5f`. Each numbered row is one deliverable. The earlier 27 ledger IDs group work by subject. The earlier estimate of at least 40 actions preceded this scope decision. Count open rows here once, even when one test or approval supplies evidence for several rows.
+
+**Next engineering action: 01.** R5 is open. QA and engineering use Stripe sandbox. The owner controls the production release decision. Start commercial inputs 29, 34, 36, 38 and 40–42 alongside engineering. Row 30 can use a test price while 29 is open. An outstanding external approval can block the paid launch while sandbox engineering continues.
+
+## How to execute and close
+
+- Start with the first open engineering row whose prerequisites are met. Product, finance and privacy owners can prepare their rows in parallel. Numbers in the “After” column refer to this checklist. A dash means work can start from the current baseline.
+- QA first checks existing immutable evidence against the exact pass condition. Record the link and mark the row Done if it already passes. Otherwise run the missing check on a fresh private fixture or implement the missing behavior. A failing check stays on the same row through correction and retest.
+- Replace Open with Done only alongside a run, PR, redacted decision reference or provider approval supporting the result. Record Blocked with the missing input and responsible role. Use the [existing execution boundaries](R5-SELF-HANDOFF-20261115.md#execution-and-safety-boundaries) for fixture cleanup, configuration restoration and protected billing. A sandbox charge supplies sandbox evidence only.
+- R5 closes when every numbered row has passed. Any later scope change requires an explicit owner decision recorded here. Findings outside the bounded outcomes go in the backlog. A defect that prevents a listed outcome stays on that row. A material release risk goes to the owner before launch.
+
+## Billing recovery, inventory and enforcement
+
+| ID | State | Ledger | Owner | After | Action and evidence required to close |
+|---|---|---|---|---|---|
+| 01 | Open | BL08.11 | Engineering + QA | — | Interrupt the response after Stripe applies the 2→1 renewal schedule for a paid dwelling cessation. Verify the pending command has not prematurely ended management. Retry the original command under its original key. Verify one intended schedule change, one stock change and one recovery audit, with no duplicate financial effect. |
+| 02 | Open | BL08.11 | Platform admin + QA | — | Interrupt sandbox price publication. Retry the same immutable version and key. Verify one provider price and audit history. Missing or expired evidence and revoked admin authority must lead to review or denial before another write. |
+| 03 | Open | BL08.11 | QA | — | For one non-cancellation command, prove an authorized organization admin can inspect and recover it, and an unauthorized renter/staff member or revoked admin is denied without a write. |
+| 04 | Open | BL08.11 | QA | — | Use a second sandbox organization to attempt inspection and recovery of the first organization’s command. Verify denial and unchanged journal and billing records. |
+| 05 | Open | BL08.11 | QA | — | Verify the worker processes only the configured sandbox organization. Retain the scope readback, an unscoped job left untouched, and redacted logs. |
+| 06 | Open | BL08.11 | QA | — | Take an interrupted synthetic operation to the retry limit. Verify an auditable review state and that a later retry creates no provider effect or replacement command. |
+| 07 | Open | BL06.3 | QA | — | Deliver and replay one signed sandbox billing event for organization A. Verify one applied event for A and unchanged billing records for B. |
+| 08 | Open | BL08.9 | QA | 01 | On an approved but unsettled settlement, confirm cessation is refused before a provider write. Settle the fixture and verify that fresh review permits cessation. |
+| 09 | Open | BL08.9 | QA | 01 | Between review and confirmation, change the managed inventory through a supported operation. The stale confirmation must leave stock and provider billing unchanged. |
+| 10 | Open | BL08.6 | QA | — | In the deployed owner screen, prepare one dwelling and confirm it appears once in staged inventory. |
+| 11 | Open | BL08.6 | QA | — | Import a valid fixture through the owner screen. Confirm the displayed records match the import. Verify an invalid import leaves the batch unapplied. |
+| 12 | Open | BL08.7, BL08.10 | QA | — | Restore a ceased fixture through the owner screen. Verify the active dwelling and its retained cessation history. |
+| 13 | Open | BL08.7, BL08.10 | QA | — | Split a fixture through the owner screen. Verify the resulting units and parent history, with the parent excluded from duplicate billing. |
+| 14 | Open | BL08.2 | QA | — | Run monthly generation on one entitled and one expired fixture with confirmed invoice and due days. Verify the permitted draft, denial for the expired fixture, and no partial invoice or components on denial. |
+| 15 | Open | BL08.3 | QA | — | Check invoice, payment and adjustment write enforcement for an expired fixture, including adjustment through its normal route. Compare before/after records. Credit the accepted invoice/payment checks where they cover the same outcome. |
+| 16 | Open | BL08.4 | QA | — | For activation, exit and maintenance writes, verify that expired or revoked authority cannot change the fixture. Reuse the accepted maintenance evidence and retain history reads. |
+| 17 | Open | BL08.5 | QA | — | Attempt a controlled stock mutation through the generic write and bulk import paths. Verify refusal or required staging with no unauthorized stock creation and no partial batch. |
+| 18 | Open | BL08.12 | Release engineer | 01–17 | Exercise the enforcement switch for one explicitly scoped sandbox organization. Verify its guarded writes, unchanged access for the control organization, successful rollback and application/SQL health. |
+
+## Rental operations and usability
+
+| ID | State | Ledger | Owner | After | Action and evidence required to close |
+|---|---|---|---|---|---|
+| 19 | Open | OP02.1 | QA | — | Render public search with a rented dwelling and confirm it is unavailable for enquiry. |
+| 20 | Open | OP02.1 | QA | — | Withdraw a fixture listing and confirm it disappears from rendered public results. |
+| 21 | Open | OP02.1 | QA | — | Opt a fixture property out of listing and confirm the property disappears from rendered public results. |
+| 22 | Open | OP02.1 | QA | — | Reserve an otherwise eligible dwelling and verify the rendered listing excludes the reserved dwelling from available public results. |
+| 23 | Open | OP02.1, OP09.2 | QA | — | Open a previously valid listing URL after withdrawal. Verify an unavailable state and no actionable stale enquiry. |
+| 24 | Open | OP09.2 | QA | — | Open a naturally expired unsigned reservation in the renter screen. Verify acceptance is unavailable and the displayed reservation state matches its recorded expiry. Use retained evidence or a fresh fixture. |
+| 25 | Open | OP08.1 | QA + mailbox holder | — | Deliver one application notification to a controlled intended inbox and match its timestamp and recipient to the send record. Record redacted receipt evidence. |
+| 26 | Open | OP10.1, CT04.2 | QA | 10 | Complete a desktop owner credential sign-in, open the selected property and a permitted retained record. Capture the rendered outcome in that workspace. |
+| 27 | Open | OP10.1 | QA | 19 | Complete the mobile seeker journey from public search to an eligible listing and its enquiry action. Verify readable controls and preservation of the selected property. |
+| 28 | Open | OP10.1 | QA | 10 | Complete the owner stock-preparation journey with the keyboard. Verify focus, validation and the final confirmation. Reuse the fixture and evidence from 10. |
+
+## Sri Lanka pricing, invoicing and paid launch
+
+| ID | State | Ledger | Owner | After | Action and evidence required to close |
+|---|---|---|---|---|---|
+| 29 | Open | CM01.3 | Owner / country admin | — | Record the approved monthly LKR base fee per managed dwelling in the LK pricing decision. A USD conversion or a sample fee cannot supply this value. |
+| 30 | Open | CM01.3 | Engineering + QA | — | Implement the approved LKR fee in the billing path. Test a vacant dwelling, rent at Rs 25,000, rent above it and a half-cent rounding boundary. At Rs 100,000 rent the excess is Rs 1,500. Sum once-rounded dwelling charges. A synthetic base fee is sufficient for development. |
+| 31 | Open | CM01.4 | Engineering + platform admin | 29, 30 | Publish a dated LK price from the admin screen, persist its version and verify the correct effective version on a sandbox charge or invoice, including the LKR currency and actual amount. Reject unauthorized publication. |
+| 32 | Open | CM01.4, CM02.1 | Platform admin + QA | — | Exercise the existing issuer setup with Quixo Inc. (USA) on a sandbox LK invoice. Verify effective-date selection and that changing a later assignment preserves the original invoice issuer. |
+| 33 | Open | CM02.1 | Engineering + platform admin | — | Configure the LK Stripe collector and receiving-account reference as a country record. Verify lookup for the effective date and that only an authorized platform admin can change it. Use sandbox references for QA. |
+| 34 | Open | CM02.2 | Finance / tax adviser | — | Record the approved LK tax treatment for Quixo’s platform fee, including applicable VAT and withholding, registration basis, invoice treatment and effective date. Record an explicit decision where a tax does not apply. |
+| 35 | Open | CM02.2 | Engineering + QA | 34 | Implement effective-dated LK tax switches and apply the approved treatment to a sandbox fee invoice. Verify enabled and disabled calculations, withholding where applicable, and the saved invoice tax details after a later rule change. |
+| 36 | Open | CM01.5 | Product owner | — | Decide the LK reactivation terms before and after expiry, including treatment of any valid overdue balance. Record the approved decision. |
+| 37 | Open | CM01.5 | Engineering + QA | 36 | Verify the supported reactivation flow implements those terms on a controlled paid fixture. Verify access, charge and retained property history. |
+| 38 | Open | CM01.7 | Finance + product owner | — | Approve the LK fee refund/credit and cancellation disclosures. Record the correction method for a billing error and the customer-facing wording. |
+| 39 | Open | CM01.4, CM01.7 | QA | 31, 32, 33, 35, 38 | Verify one end-to-end sandbox purchase against its displayed price, issuer, tax and total. Check the effective-price notice and the approved credit/cancellation disclosure against the issued record. |
+| 40 | Open | CM02.1 | Merchant account owner | — | Supply a redacted provider approval reference for the live legal entity, LK collection currency/capability and receiving account/payout route. Sandbox approval cannot close the live gate. |
+| 41 | Open | CM02.4 | Privacy owner | — | Sign off the LK privacy record for controller/contact, purposes and grounds, providers, data locations and transfer arrangements. Publish or correct the customer notice if the approved facts require it. |
+| 42 | Open | CM02.5 | Privacy owner | — | Approve retention periods, holds and backup/deletion handling for the LK data categories in the existing retention record. |
+| 43 | Open | CM02.5 | QA + privacy owner | 42 | Process one controlled privacy request through the existing runbook. Verify identity handling, the requested outcome, retained exceptions and redacted completion evidence. |
+| 44 | Open | RG01.1 | Release owner | 01–43 | Review the closed checklist and signed merchant, tax and privacy references. Record the LK go/no-go, authorized scope and rollback owner. A hold keeps paid launch open. |
+| 45 | Open | RG01.2 | Release engineer + owner | 44, explicit go | Execute the separately authorized LK activation for the approved entity, account, price and scope. Record readback, health, billing verification and rollback readiness. A sandbox pass or this planning change supplies no authorization to switch on live charging. |
+
+## Execution aids
+
+For 01–09 use [tracker #611](https://github.com/WasanthaK/khrental/issues/611), the [paid inventory workflow](../.github/workflows/verify-deployed-paid-inventory.yml), the [pricing and issuer routes](../src/api/managementBilling/router.js) and the [two-tenant SQL workflow](../.github/workflows/test-billing-two-tenant-sqlserver.yml). Assign the missing assertion to the matching harness. For 10–28 use the stock screens and [existing enforcement workflow](../.github/workflows/verify-deployed-http-enforcement.yml). Capture redacted rendered evidence for screen outcomes. For 29–43 use the [country decisions](R5-LK-COMMERCIAL-READINESS-20261116.md#country-billing-decisions-agreed-on-26-november-2026). Never put identity documents, credentials or bank details in an evidence link.
+
+## Outside this release
+
+| Former wording or proposal | Disposition |
+|---|---|
+| “Other” refund, entitlement, transition, obligation, resource, race, route, role and rendered permutations | Backlog. The named checks above exhaust the R5 scope. The approved-settlement and real inventory-change checks are 05 and 06. The accepted canceled-invoice and overpayment checks stay closed. |
+| Waiting indefinitely for a naturally paused database (OP10.3) | Field observation after R5. A genuine pause must occur before this can be measured. Application/SQL health is still checked during controlled rollout. |
+| Exceptional bulk pricing (CM01.6) | Later commercial proposal. Ordinary published pricing applies for the launch scope. Any special rate requires a separate decision. |
+| Other collectors, PayHere integration, local incorporation, taxes for other jurisdictions, owner rent collection/payout and owner-issued rent documents | Later product scope. R5 covers LK Quixo platform fees, approved LK tax treatment, configurable issuer and Stripe collector/account. |
+| Blanket production enforcement or additional cohorts | Later rollout. Row 18 verifies one reversible scope. Row 45 requires explicit authorization for its named launch scope. |
+| Natural seven-day grace, Evia package/matching audit, Brunei, R2 archiving and R3 scaling/signup follow-ups | Previously deferred or tracked separately. Preserve their evidence and original disposition. |
+
+[Evidence ledger](R5-LIFECYCLE-ACCEPTANCE-20261105.md#handoff-task-level-dispositions) · [Execution plan](EXECUTION-PLAN.md) · [Engineering handoff](R5-SELF-HANDOFF-20261115.md#next-executable-slice)

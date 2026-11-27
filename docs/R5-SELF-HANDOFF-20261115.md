@@ -1,5 +1,7 @@
 # R5 self-handoff — updated 27 November 2026
 
+**Current R5 scope.** The [R5 Sri Lanka closure checklist](R5-LK-CLOSURE.md) controls remaining work, dependencies, deferrals and sign-off. Earlier matrices preserve the evidence and earlier scope decisions.
+
 **Cancellation isolation case closed by owner decision, 26 November 2026.** The [CI job](https://github.com/WasanthaK/khrental/actions/runs/45435218718/job/138591046050) recorded HTTP 404 and zero synthetic provider requests for pending and completed cancellations. Before-and-after records matched in both cases. Deployed verification remains outstanding. This case leaves the active R5 queue. Other billing isolation and recovery checks remain in scope.
 
 ## Owner-confirmed rent billing dates
@@ -15,7 +17,7 @@ Dated acceptance sections preserve historical checkpoints, including the work pl
 ## Current decision
 R5 is PARTIAL. LK is not launch-ready. Live charging and full enforcement remain OFF. BN is a separate later release. Continue controlled sandbox acceptance without repeating accepted fixtures.
 
-Owner scope decision, 15 November 2026 19:36 Asia/Colombo: natural seven-day grace expiry/later recovery (BL05.5) and the Evia service/package and matching audit (CT03.4/5) are OUT OF R5. Neither is accepted. Grace expiry moves to field testing; Evia moves to later troubleshooting because it affects the audit report only. Every other queue item stays in R5 and must be closed there. Do not work on either item as R5 work, and do not retry, resend or re-sign anything with Evia without a new owner instruction.
+Owner scope decision, 15 November 2026 19:36 Asia/Colombo: natural seven-day grace expiry/later recovery (BL05.5) and the Evia service/package and matching audit (CT03.4/5) are OUT OF R5. Neither is accepted. Grace expiry moves to field testing; Evia moves to later troubleshooting because it affects the audit report only. The 27 November checklist defines the remaining release obligations. Do not work on either item as R5 work, and do not retry, resend or re-sign anything with Evia without a new owner instruction.
 
 On 25 November, production deployment [#1856](https://github.com/WasanthaK/khrental/actions/runs/45522706927) served `4e32c05d`. [Apply #71, attempt 2](https://github.com/WasanthaK/khrental/actions/runs/45616123887/job/139217741324) applied the market invoice issuer migration. [Strict verification #17, attempt 2](https://github.com/WasanthaK/khrental/actions/runs/45518652952/job/139221679391) passed all 24 ledger and schema checks. In the deployed Management pricing screen, the platform administrator saw **LK · Quixo Inc. (US)** with status **Draft** under Assignment history. The workspace administrator received the platform administrator access requirement. Live issuance still requires approval and an effective date.
 
@@ -23,7 +25,7 @@ On 25 November, production deployment [#1856](https://github.com/WasanthaK/khren
 
 The owner requested commercial terms, tax and privacy work without overlapping the recovery lane. The [commercial readiness record](R5-LK-COMMERCIAL-READINESS-20261116.md) now prepares the price/FX/rounding, restoration/refund, merchant/tax and privacy/retention decisions with current official sources. The existing commercial documents and canonical CM references point to that record. This is documentation preparation; CM items remain YELLOW, live merchant/payout remains RED, and public policies/provider settings are unchanged.
 
-Next for this lane: resolve the record's owner-decision bundles and actual entity/provider evidence, then separately scope any approved implementation after checking this handoff and active branches. The next executable engineering slice below is retained; this update assigns no engineering ownership and consumes no fixture or operation UUID.
+The numbered closure checklist governs current LK commercial decisions and implementation. The 16 November research remains supporting evidence.
 
 ## Accepted evidence and limits
 
@@ -226,23 +228,15 @@ UUID `3723cb4a-f474-4789-93b6-513652b6cf08` is used and must never be replayed. 
 
 ## Next executable slice
 
-[Run #55](https://github.com/WasanthaK/khrental/actions/runs/45834265313) closed invoice-preview response loss and expired-preview handling. Follow the cessation-provider interruption row in [BL08.11 tracker #611](https://github.com/WasanthaK/khrental/issues/611). Verify that a lost provider response during paid cessation reconciles the original command and applies the stock change once. The [service](../src/api/managementBilling/service.js) routes paid cessation through recovery handlers. The [quantity SQL suite](../scripts/test-management-quantity-recovery-sql.mjs) injects provider response loss using simulated Stripe transport. Deployed refusal and successful renewal evidence cover different paths.
-
-Mounted HTTP cancellation isolation passed with disposable SQL. The owner closed the cancellation-isolation case on 26 November with deployed HTTP verification outstanding. [Acceptance evidence](R5-LIFECYCLE-ACCEPTANCE-20261105.md#bl0811-cancellation-isolation).
-
-The cessation maintenance, invoice, payment, settlement, deposit and reservation blocker proofs remain complete only for their recorded paid whole-property service/SQL cases. Their accepted fixtures, including reservation UUID `ca5c25a6-9cf6-4724-9b34-a5a4f9c049de`, must never be replayed. [Sandbox run #57](https://github.com/WasanthaK/khrental/actions/runs/45948770110/job/140339490549) passed all five deployed service/SQL checks. An active agreement blocked stale confirmation and retry without a provider write. After closure, the agreement was retained and one dwelling was scheduled for renewal. Cleanup deactivated the fixture and canceled its subscription. Protected billing stayed unchanged. [Sandbox run #59](https://github.com/WasanthaK/khrental/actions/runs/45951800629/job/140349477052) passed six checks. A zero-value draft blocked stale confirmation, retry and a fresh request without a provider write. Canceling the draft allowed cessation, retained the invoice and scheduled one dwelling for renewal. Fixture cleanup and protected billing checks passed. [Sandbox run #62](https://github.com/WasanthaK/khrental/actions/runs/45959117680/job/140372463305) passed seven checks. A canceled invoice with a verified payment and a paid invoice with a negative outstanding balance each blocked stale confirmation, retry and a fresh request without a provider write. Balancing the synthetic invoice allowed cessation, retained its verified payment and scheduled one dwelling for renewal. Fixture cleanup and protected billing checks passed. Remaining named deployed paid cases include other refund states and approved settlement; remaining entitlement states, transitions, simultaneous-race boundaries and rendered journeys stay under inventory item 1. Use the [cessation evidence-level matrix](R5-LIFECYCLE-ACCEPTANCE-20261105.md#cessation-evidence-levels--current-scope-clarification): PR #548 unit/real SQL insertion-lock and isolated-browser proofs, paid HTTP stale previews and the later six-family blocker passes are already retained and must not be generically reimplemented or repeated. Natural seven-day grace and Evia audit remain outside R5 by owner decision. Hosted Checkout remains accepted within its recorded scopes; rendered stock forms and credential login remain separate.
+Start with row 01 of the [R5 Sri Lanka closure checklist](R5-LK-CLOSURE.md). Use the existing BL08.11 tracker and paid inventory harness for the interrupted paid cessation case.
 
 ## Remaining queue and exit criteria
 
-1. Inventory create/import, restoration, split and cessation: remaining stock/resource and entitlement states, transitions and rendered forms; named deployed paid cessation cases for other refund states and approved settlement; specifically unproved simultaneous-race boundaries. Use the [evidence-level matrix](R5-LIFECYCLE-ACCEPTANCE-20261105.md#cessation-evidence-levels--current-scope-clarification) to preserve completed PR #548 unit/real SQL insertion-lock and isolated-browser proofs, paid HTTP stale-preview negatives and the six recorded obligation-family passes. Active paid final-dwelling zero-stock and hosted Checkout payment/promotion are also accepted within their recorded scopes. Do not reimplement or repeat accepted cases; name the missing evidence layer before assigning a new one.
-2. Remaining billing event and organization-isolation coverage. Retained renewal, within-grace recovery and delayed failure remain accepted; do not advance their retained clocks.
-3. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
-4. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
-5. LK commercial and launch work: set the base fee, implement the approved LKR formula and publication policy, resolve reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
+The checklist supplies the individual actions, owners, dependencies, evidence and release decision. Work on a ready independent row while another awaits an external input. Update its state and link the result once.
 
 ## Outside R5 by owner decision
-- Natural seven-day grace expiry and later recovery. [PR #672](https://github.com/WasanthaK/khrental/pull/672) holds a prepared harness (start, inspect, expiry-recovery, cleanup); it is unmerged and has not been run. Start it only on an owner instruction, for field testing. Never advance accepted retained clocks.
-- Evia service/package retrieval and matching audit retention. Completed signing stays accepted.
+
+Use the checklist’s [deferrals](R5-LK-CLOSURE.md#outside-this-release). Accepted cases, including cancellation isolation, stay closed.
 
 ## Execution and safety boundaries
 - User authorized continued R5 work, merges and controlled deployed sandbox acceptance; do not repeatedly ask for the same authorization.
@@ -257,5 +251,5 @@ The cessation maintenance, invoice, payment, settlement, deposit and reservation
 - No new dependencies or unrelated application changes.
 
 ## Completion discipline
-For every new slice, retain immutable run/artifact evidence and explicit limits, update current headers/queues/task rows in all three canonical documents, and read back exact written content. Keep historical failed runs failed. Report what passed, what remains, and the next executable slice. Update this handoff when the next slice changes.
+Record the result in the matching checklist row, link the acceptance evidence and report the new open count. Keep the ledger’s historical results intact. Update linked summaries when the release disposition changes.
 
