@@ -3,13 +3,15 @@ import {createBillingStore} from '/app/src/api/managementBilling/store.js';
 import {createStripeClient, objectId} from '/app/src/api/managementBilling/stripe.js';
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
-const operation = '9a7430ca-4bb8-44b0-9226-1475c1dbfb1f';
+const operation = process.env.R5_PAID_CESSATION_OPERATION;
+const allowedOperations = new Set(['9a7430ca-4bb8-44b0-9226-1475c1dbfb1f', '46f51bf9-b6f9-4052-a4b9-1471f98a0599']);
 const store = createBillingStore();
 const stripe = createStripeClient();
 const read = (path, params) => stripe.request('GET', path, params);
 const params = {tenantId: operation, slug: 'r5-paid-stock-' + operation};
 let stage = 'sandbox_account';
 try {
+  assert.ok(allowedOperations.has(operation));
   await stripe.assertAccount();
   stage = 'exact_fixture_sql';
   const [fixture] = await store.read('SELECT status FROM dbo.tenants WHERE id=@tenantId AND slug=@slug', params);
