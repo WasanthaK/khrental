@@ -5,7 +5,7 @@ import express from 'express';
 import {BILLING_ACCOUNT} from '../src/api/managementBilling/contract.js';
 import {createManagementBillingRouter, createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 
-export async function verifyLocalRenewal({store, q, tenantId, versionId, laterIssuer, provider}) {
+export async function verifyLocalRenewal({store, q, tenantId, versionId, laterIssuer, provider, issuerMarket='LK'}) {
   const customer = provider?.customer ?? 'cus_fixtureLK';
   const subscription = provider?.subscription ?? 'sub_fixtureLK';
   const item = provider?.item ?? 'si_fixtureLK';
@@ -43,6 +43,7 @@ export async function verifyLocalRenewal({store, q, tenantId, versionId, laterIs
   // The outer SQL fixture owns the transaction and rolls back account, issuer and journal changes.
   const fixtureStore = {...store, read: q, account: id => store.account(id, q), locked: (_id, action) => action(q)};
   const env = {MANAGEMENT_BILLING_SCHEMA_READY: 'true', MANAGEMENT_LK_SANDBOX_INVOICE_TENANT: tenantId,
+    MANAGEMENT_LK_SANDBOX_ISSUER_MARKET: issuerMarket,
     STRIPE_SANDBOX_WEBHOOK_SECRET: randomUUID()};
   const app = express();
   app.use('/events', createManagementBillingWebhook({env, store: fixtureStore, stripe}));

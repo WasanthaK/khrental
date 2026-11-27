@@ -34,7 +34,8 @@ function feeReceipt(invoice,account){
 
 // Runs only on an explicitly scoped sandbox renewal. The invoice item retains
 // the historical issuer alongside the once-rounded fee, including a zero excess.
-export async function applyLocalRenewal({store,q,stripe,account,loadInvoice,invoiceId}){
+export async function applyLocalRenewal({store,q,stripe,account,loadInvoice,invoiceId,issuerMarket='LK'}){
+  if(!/^[A-Z]{2}$/.test(issuerMarket)){throw review();}
   const invoice=await loadInvoice(invoiceId);
   if(invoice.id!==invoiceId){throw review();}
   const {base,receipt}=feeReceipt(invoice,account);
@@ -44,7 +45,8 @@ export async function applyLocalRenewal({store,q,stripe,account,loadInvoice,invo
   const [version]=await q("SELECT rules_json FROM dbo.management_pricing_versions WHERE id=@id AND stripe_price_id=@price AND status='sandbox_published'",
     {id:account.pricing_version_id,price:account.stripe_price_id});
   if(!version||base.quantity!==fee.quantity||base.amount!==JSON.parse(version.rules_json).baseFeeMinor*fee.quantity){throw review();}
-  const [issuer]=await q("SELECT * FROM dbo.management_invoice_issuer_at('LK',@asOf)",{asOf:new Date(invoice.created*1000)});
+  const [issuer]=await q('SELECT * FROM dbo.management_invoice_issuer_at(@issuerMarket,@asOf)',
+    {issuerMarket,asOf:new Date(invoice.created*1000)});
   if(!issuer){throw review();}
   const amount=fee.monthlyTotalMinor-base.amount;
   const body={customer:account.stripe_customer_id,invoice:invoiceId,currency:'lkr',amount,
