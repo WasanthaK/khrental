@@ -54,6 +54,8 @@ on:
       - 'src/components/properties/PropertyViewing.jsx'
       - 'src/components/properties/PropertyApplication.jsx'
       - 'src/components/properties/PropertyOffer.jsx'
+      - 'scripts/test-rental-offers-browser.mjs'
+      - 'docs/evidence/r5-reservation-natural-expiry-20261114.json'
       - 'src/pages/RentalJourney.jsx'
       - 'migrations/20261029_01_rental_offers_and_holds.sql'
       - 'scripts/*rental-offer*'

@@ -132,6 +132,31 @@ try{
  }
  await page.screenshot({path:'enquiry-browser-proof/rental-terminal-mobile.png',fullPage:true});
  console.log('RENTAL_TERMINAL_BROWSER=PASS expired_withdrawn_invalidated no_acceptance no_preparation retained_links');
+ // Replay the retained naturally elapsed hold through the actual renter screen.
+ const retained=JSON.parse(await fs.readFile(new URL('../docs/evidence/r5-reservation-natural-expiry-20261114.json',import.meta.url),'utf8'));
+ assert.equal(retained.result.scenario,'natural_expiry');
+ assert.equal(retained.result.checks.includes('authorized_read_records_expiry'),true);
+ assert.equal(retained.result.checks.includes('unsigned_draft_preserved_without_signing'),true);
+ assert.ok(Date.parse(retained.timing.initialSqlTime)<Date.parse(retained.timing.holdUntil));
+ assert.ok(Date.parse(retained.timing.holdUntil)<=Date.parse(retained.timing.expiredSqlTime));
+ offer={status:'expired',version:2,currency:'LKR',rent:100,deposit:0,fees:0,
+  startDate:'2026-11-14',endDate:'2026-12-14',terms:'Seeded synthetic hold; no participant acceptance, tenancy or payment',
+  holdUntil:retained.timing.holdUntil,agreementId};
+ cancelled=false;
+ for(const width of [390,1440]){
+  await page.setViewport({width,height:900});
+  await page.goto(origin+'/rental-journey',{waitUntil:'networkidle0'});
+  const when=await page.waitForSelector('section[aria-label^="Rental offer"] time');
+  assert.equal(await when.evaluate(el=>el.dateTime),retained.timing.holdUntil);
+  assert.equal(await when.evaluate(el=>el.innerText),'14 Nov 2026, 21:20 (Asia/Colombo)');
+  assert.match(await page.$eval('section[aria-label^="Rental offer"]',el=>el.innerText),/Agreement: draft/);
+  await noNewActions();
+  assert.equal(await page.$('input[type=checkbox]'),null);
+  assert.equal((await buttonLabels()).includes('Withdraw offer or reservation'),false);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await page.screenshot({path:'enquiry-browser-proof/rental-natural-expiry-'+width+'.png',fullPage:true});
+ }
+ console.log('R5_24_RENTER_BROWSER=PASS retained_run='+retained.run+' deadline='+retained.timing.holdUntil+' unsigned_draft no_acceptance 390px 1440px');
  assert.deepEqual(errors,[]);
  console.log('RENTAL_OFFERS_BROWSER=PASS exact_terms market_deadlines consent retry acceptance_no_signature existing_account_agreement onboarding_links mobile withdrawal delayed_refresh rollback_readonly');
 }catch(error){if(page){await fs.mkdir('enquiry-browser-proof',{recursive:true});await page.screenshot({path:'enquiry-browser-proof/rental-offer-failure.png',fullPage:true}).catch(()=>{});}throw error;}
