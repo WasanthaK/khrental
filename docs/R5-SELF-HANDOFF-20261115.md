@@ -1,4 +1,4 @@
-# R5 self-handoff — updated 26 November 2026
+# R5 self-handoff — updated 27 November 2026
 
 **Cancellation isolation case closed by owner decision, 26 November 2026.** The [CI job](https://github.com/WasanthaK/khrental/actions/runs/45435218718/job/138591046050) recorded HTTP 404 and zero synthetic provider requests for pending and completed cancellations. Before-and-after records matched in both cases. Deployed verification remains outstanding. This case leaves the active R5 queue. Other billing isolation and recovery checks remain in scope.
 
@@ -226,7 +226,7 @@ UUID `3723cb4a-f474-4789-93b6-513652b6cf08` is used and must never be replayed. 
 
 ## Next executable slice
 
-Continue with the remaining subscription and billing-operation recovery cases.
+[Run #55](https://github.com/WasanthaK/khrental/actions/runs/45834265313) closed invoice-preview response loss and expired-preview handling. Follow the cessation-provider interruption row in [BL08.11 tracker #611](https://github.com/WasanthaK/khrental/issues/611). Verify that a lost provider response during paid cessation reconciles the original command and applies the stock change once. The [service](../src/api/managementBilling/service.js) routes paid cessation through recovery handlers. The [quantity SQL suite](../scripts/test-management-quantity-recovery-sql.mjs) injects provider response loss using simulated Stripe transport. Deployed refusal and successful renewal evidence cover different paths.
 
 Mounted HTTP cancellation isolation passed with disposable SQL. The owner closed the cancellation-isolation case on 26 November with deployed HTTP verification outstanding. [Acceptance evidence](R5-LIFECYCLE-ACCEPTANCE-20261105.md#bl0811-cancellation-isolation).
 
@@ -238,7 +238,7 @@ The cessation maintenance, invoice, payment, settlement, deposit and reservation
 2. Remaining billing event and organization-isolation coverage. Retained renewal, within-grace recovery and delayed failure remain accepted; do not advance their retained clocks.
 3. Billing enforcement remaining routes, jobs, imports, generic bypass and stale actor/resource paths. Full rollout stays OFF.
 4. Desktop/mobile/keyboard journeys, rendered retained-history permissions, actual mailbox receipt and naturally paused database wake-up.
-5. LK commercial and launch decisions: formula/FX/rounding/versioning, reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
+5. LK commercial and launch work: set the base fee, implement the approved LKR formula and publication policy, resolve reactivation/refund, merchant payout, tax/privacy and final release approval. BN follows separately.
 
 ## Outside R5 by owner decision
 - Natural seven-day grace expiry and later recovery. [PR #672](https://github.com/WasanthaK/khrental/pull/672) holds a prepared harness (start, inspect, expiry-recovery, cleanup); it is unmerged and has not been run. Start it only on an owner instruction, for field testing. Never advance accepted retained clocks.
