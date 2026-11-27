@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-27",
+  "environment": "Deployed KH Rentals application, appointed disposable owner workspace. All billing actions used the sandbox.",
+  "servingSha": "d9296967b3da31b02dac4add3d474f37f777c848",
+  "workflowSha": "a5fef469639e673322c10ee00ab6e20115cbccb4",
+  "workflowJob": "https://github.com/WasanthaK/khrental/actions/runs/46018883819/job/140573033545",
+  "operation": "45c934f8-7876-434a-9dc9-cde9e66eefa6",
+  "ownerWorkspace": "R5 disposable owner acceptance 2c9ecc61",
+  "ownerWorkspaceSlug": "r5-owner-2c9ecc61-deed-4804-b3d3-f7dc0648bfa9",
+  "browserProperty": "8A1F6C40-3FB4-4B1A-AF84-C81021707254",
+  "browserRows": {
+    "10": "In deployed owner inventory, keyboard submission staged R5 owner keyboard 45c934f8. A full reload showed exactly one row with that name alongside the previous synthetic fixture row. Managed and billed stayed zero.",
+    "11": "The owner screen rejected a duplicate CSV reference before submission. The valid house, apartment building and linked unit added exactly three named rows. After reload the five pending records projected four dwellings, with zero managed and zero billed. Withdrawal returned pending to zero.",
+    "12": "The owner ended management of the private house, opened its retained cessation and reviewed restoration with the prior records attached. Confirmation and reload restored the same property to one managed and zero billed. The companion SQL assertion retained the cessation episode after restoration.",
+    "13": "The owner confirmed a two-unit split. A reload showed the two named units and exactly two managed dwellings, zero billed. The owner reopened the original parent detail under its original ID. Cleanup ended both units individually.",
+    "26": "The appointed owner’s 27 November desktop credential sign-in and the deployed visit to the selected fixture property are recorded across the two acceptance sessions. The authenticated owner opened the permitted retained cessation/restoration record for that same house and later reopened the original parent detail.",
+    "28": "Keyboard navigation reached property name, country, property type and Prepare dwelling in order. Empty input triggered required-field validation and no write. Enter submitted the named dwelling, the confirmation reported one prepared record, and reload showed it exactly once."
+  },
+  "inventory": {
+    "baselinePending": [
+      "R5 synthetic staged dwelling 8e85b87d"
+    ],
+    "keyboardName": "R5 owner keyboard 45c934f8",
+    "invalidCsv": "Record 2: Give each row a unique reference. Two previously staged records remained.",
+    "validCsv": [
+      "R5 Run 5 Import House",
+      "R5 Run 5 Import Building",
+      "R5 Run 5 Import Unit"
+    ],
+    "validAfterReload": {
+      "pending": 5,
+      "projectedDwellings": 4,
+      "managed": 0,
+      "billed": 0
+    },
+    "restoredProperty": "R5 private owner history 45c934f8",
+    "splitUnits": [
+      "R5 Unit A 45c934f8",
+      "R5 Unit B 45c934f8"
+    ]
+  },
+  "protectedWindow": {
+    "startUtc": "2026-11-27T14:47:52Z",
+    "durationSeconds": 900,
+    "scopedRevision": "khrental-app--0000533",
+    "restoredRevision": "khrental-app--0000534",
+    "restoredUtc": "2026-11-27T15:04:53Z",
+    "checks": 22,
+    "fixtureClosed": true,
+    "designatedProtectedAccountsAndForeignPropertySnapshot": "matched",
+    "scope": "Only the workflow UUID was in the enforcement list. The separately appointed owner workspace created and read its private house during that window before complimentary enrollment.",
+    "automationEvidenceBoundary": "Workflow evidence is deployed HTTP and SQL. Browser outcomes above were separately observed in an authenticated desktop session."
+  },
+  "cleanup": {
+    "ownerPending": 0,
+    "ownerManaged": 0,
+    "ownerBilled": 0,
+    "units": "Both ceased and retained in management history",
+    "parent": "Opted out of advertising on reload and not eligible for public listing",
+    "complimentary": "Revoked, payment pending",
+    "fixtureTenantMemberships": "No tenant administrators remained",
+    "fixtureOrganization": "inactive",
+    "activeWorkspaceReturnedTo": "KH Rentals",
+    "providerCheckout": false,
+    "liveChargingActivated": false,
+    "appHealthOk": true,
+    "sqlConnection": "ready",
+    "independentBuildSha": "d9296967b3da31b02dac4add3d474f37f777c848"
+  },
+  "privateScreenshotManifest": {
+    "owner-property.png": {
+      "sha256": "d0b4c8b5cc64d0c0fba1b613d5bdb88ca312378b710b261c0e412e97f6483ae0",
+      "capturedUtc": "2026-11-27T14:59:07+00:00"
+    },
+    "owner-staged.png": {
+      "sha256": "616628f871441631cab72de6a6f817b41ff6b77a0f1e2b3717139e9e6ea49613",
+      "capturedUtc": "2026-11-27T14:57:57+00:00"
+    },
+    "restored.png": {
+      "sha256": "72636fd4ddf2fd5fc4cd9dc6655ff5b5a5a1d3df28c9af35642d34b7ac575572",
+      "capturedUtc": "2026-11-27T15:00:58+00:00"
+    },
+    "retained-cessation.png": {
+      "sha256": "ed07069d062300b0dfdf6a8b47413d206706e50ea42a7faa81293c1e561c6ef8",
+      "capturedUtc": "2026-11-27T15:00:46+00:00"
+    },
+    "retained-parent.png": {
+      "sha256": "132c402229d871ee1eb632992a7093ad0b47fb6ab8294a35a52b347161bdbb57",
+      "capturedUtc": "2026-11-27T15:03:16+00:00"
+    },
+    "split.png": {
+      "sha256": "1ad14f8a4ae9cef34341654bc82c4c7ce6ae4c3855e2eee27d3b06fbcaeb4327",
+      "capturedUtc": "2026-11-27T15:01:37+00:00"
+    }
+  },
+  "privateEvidenceArchive": "R5-owner-acceptance-run-5.zip (restricted owner copy)"
+}
