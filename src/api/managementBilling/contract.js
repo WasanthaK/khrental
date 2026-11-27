@@ -60,7 +60,8 @@ export const parsePricing = input => {
 export const pricingPreview = (rule, quantity) => {
   integer(quantity, 1, 10000, 'Dwelling quantity');
   return {quantity, monthlyBaseMinor:rule.baseFeeMinor * quantity, currency:rule.billingCurrency,
-    ready:rule.includedRentMinor !== null && rule.excessPolicy === 'none' && Boolean(rule.effectiveAt),
+    ready:rule.includedRentMinor !== null && Boolean(rule.effectiveAt) && (rule.excessPolicy === 'none' ||
+      (rule.market === 'LK' && rule.billingCurrency === 'LKR' && rule.excessPolicy === 'agreed_rent_excess')),
     adjustmentApplied:false, taxIncluded:false,
     appliesTo:'new_subscriptions_only'};
 };
