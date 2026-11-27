@@ -185,6 +185,8 @@ finally{
       await q('DELETE dbo.management_billing_accounts WHERE tenant_id=@id',{id:operation});
       await q('DELETE dbo.agreements WHERE id=@agreement AND tenant_id=@id',{agreement:agreementId,id:operation});
       await q('DELETE dbo.properties WHERE id=@property AND tenant_id=@id',{property:propertyId,id:operation});
+      await q(`DELETE s FROM dbo.auth_sessions s JOIN dbo.auth_users u ON u.id=s.auth_user_id
+        WHERE u.app_user_id=@actor`,{actor:actorId});
       await q('DELETE dbo.auth_users WHERE app_user_id=@actor',{actor:actorId});
       await q('DELETE dbo.tenant_memberships WHERE tenant_id=@id AND app_user_id=@actor',{id:operation,actor:actorId});
       await q('DELETE dbo.app_users WHERE id=@actor AND tenant_id=@id',{actor:actorId,id:operation});
