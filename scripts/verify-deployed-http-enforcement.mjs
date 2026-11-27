@@ -8,7 +8,8 @@ import {createAuthRecord,issueAuthSession,revokeAccessToken} from '/app/src/api/
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
 const target=JSON.parse(process.env.HTTP_ACCEPTANCE_TARGET||'{}'),store=createBillingStore();
-const proof={fixtureId:target.id,scope:'public authenticated HTTP + deployed SQL; seeded billing states',checks:[]};
+const controlId=randomUUID();
+const proof={fixtureId:target.id,controlId,scope:'public authenticated HTTP + deployed SQL; seeded billing states',checks:[]};
 let stage='preflight',token,actorId,created=false;
 const check=(name)=>{proof.checks.push(name);console.log('HTTP_CHECK='+name);};
 const main=async()=>{
@@ -22,16 +23,20 @@ const main=async()=>{
   const controlHash=hash(await store.account(protectedId));
   const dedicatedId='2383f4fc-e107-4ac7-9e13-39db501f40ec',dedicatedHash=hash(await store.account(dedicatedId));
   await store.locked(target.id,async q=>{
-    assert.equal((await q('SELECT id FROM dbo.tenants WHERE id=@id',{id:target.id})).length,0,'Existing fixture must be inspected, not rerun');
-    await q("INSERT INTO dbo.tenants(id,name,slug,status,[plan]) VALUES(@id,'R5 HTTP enforcement acceptance',@slug,'active','development-testing')",{id:target.id,slug:`r5-http-${target.id}`});
-    await q(`INSERT INTO dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json,subscription_status,initial_payment_verified,grace_started_at)
-      VALUES(@id,@account,@price,'LK','[]','past_due',1,DATEADD(DAY,-8,SYSUTCDATETIME()))`,{id:target.id,account:BILLING_ACCOUNT,price:BILLING_PRICE});
+    for(const [id,name] of [[target.id,'R5 HTTP enforcement acceptance'],[controlId,'R5 HTTP unscoped control']]){
+      assert.ok(![protectedId.toLowerCase(),dedicatedId].includes(id));
+      assert.equal((await q('SELECT id FROM dbo.tenants WHERE id=@id',{id})).length,0,'Existing fixture must be inspected, not rerun');
+      await q("INSERT INTO dbo.tenants(id,name,slug,status,[plan]) VALUES(@id,@name,@slug,'active','development-testing')",{id,name,slug:`r5-http-${id}`});
+      await q(`INSERT INTO dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,inventory_json,subscription_status,initial_payment_verified,grace_started_at)
+        VALUES(@id,@account,@price,'LK','[]','past_due',1,DATEADD(DAY,-8,SYSUTCDATETIME()))`,{id,account:BILLING_ACCOUNT,price:BILLING_PRICE});
+    }
   });created=true;
   stage='persisted_fixture_session';
   actorId=randomUUID();const authId=randomUUID(),email=`r5-http-${target.id}@example.invalid`;
   await store.locked(target.id,async q=>{
     await q("INSERT INTO dbo.app_users(id,tenant_id,name,email,role,user_type,auth_id,status) VALUES(@actor,@id,'R5 HTTP fixture administrator',@email,'admin','admin',@auth,'active')",{actor:actorId,id:target.id,email,auth:authId});
     await q("INSERT INTO dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@id,@actor,'admin','active',1)",{id:target.id,actor:actorId});
+    await q("INSERT INTO dbo.tenant_memberships(tenant_id,app_user_id,role,status,is_default) VALUES(@id,@actor,'admin','active',0)",{id:controlId,actor:actorId});
   });
   const record=await createAuthRecord({authId,appUserId:actorId,email,role:'admin',password:randomBytes(32).toString('base64url'),metadata:{acceptance_fixture:target.id}});
   token=(await issueAuthSession(record)).accessToken;
@@ -50,6 +55,14 @@ const main=async()=>{
   stage='public_expired_grace_denial';
   await denied('POST','agreement-templates',{id:templateId,name:'R5 fixture',content:'<p>Acceptance fixture only.</p>',MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED:false});
   check('expired_grace_create_denied_without_write');
+  const controlTemplate=randomUUID();
+  const controlResponse=await api('POST','agreement-templates',{id:controlTemplate,name:'R5 unscoped control',content:'<p>Private synthetic control.</p>'},controlId);
+  assert.equal(controlResponse.status,201);
+  const readback=await api('GET','agreement-templates/'+controlTemplate,undefined,controlId);
+  assert.equal(readback.status,200);assert.equal(readback.data.data.id.toLowerCase(),controlTemplate);
+  const controlRows=await store.read('SELECT tenant_id FROM dbo.agreement_templates WHERE id=@id',{id:controlTemplate});
+  assert.deepEqual(controlRows.map(row=>row.tenant_id.toLowerCase()),[controlId]);
+  check('same_expired_state_unscoped_control_create_and_read_allowed');
   await state('grace_started_at=SYSUTCDATETIME()');
   let response=await api('POST','agreement-templates',{id:templateId,name:'R5 fixture',content:'<p>Acceptance fixture only.</p>'});
   assert.equal(response.status,201);assert.equal(response.data.data.id.toLowerCase(),templateId);check('current_grace_create_allowed');
@@ -85,8 +98,11 @@ finally{
   try{
     if(token){await revokeAccessToken(token);}
     if(created){await store.locked(target.id,async q=>{
-      if(actorId){await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id=@id AND app_user_id=@actor; UPDATE dbo.app_users SET status='inactive',active=0 WHERE id=@actor AND tenant_id=@id",{id:target.id,actor:actorId});}
-      await q("UPDATE dbo.tenants SET status='inactive' WHERE id=@id",{id:target.id});
+      if(actorId){await q("UPDATE dbo.tenant_memberships SET status='inactive' WHERE tenant_id IN (@id,@controlId) AND app_user_id=@actor; UPDATE dbo.app_users SET status='inactive',active=0 WHERE id=@actor AND tenant_id=@id",{id:target.id,controlId,actor:actorId});}
+      await q("UPDATE dbo.tenants SET status='inactive' WHERE id IN (@id,@controlId)",{id:target.id,controlId});
+      const outstanding=await q(`SELECT id FROM dbo.tenants WHERE id IN (@id,@controlId) AND status='active'
+        UNION ALL SELECT app_user_id FROM dbo.tenant_memberships WHERE tenant_id IN (@id,@controlId) AND status='active'`,{id:target.id,controlId});
+      assert.equal(outstanding.length,0);
     });}
     proof.fixtureClosed=true;
     if(proof.passed){console.log('HTTP_PASS='+JSON.stringify(proof));}
