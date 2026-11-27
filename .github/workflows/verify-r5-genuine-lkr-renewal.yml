@@ -1,0 +1,48 @@
+name: R5 genuine sandbox LKR renewal with disposable SQL
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation_id:
+        description: New UUID for an isolated Stripe sandbox fixture
+        type: string
+        required: true
+      confirmation:
+        description: VERIFY-R5-SANDBOX-LKR
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+
+jobs:
+  sandbox-renewal:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 20
+    steps:
+      - name: Validate one authorized sandbox attempt
+        env:
+          OPERATION_ID: ${{ inputs.operation_id }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = VERIFY-R5-SANDBOX-LKR
+          [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify genuine renewal, issuer history and sandbox fixture cleanup
+        env:
+          MSSQL_TEST_IMAGE: mcr.microsoft.com/mssql/server:2022-latest
+          R5_LKR_SANDBOX_OPERATION: ${{ inputs.operation_id }}
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+        run: node scripts/test-production-migrations-sqlserver.mjs

@@ -51,7 +51,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
           while IFS= read -r changed; do
             case "$changed" in
-              docs/*|*.md|.github/workflows/inspect-r5-paid-cessation-attempt.yml|scripts/inspect-r5-paid-cessation-attempt.mjs) ;;
+              docs/*|*.md|.github/workflows/inspect-r5-paid-cessation-attempt.yml|scripts/inspect-r5-paid-cessation-attempt.mjs|scripts/test-sandbox-lkr-cycle.mjs|.github/workflows/verify-r5-genuine-lkr-renewal.yml|scripts/test-local-renewal.mjs|scripts/test-management-billing-sql.mjs|.github/workflows/verify-deployed-paid-inventory.yml) ;;
               *) echo "Unverified runtime change: $changed" >&2; exit 1 ;;
             esac
           done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")
