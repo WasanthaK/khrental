@@ -18,6 +18,7 @@ on:
       - 'scripts/test-management-quantity-recovery-sql.mjs'
       - 'src/api/managementBilling/**'
       - 'scripts/test-production-migrations-sqlserver.mjs'
+      - 'scripts/test-market-collector-administration-sql.mjs'
       - '.github/workflows/verify-production-migrations-sqlserver.yml'
       - '.github/workflows/run-production-db-migrations.yml'
   push:
@@ -37,6 +38,7 @@ on:
       - 'scripts/test-management-quantity-recovery-sql.mjs'
       - 'src/api/managementBilling/**'
       - 'scripts/test-production-migrations-sqlserver.mjs'
+      - 'scripts/test-market-collector-administration-sql.mjs'
       - '.github/workflows/verify-production-migrations-sqlserver.yml'
       - '.github/workflows/run-production-db-migrations.yml'
   workflow_dispatch:

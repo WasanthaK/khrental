@@ -36,6 +36,28 @@ try{
   await page.waitForFunction(()=>document.body.innerText.includes('Scheduled · 2030-04-01 10:30 UTC · Fixture approval'));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:path.join(output,'issuers-'+width+'.png'),fullPage:true});
+  await page.goto(origin+'/tests/fixtures/management-billing/index.html?screen=collectors',{waitUntil:'networkidle2'});
+  await page.focus('button[aria-controls="sandbox-collector-panel"]');
+  await page.keyboard.press('Enter');
+  const panel='#sandbox-collector-panel';
+  await page.waitForFunction(()=>document.body.innerText.includes('No sandbox collector assignments yet.'));
+  assert.equal(await page.$eval(panel+' input[name=market]',el=>el.value),'LK');
+  await page.type(panel+' input[name=receivingAccount]','acct_SandboxExample');
+  await page.$eval(panel+' input[name=effectiveAt]',el=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'2030-04-01T10:30');
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await page.type(panel+' input[name=approvalReference]','Approved fixture');
+  await page.focus(panel+' button[type=submit]');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('#sandbox-collector-panel li')?.innerText.includes('2030-04-01 10:30 UTC · Approved fixture'));
+  const entry=await page.$eval(panel+' li',el=>el.innerText);
+  assert.match(entry,/LK · stripe/);
+  assert.match(entry,/acct_SandboxExample/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:path.join(output,'collectors-'+width+'.png'),fullPage:true});
+  console.log('PASS: keyboard scheduling and dated collector history at '+width+'px');
   await page.close();
  }
  for(const screen of ['pricing','subscription','complimentary']){for(const width of [390,1440]){

@@ -1,4 +1,5 @@
 import MarketInvoiceIssuers from '../../../src/components/admin/MarketInvoiceIssuers';
+import MarketSandboxCollectors from '../../../src/components/admin/MarketSandboxCollectors';
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {ManagementPricingView,ManagementComplimentaryView} from '../../../src/pages/ManagementPricing';
@@ -6,6 +7,13 @@ import {ManagementSubscriptionView} from '../../../src/pages/ManagementSubscript
 import '../../../src/index.css';
 const initial={market:'LK',billingCurrency:'USD',baseFee:'5.00',rentCurrency:'LKR',includedRent:'',excessPolicy:'pending',effectiveDate:'',reason:'Synthetic screen review. No commercial approval.'};
 const fixtureIssuers = [];
+const fixtureCollectors = [];
+const collectorRequest = async (_path, options) => {
+  if (!options) {return [...fixtureCollectors];}
+  const saved = {...options.body,id:'fixture-collector'};
+  fixtureCollectors.push(saved);
+  return {id:saved.id};
+};
 const issuerRequest = async (path, options) => {
   if (!options) {return [...fixtureIssuers];}
   if (path.endsWith('/schedule')) {
@@ -25,6 +33,7 @@ function Fixture(){
  const data={enrolled:true,configured:true,inventoryQuantity:12,billedQuantity:12,status:'active',entitlement:{state:'active'},cancelAtPeriodEnd:false,
    inventory:Array.from({length:12},(_,i)=>({key:`unit:${i}`,label:`Example residence · Unit ${i+1}`}))};
  if(screen==='issuers'){return <MarketInvoiceIssuers request={issuerRequest}/>;}
+ if(screen==='collectors'){return <MarketSandboxCollectors request={collectorRequest}/>;}
  if(screen==='subscription'){
   if(scenario){Object.assign(data,{inventoryQuantity:1,billedQuantity:2,pendingQuantity:1,paidThrough:'2026-12-06T12:00:00.000Z',inventory:[data.inventory[0]]});}
   if(['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(data,{status:scenario==='cessation-grace'?'past_due':'trialing',entitlement:{state:scenario==='cessation-grace'?'grace':'payment_pending'},pendingQuantity:null});}

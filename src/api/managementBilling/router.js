@@ -1,3 +1,4 @@
+import {listSandboxCollectors,scheduleSandboxCollector} from './collectorAdministration.js';
 import {listIssuerAssignments,saveIssuerDraft,scheduleIssuer} from './issuerAdministration.js';
 import express from 'express';
 import {createTenantContextMiddleware} from '../tenant/context.js';
@@ -30,6 +31,16 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   router.use((req,res,next)=>req.authSession && req.user?.id && !req.user?.is_dev_bypass?next():res.status(401).json({error:'An authenticated session is required.'}));
   const globalAdmin=wrap(async(req,_res,next)=>{if(!await checkPlatformAdmin(req.user)) {throw problem(403,'PLATFORM_ADMIN_REQUIRED','Platform administrator access is required.');}next();});
   const orgAdmin=wrap(async(req,_res,next)=>{assertBillingAdministrator(req);next();});
+  router.get('/admin/collectors',globalAdmin,wrap(async(_req,res)=>send(res,await listSandboxCollectors(store))));
+  router.post('/admin/collectors',globalAdmin,wrap(async(req,res)=>{
+    exact(req.body,['market','provider','receivingAccount','effectiveAt','approvalReference']);
+    const authorize = async q => {
+      if (!await checkPlatformAdmin(req.user,{query:async(statement,params)=>(await q(statement,params))[0]||null,env})) {
+        throw problem(403,'PLATFORM_ADMIN_REQUIRED','Platform administrator access is required.');
+      }
+    };
+    send(res,await scheduleSandboxCollector(store,req.user.id,req.body,authorize));
+  }));
   router.get('/admin/issuer-assignments',globalAdmin,wrap(async(_req,res)=>send(res,await listIssuerAssignments(store))));
   router.post('/admin/issuer-assignments',globalAdmin,wrap(async(req,res)=>{
     exact(req.body,['market','issuerCountry','legalName']);

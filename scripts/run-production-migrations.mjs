@@ -159,6 +159,19 @@ const assertSatisfied = async (inspection, message) => {
   if (!state.satisfied) {throw new Error(`${message} (${state.detail})`);}
 };
 
+const inspectSandboxCollectors = async pool => {
+  const {recordset} = await pool.request().query(`
+    SELECT CASE WHEN COL_LENGTH(N'dbo.management_billing_accounts',N'collector_assignment_id') IS NOT NULL
+      AND OBJECT_ID(N'dbo.management_sandbox_collector_at',N'IF') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.management_market_sandbox_collectors')
+        AND name='UQ_market_sandbox_collector_date' AND is_unique=1 AND is_disabled=0)
+      AND EXISTS (SELECT 1 FROM sys.triggers WHERE object_id=OBJECT_ID(N'dbo.management_sandbox_collector_history') AND is_disabled=0)
+      AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE object_id=OBJECT_ID(N'dbo.FK_management_billing_sandbox_collector')
+        AND is_disabled=0 AND is_not_trusted=0)
+      THEN 1 ELSE 0 END AS ready`);
+  return {satisfied:Boolean(recordset[0].ready),detail:'Dated sandbox collector assignments, immutable history and billing-account binding'};
+};
+
 const inspectMarketIssuers = async pool => {
   const {recordset} = await pool.request().query(`
     SELECT CASE WHEN OBJECT_ID(N'dbo.management_invoice_issuers', N'U') IS NOT NULL
@@ -544,6 +557,12 @@ const MIGRATIONS = [
     file:'migrations/20261124_01_market_invoice_issuers.sql',
     inspect:inspectMarketIssuers,
     verify:async pool=>assertSatisfied(inspectMarketIssuers(pool),'Market issuer schema verification failed.')
+  },
+  {
+    id:'20261127_01_market_sandbox_collectors',
+    file:'migrations/20261127_01_market_sandbox_collectors.sql',
+    inspect:inspectSandboxCollectors,
+    verify:async pool=>assertSatisfied(inspectSandboxCollectors(pool),'Sandbox collector schema verification failed.')
   }
 ];
 

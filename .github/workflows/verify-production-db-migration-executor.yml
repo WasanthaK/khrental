@@ -199,7 +199,8 @@ jobs:
             20261112_01_management_recovery
             20261112_02_management_restoration
             20261112_03_management_splits
-            20261124_01_market_invoice_issuers"
+            20261124_01_market_invoice_issuers
+            20261127_01_market_sandbox_collectors"
 
             local -a preflight_rows=()
             local state

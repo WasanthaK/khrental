@@ -22,6 +22,7 @@ on:
       - 'src/pages/rentee/**'
       - 'src/pages/ManagementPricing.jsx'
       - 'src/components/admin/MarketInvoiceIssuers.jsx'
+      - 'src/components/admin/MarketSandboxCollectors.jsx'
       - 'src/pages/ManagementSubscription.jsx'
       - 'src/pages/TenancyOnboarding.jsx'
       - 'src/pages/TenancyExit.jsx'
