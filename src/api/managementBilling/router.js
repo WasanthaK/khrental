@@ -1,3 +1,5 @@
+import {listSandboxCollectors,scheduleSandboxCollector} from './collectorAdministration.js';
+import {previewWorkspaceFee} from './localMarketFee.js';
 import {listIssuerAssignments,saveIssuerDraft,scheduleIssuer} from './issuerAdministration.js';
 import express from 'express';
 import {createTenantContextMiddleware} from '../tenant/context.js';
@@ -30,6 +32,16 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   router.use((req,res,next)=>req.authSession && req.user?.id && !req.user?.is_dev_bypass?next():res.status(401).json({error:'An authenticated session is required.'}));
   const globalAdmin=wrap(async(req,_res,next)=>{if(!await checkPlatformAdmin(req.user)) {throw problem(403,'PLATFORM_ADMIN_REQUIRED','Platform administrator access is required.');}next();});
   const orgAdmin=wrap(async(req,_res,next)=>{assertBillingAdministrator(req);next();});
+  router.get('/admin/collectors',globalAdmin,wrap(async(_req,res)=>send(res,await listSandboxCollectors(store))));
+  router.post('/admin/collectors',globalAdmin,wrap(async(req,res)=>{
+    exact(req.body,['market','provider','receivingAccount','effectiveAt','approvalReference']);
+    const authorize = async q => {
+      if (!await checkPlatformAdmin(req.user,{query:async(statement,params)=>(await q(statement,params))[0]||null,env})) {
+        throw problem(403,'PLATFORM_ADMIN_REQUIRED','Platform administrator access is required.');
+      }
+    };
+    send(res,await scheduleSandboxCollector(store,req.user.id,req.body,authorize));
+  }));
   router.get('/admin/issuer-assignments',globalAdmin,wrap(async(_req,res)=>send(res,await listIssuerAssignments(store))));
   router.post('/admin/issuer-assignments',globalAdmin,wrap(async(req,res)=>{
     exact(req.body,['market','issuerCountry','legalName']);
@@ -41,6 +53,12 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
   }));
   router.get('/admin/pricing',globalAdmin,wrap(async(_req,res)=>send(res,{versions:await store.listPricing(),sandboxConfigured:stripe.configured(),liveChargingEnabled:false})));
   router.post('/admin/pricing/preview',globalAdmin,wrap(async(req,res)=>{
+    if (req.body?.workspaceId!==undefined) {
+      const saved=req.body.versionId!==undefined;
+      exact(req.body,[saved?'versionId':'rules','workspaceId']);
+      const pricing=saved?{versionId:identifier(req.body.versionId)}:{rules:parsePricing(req.body.rules)};
+      return send(res,await previewWorkspaceFee(store,{...pricing,tenantId:identifier(req.body.workspaceId)}));
+    }
     exact(req.body,['rules','quantity']);send(res,pricingPreview(parsePricing(req.body.rules),req.body.quantity));
   }));
   router.post('/admin/pricing',globalAdmin,wrap(async(req,res)=>{
@@ -67,7 +85,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
         if(attempts.some(row=>row.current_hash!==hash(rules))){throw problem(409,'BILLING_RECOVERY_INTENT_CHANGED','The saved publication terms changed.');}
         if(attempts.length>=8){throw problem(409,'BILLING_RECOVERY_REVIEW','This price publication requires review.');}
         await store.audit(q,{actorId:req.user.id,action:'pricing.publication.attempt',resourceId:id,current:rules,reason:'Persisted immutable pricing intent and original provider key before publication.'});
-        return {rules};
+        return {rules,recovering:attempts.length>0};
       });
       if(prepared.completed){return send(res,{id,stripePriceId:prepared.stripePriceId});}
       const result=await store.locked(`pricing-publication:${id}`,async q=>{
@@ -87,6 +105,9 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
           return p.metadata?.pricing_version===id;
         }});
         if(selected&&!matches(selected)){throw problem(409,'BILLING_PRICE_MISMATCH','The original provider price changed and needs review.');}
+        if(!selected && prepared.recovering){
+          throw problem(409,'BILLING_RECOVERY_EVIDENCE_REQUIRED','Review the original publication. Its provider price could not be confirmed.');
+        }
         selected=selected||reusable;
         if(!selected){
           const age=(await q("SELECT DATEDIFF_BIG(second,created_at,SYSUTCDATETIME()) AS age FROM dbo.management_pricing_versions WHERE id=@id",{id}))[0]?.age;
@@ -176,6 +197,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
     send(res,await service.splitStock({tenantId:req.tenantId,actorId:req.user.id,id:identifier(req.body.requestId),propertyId:identifier(req.body.propertyId),
       units:req.body.units,inventoryHash:req.body.inventoryHash,reason:reason(req.body.reason)}));
   }));
+  router.get('/invoices/:id/local-fee',orgAdmin,wrap(async(req,res)=>send(res,await service.localInvoiceReceipt(req.tenantId,req.params.id))));
   router.post('/refresh',orgAdmin,wrap(async(req,res)=>{exact(req.body,[]);send(res,await service.refresh(req.tenantId));}));
   const command=(kind,extraKeys,run)=>router.post(`/${kind}`,orgAdmin,wrap(async(req,res)=>{
     exact(req.body,['requestId',...extraKeys]);
@@ -204,3 +226,4 @@ export const createManagementBillingWebhook=({env=process.env,store=createBillin
   router.use((error,_req,res,_next)=>res.status(error.status||500).json({error:error.status?error.message:'Webhook reconciliation failed.',code:error.code||'BILLING_WEBHOOK_ERROR'}));
   return router;
 };
+

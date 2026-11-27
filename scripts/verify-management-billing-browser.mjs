@@ -1,15 +1,21 @@
-import {createServer} from 'vite';
+import {build,preview} from 'vite';
+import {tmpdir} from 'node:os';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 const output=process.env.BILLING_SCREENSHOT_DIR || '/tmp/khrental-management-billing-screens';
-const vite=await createServer({root:process.cwd(),configFile:false,logLevel:'error',plugins:[react()],
- optimizeDeps:{entries:['tests/fixtures/management-billing/index.html','tests/fixtures/security/index.html']},server:{host:'127.0.0.1',port:0,strictPort:false}});
-let browser;
+const outDir=fs.mkdtempSync(path.join(tmpdir(),'kh-billing-fixtures-'));
+let browser,server;
 try{
- await vite.listen();const origin=`http://127.0.0.1:${vite.httpServer.address().port}`;
+ const config={configFile:false,logLevel:'error',plugins:[react()],build:{outDir,rollupOptions:{
+   input:{billing:'tests/fixtures/management-billing/index.html',security:'tests/fixtures/security/index.html',sanitizer:'src/utils/sanitizeHtml.js'},
+   preserveEntrySignatures:'strict',output:{entryFileNames:'assets/[name].js'}
+ }}};
+ await build(config);
+ server=await preview({...config,preview:{host:'127.0.0.1',port:0,strictPort:true}});
+ const origin='http://127.0.0.1:'+server.httpServer.address().port;
  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox']});
  fs.mkdirSync(output,{recursive:true});
  for (const width of [390,1440]) {
@@ -36,7 +42,48 @@ try{
   await page.waitForFunction(()=>document.body.innerText.includes('Scheduled · 2030-04-01 10:30 UTC · Fixture approval'));
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:path.join(output,'issuers-'+width+'.png'),fullPage:true});
+  await page.goto(origin+'/tests/fixtures/management-billing/index.html?screen=collectors',{waitUntil:'networkidle2'});
+  await page.focus('button[aria-controls="sandbox-collector-panel"]');
+  await page.keyboard.press('Enter');
+  const panel='#sandbox-collector-panel';
+  await page.waitForFunction(()=>document.body.innerText.includes('No sandbox collector assignments yet.'));
+  assert.equal(await page.$eval(panel+' input[name=market]',el=>el.value),'LK');
+  await page.type(panel+' input[name=receivingAccount]','acct_SandboxExample');
+  await page.$eval(panel+' input[name=effectiveAt]',el=>{
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'2030-04-01T10:30');
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    el.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await page.type(panel+' input[name=approvalReference]','Approved fixture');
+  await page.focus(panel+' button[type=submit]');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('#sandbox-collector-panel li')?.innerText.includes('2030-04-01 10:30 UTC · Approved fixture'));
+  const entry=await page.$eval(panel+' li',el=>el.innerText);
+  assert.match(entry,/LK · stripe/);
+  assert.match(entry,/acct_SandboxExample/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:path.join(output,'collectors-'+width+'.png'),fullPage:true});
+  console.log('PASS: keyboard scheduling and dated collector history at '+width+'px');
   await page.close();
+ }
+ for(const width of [390,1440]){
+  const page=await browser.newPage();
+  await page.setViewport({width,height:1000});
+  await page.goto(origin+'/tests/fixtures/management-billing/index.html?screen=local-pricing',{waitUntil:'networkidle2'});
+  const fee=await page.waitForSelector('input[aria-label="Monthly fee per dwelling (LKR)"]');
+  assert.equal(await fee.evaluate(el=>el.value),'');
+  await fee.type('100');
+  await page.select('aside select','fixture');
+  await page.focus('form button[type=button]');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.querySelector('aside')?.innerText.includes('Vacant fixture'));
+  const text=await page.$eval('aside',el=>el.innerText.replace(/\s/g,' '));
+  assert.match(text,/LKR\s*1,700.00/);
+  assert.match(text,/Active fixture.+LKR\s*100,000.00 agreed rent/);
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await page.screenshot({path:path.join(output,'local-fee-'+width+'.png'),fullPage:true});
+  await page.close();
+  console.log('PASS: LKR workspace fee preview with vacant and active rent at '+width+'px');
  }
  for(const screen of ['pricing','subscription','complimentary']){for(const width of [390,1440]){
   const page=await browser.newPage();const errors=[];
@@ -183,7 +230,7 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
   await page.screenshot({path:path.join(output,`security-${screen}-initial-${width}.png`),fullPage:true});
   const cases=await page.evaluate(async()=>{
-   const {sanitizeHtml}=await import('/src/utils/sanitizeHtml.js');
+   const {sanitizeHtml}=await import('/assets/sanitizer.js');
    const attacks=['<img src=x onerror="window.attackCount++">','<svg><g onload="window.attackCount++"></g></svg>',
     '<math><mtext><table><mglyph><style><!--</style><img title="--><img src=x onerror=window.attackCount++>">',
     '<a href="jav&#x61;script:window.attackCount++">click</a>','<iframe srcdoc="<script>parent.attackCount++</script>"></iframe>',
@@ -200,4 +247,4 @@ try{
   await page.screenshot({path:path.join(output,`security-${screen}-${width}.png`),fullPage:true});
   await page.close();console.log(`PASS: actual ${screen} initial/update HTML, stored/encoded/mutation XSS denials and preserved formatting at ${width}px`);
  }}
-}finally{await browser?.close();await vite.close();}
+}finally{await browser?.close();if(server){await server.close();}fs.rmSync(outDir,{recursive:true,force:true});}

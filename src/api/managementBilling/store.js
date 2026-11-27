@@ -454,6 +454,18 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     await q(`INSERT INTO dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,pricing_version_id,market,inventory_json)
       VALUES(@tenantId,@stripeAccount,@price,@pricingVersion,@market,@inventory)`,
       {tenantId,stripeAccount:BILLING_ACCOUNT,price:selectedPrice,pricingVersion,market,inventory:JSON.stringify(items)});
+    // Read the dated assignment only for new enrollments. Existing accounts keep
+    // their original binding, including accounts predating the collector migration.
+    const [schema] = await q("SELECT OBJECT_ID(N'dbo.management_sandbox_collector_at',N'IF') AS collectorLookup");
+    if (schema?.collectorLookup) {
+      const [collector] = await q('SELECT id,provider,receiving_account FROM dbo.management_sandbox_collector_at(@market,SYSUTCDATETIME())',{market});
+      if (collector) {
+        if (collector.provider!=='stripe' || collector.receiving_account!==BILLING_ACCOUNT) {
+          throw problem(409,'BILLING_COLLECTOR_UNAVAILABLE','The selected sandbox collector account is unavailable for billing.');
+        }
+        await q('UPDATE dbo.management_billing_accounts SET collector_assignment_id=@assignment WHERE tenant_id=@tenantId',{tenantId,assignment:collector.id});
+      }
+    }
     await audit(q,{tenantId,actorId,action:'sandbox.enrolled',resourceId:tenantId,current:{inventory:items,market,price:selectedPrice,pricingVersion,useApprovedSandboxBaseline},reason});
     return account(tenantId,q);
   });
