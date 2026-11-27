@@ -2,13 +2,13 @@
 
 **For Wasantha, Finance, the merchant account holder and the privacy owner · 27 November 2026**
 
-Return the seven numbered lines below together. Each responsible role can approve its own line by reference to an existing restricted record. If a provider or adviser is still reviewing a decision, give the pending reference and the responsible role so engineering can continue. Keep account identifiers, bank information, customer records, credentials and identity documents in their existing restricted systems.
+Row 29 records the approved base fee. Return the six remaining decisions together. Each responsible role can approve its own line by reference to an existing restricted record. If a provider or adviser is still reviewing a decision, give the pending reference and the responsible role so engineering can continue. Keep account identifiers, bank information, customer records, credentials and identity documents in their existing restricted systems.
 
 ## Reply form
 
 | Row | Responsible role | Reply |
 |---|---|---|
-| 29 | Product owner or country admin | Monthly base **Rs ___ per managed dwelling**. Effective date and time with zone **___**, or country admin **___** will date the version at publication. |
+| 29 | Product owner / country admin | The owner approved **Rs 1,500 per managed dwelling per month** on 27 November. The country admin sets the effective date at publication. |
 | 34 | Finance or tax adviser | Signed LK platform-fee tax instruction **ref ___**, **effective ___**, approved by **___**. The rule sheet below is completed in that record. |
 | 36 | Product owner | **Approve §36** or replace the quoted wording with **___**. Decision owner and date **___**. |
 | 38 | Finance and product owner | **Approve §38**, including the correction authority and price notice, or give edits **___**. Approvers and date or decision reference **___**. |
@@ -18,7 +18,7 @@ Return the seven numbered lines below together. Each responsible role can approv
 
 ### 29. Local price
 
-The country admin maintains the LKR table. Each independently rentable managed dwelling incurs the local monthly base. For occupied dwellings add 2% of agreed monthly rent above Rs 25,000. Round each line once to the nearest cent, half up, then sum. A vacant dwelling costs **the selected base**. A dwelling rented for Rs 100,000 costs **the selected base + Rs 1,500**. The two together cost **twice the base + Rs 1,500** before applicable taxes. The base is the only outstanding price number. The issuer is Quixo Inc. (USA), with a draft LK assignment. The approved defaults remain in the [country decision record](R5-LK-COMMERCIAL-READINESS-20261116.md#country-billing-decisions-agreed-on-26-november-2026).
+The country admin maintains the LKR table. Each independently rentable managed dwelling incurs the local monthly base. For occupied dwellings add 2% of agreed monthly rent above Rs 25,000. Round each line once to the nearest cent, half up, then sum. A vacant dwelling costs **Rs 1,500** per month. A dwelling rented for Rs 100,000 costs **Rs 3,000** per month. The two together cost **Rs 4,500** before applicable taxes. The issuer is Quixo Inc. (USA), with a draft LK assignment. The approved defaults remain in the [country decision record](R5-LK-COMMERCIAL-READINESS-20261116.md#sri-lanka-base-fee-approved-on-27-november-2026).
 
 ### 34. Finance rule sheet
 
