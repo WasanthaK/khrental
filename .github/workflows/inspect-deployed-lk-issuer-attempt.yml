@@ -107,12 +107,10 @@ jobs:
             status=$(az containerapp job execution show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
               --job-execution-name "$execution" --query properties.status -o tsv)
             case "$status" in
-              Succeeded) break ;;
-              Failed|Stopped) echo "Read-only SQL reconciliation ended with status $status" >&2; exit 1 ;;
+              Succeeded|Failed|Stopped) break ;;
             esac
             sleep 5
           done
-          test "$status" = Succeeded
           log_file=$(mktemp)
           found=0
           for attempt in $(seq 1 12); do
@@ -122,8 +120,10 @@ jobs:
             sleep 5
           done
           test "$found" = 1
+          cp "$log_file" lk-issuer-sql-reconciliation-raw.txt
           grep -Eo 'LK_ISSUER_SQL_RECONCILIATION=\{.*\}' "$log_file" | tail -n 1 |
             sed 's/^LK_ISSUER_SQL_RECONCILIATION=//' > lk-issuer-sql-reconciliation-summary.json
+          test "$status" = Succeeded
           jq -e '.readOnly and .safeToRetry and ([to_entries[] | select(.value|type=="number") | .value] | all(.==0))' \
             lk-issuer-sql-reconciliation-summary.json
           sed 's/^/LK_ISSUER_SQL_RECONCILIATION=/' lk-issuer-sql-reconciliation-summary.json > lk-issuer-sql-reconciliation.txt
@@ -138,5 +138,6 @@ jobs:
             lk-issuer-provider-reconciliation-summary.json
             lk-issuer-sql-reconciliation.txt
             lk-issuer-sql-reconciliation-summary.json
+            lk-issuer-sql-reconciliation-raw.txt
           if-no-files-found: ignore
           retention-days: 30

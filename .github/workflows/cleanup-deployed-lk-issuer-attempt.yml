@@ -1,0 +1,156 @@
+name: R5 cleanup deployed LK issuer attempt
+on:
+  workflow_dispatch:
+    inputs:
+      expected_build:
+        description: Exact serving main SHA containing this reviewed cleanup
+        required: true
+        type: string
+      operation_id:
+        description: UUID of the reconciled disposable issuer-cutover fixture
+        required: true
+        type: string
+      confirmation:
+        description: CLEANUP-DEPLOYED-LK-ISSUER
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: khrental-production
+  cancel-in-progress: false
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AZURE_RESOURCE_GROUP: khrental-prod-rg
+      AZURE_CONTAINER_APP_NAME: khrental-app
+      AZURE_MIGRATION_JOB_NAME: khrental-db-migrator
+      EXPECTED_BUILD: ${{ inputs.expected_build }}
+      OPERATION_ID: ${{ inputs.operation_id }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Verify exact reviewed and serving source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = CLEANUP-DEPLOYED-LK-ISSUER
+          [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
+          test "$EXPECTED_BUILD" = "$GITHUB_SHA"
+          node --check scripts/cleanup-deployed-lk-issuer-attempt.mjs
+          node --check scripts/inspect-lk-issuer-provider.mjs
+          curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/build-info.json |
+            jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Require zero provider residue before SQL cleanup
+        shell: bash
+        env:
+          MANAGEMENT_BILLING_SANDBOX_ENABLED: 'true'
+          STRIPE_SANDBOX_ACCOUNT_ID: acct_1UTgcdQ4sARuLNQa
+          STRIPE_SANDBOX_SECRET_KEY: ${{ secrets.STRIPE_SANDBOX_SECRET_KEY }}
+          R5_LK_ISSUER_OPERATION: ${{ inputs.operation_id }}
+        run: |
+          set -euo pipefail
+          node scripts/inspect-lk-issuer-provider.mjs | tee lk-issuer-provider-reconciliation.txt
+          grep -Eo 'LK_ISSUER_PROVIDER_RECONCILIATION=\{.*\}' lk-issuer-provider-reconciliation.txt |
+            sed 's/^LK_ISSUER_PROVIDER_RECONCILIATION=//' > lk-issuer-provider-reconciliation-summary.json
+          jq -e '.readOnly and .safeToRetry and .liveChargingEnabled==false and
+            .clocks==0 and .customers==0 and .liveObjects==0' lk-issuer-provider-reconciliation-summary.json
+      - uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: 3d42a180-fda5-4013-afcc-fdba10266f9b
+      - name: Remove only the exact reconciled SQL fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          az extension add --name containerapp --upgrade --yes >/dev/null
+          job=$(az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" -o json)
+          test "$(jq -r '.properties.template.containers[0].args[0]' <<<"$job")" = scripts/run-production-migration-plan.sh
+          jq -S '.properties.template' <<<"$job" > "$RUNNER_TEMP/migrator-template-before.json"
+          container=$(jq -c '.properties.template.containers[0]' <<<"$job")
+          container_name=$(jq -er '.name' <<<"$container")
+          cpu=$(jq -er '.resources.cpu' <<<"$container")
+          memory=$(jq -er '.resources.memory' <<<"$container")
+          server=$(jq -er '.env[] | select(.name=="MSSQL_SERVER") | .value' <<<"$container")
+          database=$(jq -er '.env[] | select(.name=="MSSQL_DATABASE") | .value' <<<"$container")
+          app=$(az containerapp show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" -o json)
+          revision=$(jq -er '.properties.latestReadyRevisionName' <<<"$app")
+          test "$(jq -r '.properties.latestRevisionName' <<<"$app")" = "$revision"
+          image=$(az containerapp revision show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_CONTAINER_APP_NAME" \
+            --revision "$revision" --query 'properties.template.containers[0].image' -o tsv)
+          test "${image##*:}" = "$EXPECTED_BUILD"
+          app_server=$(jq -er '.properties.template.containers[0].env[] | select(.name=="MSSQL_SERVER") | .value' <<<"$app")
+          app_database=$(jq -er '.properties.template.containers[0].env[] | select(.name=="MSSQL_DATABASE") | .value' <<<"$app")
+          test "${server,,}" = "${app_server,,}"
+          test "$database" = "$app_database"
+          active=$(az containerapp job execution list -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+            --query "[?properties.status=='Running' || properties.status=='Pending' || properties.status=='Processing'] | length(@)" -o tsv)
+          test "$active" = 0
+          execution=$(az containerapp job start -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+            --container-name "$container_name" --image "$image" --cpu "$cpu" --memory "$memory" \
+            --command node --args /app/scripts/cleanup-deployed-lk-issuer-attempt.mjs --env-vars \
+              MSSQL_SERVER="$server" MSSQL_DATABASE="$database" MSSQL_AUTHENTICATION=managed-identity \
+              R5_LK_ISSUER_OPERATION="$OPERATION_ID" R5_LK_ISSUER_CLEANUP_CONFIRMATION="$CONFIRMATION" \
+            --query name -o tsv)
+          test -n "$execution"
+          printf '%s\n' "$execution" > lk-issuer-cleanup-execution.txt
+          status=
+          for attempt in $(seq 1 90); do
+            status=$(az containerapp job execution show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+              --job-execution-name "$execution" --query properties.status -o tsv)
+            case "$status" in Succeeded|Failed|Stopped) break ;; esac
+            sleep 5
+          done
+          case "$status" in Succeeded|Failed|Stopped) ;; *) echo 'Cleanup job did not reach a terminal state.' >&2; exit 1 ;; esac
+          raw_log=$(mktemp)
+          found=0
+          for attempt in $(seq 1 12); do
+            if az containerapp job logs show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+              --execution "$execution" --container "$container_name" --tail 200 --format text > "$raw_log" 2>/dev/null \
+              && grep -Eq 'LK_ISSUER_EXACT_CLEANUP(_FAILED)?=' "$raw_log"; then found=1; break; fi
+            sleep 5
+          done
+          test "$found" = 1
+          grep -Eo 'LK_ISSUER_EXACT_CLEANUP(_FAILED)?=.*' "$raw_log" > lk-issuer-exact-cleanup.txt
+          rm -f "$raw_log"
+          test "$status" = Succeeded
+          ! grep -Fq 'LK_ISSUER_EXACT_CLEANUP_FAILED=' lk-issuer-exact-cleanup.txt
+          grep -Eo 'LK_ISSUER_EXACT_CLEANUP=\{.*\}' lk-issuer-exact-cleanup.txt | tail -n 1 |
+            sed 's/^LK_ISSUER_EXACT_CLEANUP=//' > lk-issuer-exact-cleanup-summary.json
+          jq -e --arg operation "$OPERATION_ID" '.operation==$operation and .cleaned and .readOnlyPreflight and
+            .liveChargingEnabled==false and ([.remaining[]] | all(.==0))' lk-issuer-exact-cleanup-summary.json
+          az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" -o json |
+            jq -S '.properties.template' > "$RUNNER_TEMP/migrator-template-after.json"
+          diff -u "$RUNNER_TEMP/migrator-template-before.json" "$RUNNER_TEMP/migrator-template-after.json"
+          test "$(az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
+            --query 'properties.template.containers[0].args[0]' -o tsv)" = scripts/run-production-migration-plan.sh
+          curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/build-info.json |
+            jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha'
+          curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health |
+            jq -e '.ok and .connection=="ready"'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: r5-deployed-lk-issuer-exact-cleanup
+          path: |
+            lk-issuer-provider-reconciliation.txt
+            lk-issuer-provider-reconciliation-summary.json
+            lk-issuer-cleanup-execution.txt
+            lk-issuer-exact-cleanup.txt
+            lk-issuer-exact-cleanup-summary.json
+          if-no-files-found: ignore
+          retention-days: 30
