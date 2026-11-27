@@ -81,22 +81,33 @@ jobs:
           test "${image##*:}" = "$EXPECTED_BUILD"
           echo 'RESTORE_ENFORCEMENT=true' >> "$GITHUB_ENV"
           az containerapp update -g khrental-prod-rg -n khrental-app --no-wait --set-env-vars "MANAGEMENT_INVENTORY_SCHEMA_READY=true" "MANAGEMENT_CESSATION_SCHEMA_READY=true" "MANAGEMENT_RESTORATION_SCHEMA_READY=true" "MANAGEMENT_SPLIT_SCHEMA_READY=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED=true" "MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS=$OPERATION_ID" -o none
+          original_revision=$(jq -er '.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-before.json")
           ready=false
           for attempt in $(seq 1 120); do
             az containerapp show -g khrental-prod-rg -n khrental-app -o json > "$RUNNER_TEMP/enforcement-ready.json"
-            if jq -e '.properties.latestRevisionName==.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null; then ready=true; break; fi
+            if jq -e --arg before "$original_revision" --arg image "$image" --arg id "$OPERATION_ID" '
+              .properties as $p
+              | ($p.latestRevisionName != null and $p.latestRevisionName != $before and
+                 $p.latestRevisionName == $p.latestReadyRevisionName and $p.template.containers[0].image == $image)
+                and ($p.template.containers[0].env | map({key: .name, value: .value}) | from_entries
+                  | .MANAGEMENT_INVENTORY_SCHEMA_READY == "true" and .MANAGEMENT_CESSATION_SCHEMA_READY == "true"
+                    and .MANAGEMENT_RESTORATION_SCHEMA_READY == "true" and .MANAGEMENT_SPLIT_SCHEMA_READY == "true"
+                    and .MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED == "true"
+                    and .MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS == $id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null; then
+              ready=true
+              break
+            fi
             sleep 5
           done
           if [ "$ready" != true ]; then
-            az containerapp revision list -g khrental-prod-rg -n khrental-app -o json > enforcement-revisions.json || true
+            az containerapp revision list -g khrental-prod-rg -n khrental-app --query '[].{name:name,provisioningState:properties.provisioningState,runningState:properties.runningState,replicas:properties.replicas}' -o json > enforcement-revisions.json || true
             jq '{latestRevisionName:.properties.latestRevisionName,latestReadyRevisionName:.properties.latestReadyRevisionName,provisioningState:.properties.provisioningState}' "$RUNNER_TEMP/enforcement-ready.json" | tee enforcement-config.txt
             {
               echo 'Inventory acceptance revision did not become ready.'
-              jq -r '.[] | [.name,.properties.provisioningState,.properties.runningState,.properties.replicas] | @tsv' enforcement-revisions.json 2>/dev/null || true
+              jq -r '.[] | [.name,.provisioningState,.runningState,.replicas] | @tsv' enforcement-revisions.json 2>/dev/null || true
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          jq -e --arg id "$OPERATION_ID" 'any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED" and .value=="true") and any(.properties.template.containers[0].env[]; .name=="MANAGEMENT_BILLING_WRITE_ENFORCEMENT_TENANT_IDS" and .value==$id)' "$RUNNER_TEMP/enforcement-ready.json" >/dev/null
           jq -r '"HTTP_SCOPE_ENABLED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-ready.json" > enforcement-config.txt
       - name: Hold protected owner browser acceptance window
         if: env.OWNER_ACCEPTANCE_WINDOW == 'true'
