@@ -1,3 +1,4 @@
+import {verifyPricePublicationRecovery} from './test-price-publication-recovery.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
@@ -81,6 +82,7 @@ export const verifyManagementBilling=async pool=>{
   assert.equal((await store.listPricing()).length,1,'Failed transaction leaves no partial pricing version.');
   console.log('PASS: management billing double migration, constraint drift denial, concurrent version serialization and atomic audit/rollback');
   await verifyBillingTransactions(pool,store,actor.id);
+  await verifyPricePublicationRecovery(store,actor.id);
 };
 
 // Real SQL transaction/uniqueness/locking proof. Stripe transport is explicitly a synthetic provider;

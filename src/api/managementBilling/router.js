@@ -67,7 +67,7 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
         if(attempts.some(row=>row.current_hash!==hash(rules))){throw problem(409,'BILLING_RECOVERY_INTENT_CHANGED','The saved publication terms changed.');}
         if(attempts.length>=8){throw problem(409,'BILLING_RECOVERY_REVIEW','This price publication requires review.');}
         await store.audit(q,{actorId:req.user.id,action:'pricing.publication.attempt',resourceId:id,current:rules,reason:'Persisted immutable pricing intent and original provider key before publication.'});
-        return {rules};
+        return {rules,recovering:attempts.length>0};
       });
       if(prepared.completed){return send(res,{id,stripePriceId:prepared.stripePriceId});}
       const result=await store.locked(`pricing-publication:${id}`,async q=>{
@@ -87,6 +87,9 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
           return p.metadata?.pricing_version===id;
         }});
         if(selected&&!matches(selected)){throw problem(409,'BILLING_PRICE_MISMATCH','The original provider price changed and needs review.');}
+        if(!selected && prepared.recovering){
+          throw problem(409,'BILLING_RECOVERY_EVIDENCE_REQUIRED','Review the original publication. Its provider price could not be confirmed.');
+        }
         selected=selected||reusable;
         if(!selected){
           const age=(await q("SELECT DATEDIFF_BIG(second,created_at,SYSUTCDATETIME()) AS age FROM dbo.management_pricing_versions WHERE id=@id",{id}))[0]?.age;
