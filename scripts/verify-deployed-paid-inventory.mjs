@@ -165,6 +165,122 @@ const cleanupFixture=async()=>{
 };
 
 
+async function verifyCessationResponseLoss() {
+  stage = 'cessation_response_loss';
+  const initialStock = await store.inventory(tenantId);
+  const preview = await service.cessationPreview({tenantId, actorId, propertyId});
+  assert.equal(preview.eligible, true);
+  const id = randomUUID();
+  const args = {tenantId, actorId, propertyId, id, inventoryHash: preview.inventoryHash,
+    reason: 'Recover the original paid cessation after its schedule response was lost.'};
+  const keyPrefix = `quixo:${tenantId}:${id}`;
+  let createdSchedule, phaseKey;
+  const client = {...stripe, request: async (method, path, body, key) => {
+    if (method === 'GET') { return stripe.request(method, path, body, key); }
+    assert.equal(method, 'POST');
+    assert.equal(phaseKey, undefined, 'Recovery and exact retry must be read-only at Stripe');
+    if (!createdSchedule) {
+      assert.equal(path, '/v1/subscription_schedules');
+      assert.equal(key.toLowerCase(), keyPrefix + ':schedule');
+      assert.equal(body.from_subscription, subscription.id);
+      const value = await stripe.request(method, path, body, key);
+      assert.equal(objectId(value.subscription), subscription.id);
+      createdSchedule = value.id;
+      return value;
+    }
+    assert.equal(path, '/v1/subscription_schedules/' + createdSchedule);
+    assert.equal(key.toLowerCase(), keyPrefix + ':phases');
+    assert.deepEqual(body.phases.map(p => p.items[0].quantity), [2, 1]);
+    const value = await stripe.request(method, path, body, key);
+    assert.equal(value.id, createdSchedule);
+    phaseKey = key;
+    throw Object.assign(Error('Discarded the successful fixture schedule response'), {code:'STRIPE_UNAVAILABLE', status:503});
+  }};
+  const subject = createBillingService({store, stripe:client, env});
+  const command = async () => {
+    const rows = await store.read(`SELECT c.id,c.status,r.state,r.attempts,
+      CASE WHEN r.next_attempt_at<=SYSUTCDATETIME() AND r.lease_until IS NULL THEN 1 ELSE 0 END AS due
+      FROM dbo.management_billing_commands c JOIN dbo.management_billing_recovery r ON r.command_id=c.id
+      WHERE c.tenant_id=@tenantId AND c.kind='cessation'`, {tenantId});
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id.toLowerCase(), id);
+    return rows[0];
+  };
+  const steps = () => store.read(`SELECT name,idempotency_key,result_json,completed_at FROM dbo.management_billing_steps
+    WHERE command_id=@id ORDER BY name`, {id});
+  const controls = () => store.read('SELECT id,property_id FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId', {tenantId});
+  const audits = () => store.read(`SELECT action FROM dbo.management_billing_audit WHERE tenant_id=@tenantId
+    AND resource_id=@id AND action IN ('inventory.ceased','sandbox.cessation.recovered') ORDER BY action`, {tenantId,id});
+
+  await assert.rejects(subject.ceaseStock(args), {code:'STRIPE_UNAVAILABLE'});
+  assert.ok(phaseKey);
+  const remote = await scheduled(1);
+  assert.equal(proof.scheduleId, createdSchedule);
+  const pending = await command();
+  assert.equal(pending.status, 'pending');
+  assert.equal(pending.state, 'pending');
+  assert.equal(pending.attempts, 1);
+  const beforeSteps = await steps();
+  assert.deepEqual(beforeSteps.map(s => s.name), ['create_schedule','set_schedule_phases']);
+  assert.ok(beforeSteps[0].completed_at);
+  assert.equal(beforeSteps[1].completed_at, null);
+  assert.equal(beforeSteps[1].idempotency_key, phaseKey);
+  assert.deepEqual(await store.inventory(tenantId), initialStock);
+  assert.deepEqual(await controls(), []);
+  assert.deepEqual(await audits(), []);
+  check('provider_applied_original_phases_while_both_dwellings_remained_managed');
+
+  const deadline = Date.now() + 90000;
+  while (!(await command()).due) {
+    assert.ok(Date.now() < deadline, 'Original cessation did not become due');
+    await delay(2000);
+  }
+  const result = await subject.ceaseStock(args);
+  assert.equal(result.managementEnded, true);
+  assert.equal(result.currentQuantity, 2);
+  assert.equal(result.nextRenewalQuantity, 1);
+  const after = await command();
+  assert.equal(after.status, 'completed');
+  assert.equal(after.state, 'succeeded');
+  assert.equal(after.attempts, 2);
+  const finished = await steps();
+  assert.deepEqual(finished[0], beforeSteps[0]);
+  assert.equal(finished.length, 2);
+  assert.equal(finished[1].idempotency_key, phaseKey);
+  assert.ok(finished[1].completed_at);
+  const evidence = JSON.parse(finished[1].result_json);
+  assert.equal(evidence.scheduleId, createdSchedule);
+  assert.equal(evidence.nextQuantity, 1);
+  const event = await read('/v1/events/' + evidence.eventId);
+  assert.equal(event.livemode, false);
+  assert.equal(event.type, 'subscription_schedule.updated');
+  assert.equal(event.request.idempotency_key, phaseKey);
+  assert.equal(event.data.object.id, createdSchedule);
+  check('attempt_two_confirmed_the_original_stripe_event_without_a_write');
+
+  const finalControls = await controls();
+  assert.equal(finalControls.length, 1);
+  assert.equal(finalControls[0].id.toLowerCase(), id);
+  assert.equal(finalControls[0].property_id.toLowerCase(), propertyId);
+  const remainingStock = await store.inventory(tenantId);
+  assert.deepEqual(remainingStock.map(item => item.propertyId.toLowerCase()), [second]);
+  assert.deepEqual((await audits()).map(row => row.action), ['inventory.ceased','sandbox.cessation.recovered']);
+  const beforeRetryAudit = await audit();
+  assert.deepEqual(await subject.ceaseStock(args), result);
+  assert.deepEqual(await command(), after);
+  assert.deepEqual(await controls(), finalControls);
+  assert.deepEqual(await steps(), finished);
+  assert.equal(await audit(), beforeRetryAudit);
+  assert.deepEqual(await store.inventory(tenantId), remainingStock);
+  assert.equal((await store.account(tenantId)).pending_quantity, 1);
+  assert.equal(await scheduled(1), remote);
+  const invoices = await read('/v1/invoices', {customer:customer.id, limit:100});
+  assert.equal(invoices.has_more, false);
+  assert.deepEqual(invoices.data.map(i => [i.id,i.status,i.amount_paid,i.total,i.currency]), [[proof.initialInvoice,'paid',1000,1000,'usd']]);
+  check('exact_retry_preserved_one_cessation_one_recovery_audit_and_one_paid_invoice');
+  Object.assign(proof, {cessationResponseLossAccepted:true, cessationCommandId:id, phaseIdempotencyKey:phaseKey, scheduleEventId:event.id});
+}
+
 async function verifyInvoicePreviewRecovery() {
   stage='invoice_preview_recovery';
   const property=randomUUID();
@@ -1083,7 +1199,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['cessation-verified-payment','cessation-zero-draft','cessation-open-tenancy','invoice-preview-recovery','transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cessation-reservation-conflict','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['cessation-response-loss','cessation-verified-payment','cessation-zero-draft','cessation-open-tenancy','invoice-preview-recovery','transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cessation-reservation-conflict','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -1138,7 +1254,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='cessation-open-tenancy'){await verifyOpenTenancyCessation();}else if(scenario==='invoice-preview-recovery'){await verifyInvoicePreviewRecovery();}else if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-verified-payment'||scenario==='cessation-financial-conflict'||scenario==='cessation-zero-draft'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(scenario==='cessation-reservation-conflict'){await verifyCessationReservation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(scenario==='cessation-response-loss'){await verifyCessationResponseLoss();}else if(scenario==='cessation-open-tenancy'){await verifyOpenTenancyCessation();}else if(scenario==='invoice-preview-recovery'){await verifyInvoicePreviewRecovery();}else if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-verified-payment'||scenario==='cessation-financial-conflict'||scenario==='cessation-zero-draft'){await verifyCessationFinancialObligation();}else if(scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(scenario==='cessation-reservation-conflict'){await verifyCessationReservation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
