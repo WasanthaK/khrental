@@ -935,7 +935,8 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       let account=await requireAccount(tenantId,q);
       if(localCycle){
         if(object.object!=='invoice'||object.livemode!==false||invoiceSubscription(object)!==account.stripe_subscription_id){throw problem(409,'BILLING_EVENT_SUBSCRIPTION_MISMATCH','Renewal subscription binding changed.');}
-        const receipt=await applyLocalRenewal({store,q,stripe,account,loadInvoice,invoiceId:object.id});
+        const receipt=await applyLocalRenewal({store,q,stripe,account,loadInvoice,invoiceId:object.id,
+          issuerMarket:env.MANAGEMENT_LK_SANDBOX_ISSUER_MARKET||'LK'});
         await q('INSERT INTO dbo.management_billing_events(stripe_event_id,tenant_id,event_type) VALUES(@id,@tenantId,@type)',{id:event.id,tenantId,type:event.type});
         await store.audit(q,{tenantId,action:'sandbox.local_renewal',resourceId:object.id,current:receipt,reason:event.type});
         return {received:true};
