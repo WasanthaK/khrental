@@ -1,5 +1,5 @@
 import {applyLocalRenewal,issuedLocalReceipt} from './localRenewal.js';
-import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, restorationPolicy, splitPolicy, splitUnits, hash, problem} from './contract.js';
+import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, restorationPolicy, splitPolicy, splitUnits, hash, parsePricing, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
 import {requestObjectEvidence,uniqueProviderObject} from './recoveryEvidence.js';
 import {createRecoveryRunner,billingClock} from './recovery.js';
@@ -141,14 +141,28 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     if(!account) {throw problem(409,'BILLING_NOT_ENROLLED','A platform administrator must enroll this test workspace first.');}
     return account;
   };
-  const price=async id=>{
+  const price=async (id,rules,versionId)=>{
     const result=await stripe.request('GET',`/v1/prices/${id}`);
     if(!result.active || result.livemode!==false || objectId(result.product)!==BILLING_PRODUCT || result.type!=='recurring' ||
       result.billing_scheme!=='per_unit' || result.recurring?.interval!=='month' || result.recurring.interval_count!==1 ||
-      result.recurring.usage_type!=='licensed' || result.recurring.trial_period_days || result.currency!=='usd' ||
+      result.recurring.usage_type!=='licensed' || result.recurring.trial_period_days || result.currency!==(rules?.billingCurrency || 'USD').toLowerCase() ||
+      (rules && result.unit_amount!==rules.baseFeeMinor) ||
+      (result.currency==='lkr' && (rules?.market!=='LK' || !versionId || result.metadata?.pricing_version?.toLowerCase()!==versionId.toLowerCase() || result.metadata?.market!=='LK')) ||
       !Number.isSafeInteger(result.unit_amount) || result.unit_amount<1 || result.transform_quantity)
       {throw problem(409,'BILLING_PRICE_MISMATCH','The selected sandbox price does not match the approved monthly contract.');}
     return result;
+  };
+  const checkoutPrice=async (account,q=store.read)=>{
+    if(!account.pricing_version_id){return price(account.stripe_price_id);}
+    const [version]=await q(`SELECT rules_json FROM dbo.management_pricing_versions
+      WHERE id=@id AND market=@market AND stripe_price_id=@price AND status='sandbox_published'`,
+      {id:account.pricing_version_id,market:account.market,price:account.stripe_price_id});
+    if(!version){throw problem(409,'BILLING_PRICE_MISMATCH','The workspace price version could not be verified.');}
+    const rules=parsePricing(JSON.parse(version.rules_json));
+    if(rules.billingCurrency==='LKR' && account.tenant_id.toLowerCase()!==env.MANAGEMENT_LK_SANDBOX_INVOICE_TENANT?.toLowerCase()){
+      throw problem(409,'BILLING_LOCAL_INVOICE_SCOPE','Select the designated sandbox invoice workspace for LKR checkout.');
+    }
+    return price(account.stripe_price_id,rules,account.pricing_version_id);
   };
   const saveProjection=async(q,tenantId,projection)=>{
     await q(`UPDATE dbo.management_billing_accounts SET subscription_status=@subscription_status,stripe_item_id=@stripe_item_id,
@@ -284,7 +298,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     const current=await requireAccount(tenantId);
     const inventory=await store.inventory(tenantId,undefined,{includePending:true});
     if(!inventory.length || hash(inventory)!==inventoryHash) {throw problem(409,'BILLING_INVENTORY_CHANGED','Reload the dwelling preview before continuing.');}
-    await price(current.stripe_price_id);
+    await checkoutPrice(current);
     return runCommand({tenantId,id,actorId,kind:'checkout',payload:{inventoryHash},action:async(q,account,key)=>{
       const items=await store.inventory(tenantId,q,{includePending:true});
       if(hash(items)!==inventoryHash) {throw problem(409,'BILLING_INVENTORY_CHANGED','Inventory changed during checkout.');}
@@ -357,7 +371,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
         existingSessionId=session.id;
       }
     }
-    await price(account.stripe_price_id);
+    await checkoutPrice(account,q);
     return {origin:configuredOrigin(),priceId:account.stripe_price_id,inventory,existingSessionId};
   },legacyCheckout);
   const portal=async args=>journalCommand(args,'portal',{},async(_q,account)=>{

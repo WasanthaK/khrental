@@ -81,6 +81,12 @@ try{
   assert.match(text,/LKR\s*1,700.00/);
   assert.match(text,/Active fixture.+LKR\s*100,000.00 agreed rent/);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  const history=await page.waitForSelector('tbody tr');
+  const actions=await history.$$('button');
+  assert.deepEqual(await Promise.all(actions.map(button=>button.evaluate(el=>el.textContent))),['Preview saved fee','Publish to sandbox']);
+  await actions[1].focus();
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>document.body.innerText.includes('Synthetic publication selected: synthetic-lkr-v2'));
   await page.screenshot({path:path.join(output,'local-fee-'+width+'.png'),fullPage:true});
   await page.close();
   console.log('PASS: LKR workspace fee preview with vacant and active rent at '+width+'px');

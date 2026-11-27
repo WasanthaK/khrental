@@ -76,7 +76,10 @@ function Fixture(){
   const previewFee=()=>setPreview({currency:'LKR',quantity:2,monthlyTotalMinor:170000,
     lines:[{key:'vacant',label:'Vacant fixture',rentBasis:'vacant',monthlyRentMinor:0,monthlyFeeMinor:10000},
       {key:'leased',label:'Active fixture',rentBasis:'active_agreement',monthlyRentMinor:10000000,monthlyFeeMinor:160000}]});
-  return <ManagementPricingView {...{form,setForm,quantity,setQuantity,preview,previewWorkspace}} onPreviewWorkspace={setPreviewWorkspace}
+  const version={id:'synthetic-lkr-v2',market:'LK',version:2,status:'draft',rules:{billingCurrency:'LKR',baseFeeMinor:10000,
+    rentCurrency:'LKR',includedRentMinor:2500000,effectiveAt:'2026-11-27T00:00:00.000Z'}};
+  return <ManagementPricingView {...{form,setForm,quantity,setQuantity,preview,previewWorkspace,notice}} ready versions={[version]}
+    onPreviewWorkspace={setPreviewWorkspace} onPreviewVersion={previewFee} onPublish={id=>setNotice('Synthetic publication selected: '+id)}
     enrollment={{workspaces:[{id:'fixture',name:'Example test workspace'}],value:{},update:()=>{},submit:()=>{}}}
     onPreview={previewFee} onSave={e=>e.preventDefault()} onReload={()=>{}}/>;
  }

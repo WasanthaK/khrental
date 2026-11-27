@@ -4,13 +4,13 @@ import express from 'express';
 import {hash,BILLING_PRODUCT} from '../src/api/managementBilling/contract.js';
 import {createManagementBillingRouter} from '../src/api/managementBilling/router.js';
 import {uniqueProviderObject,requestObjectEvidence} from '../src/api/managementBilling/recoveryEvidence.js';
-import {createProviderRecoveryHandlers} from '../src/api/managementBilling/service.js';
+import {createBillingService,createProviderRecoveryHandlers} from '../src/api/managementBilling/service.js';
 import {createRecoveryRunner} from '../src/api/managementBilling/recovery.js';
 
 const id='11111111-1111-4111-8111-111111111111';
-const fixture=()=>{
+const fixture=(overrides={})=>{
   let record={id,status:'draft',rules_json:JSON.stringify({market:'LK',billingCurrency:'USD',baseFeeMinor:500,rentCurrency:'LKR',
-    includedRentMinor:2500000,excessPolicy:'none',effectiveAt:'2026-12-01T00:00:00Z',reason:'Synthetic publication recovery.'})};
+    includedRentMinor:2500000,excessPolicy:'none',effectiveAt:'2026-12-01T00:00:00Z',reason:'Synthetic publication recovery.',...overrides})};
   let audits=[],lost=false,failAudit=false,age=0,allowed=true,truncated=false;
   const prices=[],writes=[];
   const query=async(statement,params={})=>{
@@ -60,6 +60,42 @@ test('price publication response loss recovers original price after key age with
     assert.equal(f.writes[0].key,`quixo:pricing:${id}`);
     assert.equal(f.audits().filter(a=>a.action==='pricing.sandbox_published').length,1);
   });
+});
+test('dated LK publication binds its own LKR price and recovers it once',async()=>{
+  const rules={billingCurrency:'LKR',baseFeeMinor:10000,excessPolicy:'agreed_rent_excess',excessRateBasisPoints:200};
+  const f=fixture(rules);
+  f.prices.push({id:'price_other_version',livemode:false,active:true,product:BILLING_PRODUCT,currency:'lkr',unit_amount:10000,
+    type:'recurring',billing_scheme:'per_unit',recurring:{interval:'month',interval_count:1,usage_type:'licensed'},metadata:{market:'LK',pricing_version:'another-version'}});
+  f.lose();
+  await run(f,async post=>{
+    assert.equal((await post()).status,503);
+    assert.equal((await post()).data.stripePriceId,'price_recovered');
+    assert.equal((await post()).status,200);
+    assert.equal(f.writes.length,1);
+    assert.equal(f.writes[0].body.currency,'lkr');
+    assert.equal(f.writes[0].body.unit_amount,10000);
+    assert.deepEqual(f.writes[0].body.metadata,{pricing_version:id,market:'LK'});
+    assert.equal(f.audits().filter(a=>a.action==='pricing.sandbox_published').length,1);
+  });
+  const denied=fixture(rules);denied.revoke();
+  await run(denied,async post=>{assert.equal((await post()).status,403);assert.equal(denied.writes.length,0);});
+});
+test('sandbox checkout requires the bound LK currency, amount, version and designated workspace',async()=>{
+  const rules={market:'LK',billingCurrency:'LKR',rentCurrency:'LKR',baseFeeMinor:10000,includedRentMinor:2500000,
+    excessPolicy:'agreed_rent_excess',excessRateBasisPoints:200,effectiveAt:'2026-11-27T00:00:00Z',reason:'Synthetic LKR checkout fixture.'};
+  const inventory=[{key:'fixture'}];
+  const version='22222222-2222-4222-8222-222222222222';
+  const original={id:'price_local',active:true,livemode:false,product:BILLING_PRODUCT,type:'recurring',billing_scheme:'per_unit',currency:'lkr',
+    unit_amount:10000,recurring:{interval:'month',interval_count:1,usage_type:'licensed'},metadata:{market:'LK',pricing_version:version}};
+  for(const [scope,change,code] of [[version,{},'BILLING_LOCAL_INVOICE_SCOPE'],[id,{currency:'usd'},'BILLING_PRICE_MISMATCH'],
+    [id,{unit_amount:500},'BILLING_PRICE_MISMATCH'],[id,{metadata:{}},'BILLING_PRICE_MISMATCH']]){
+    const store={account:async()=>({tenant_id:id,market:'LK',stripe_price_id:original.id,pricing_version_id:version}),
+      read:async(_sql,params)=>{assert.deepEqual(params,{id:version,market:'LK',price:original.id});return [{rules_json:JSON.stringify(rules)}];},
+      inventory:async()=>inventory};
+    const stripe={request:async(method,path)=>{assert.equal(method,'GET');assert.equal(path,'/v1/prices/price_local');return {...original,...change};}};
+    const service=createBillingService({store,stripe,env:{PUBLIC_APP_URL:'https://example.invalid',MANAGEMENT_LK_SANDBOX_INVOICE_TENANT:scope}});
+    await assert.rejects(service.checkout({tenantId:id,inventoryHash:hash(inventory)}),{code});
+  }
 });
 test('price publication audit rollback preserves prepared intent and recovers provider effect once',async()=>{
   const f=fixture();f.failAudit();await run(f,async post=>{

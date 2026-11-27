@@ -96,12 +96,13 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
         }
         if(record.status==='sandbox_published'){return {id,stripePriceId:record.stripe_price_id};}
         const rules=prepared.rules;
-        const matches=p=>p.livemode===false&&p.active&&p.currency==='usd'&&p.unit_amount===rules.baseFeeMinor&&
+        const currency=rules.billingCurrency.toLowerCase();
+        const matches=p=>p.livemode===false&&p.active&&p.currency===currency&&p.unit_amount===rules.baseFeeMinor&&
           p.type==='recurring'&&p.billing_scheme==='per_unit'&&p.recurring?.interval==='month'&&p.recurring.interval_count===1&&
           p.recurring.usage_type==='licensed'&&!p.recurring.trial_period_days&&!p.transform_quantity;
         let reusable=null;
         let selected=await uniqueProviderObject({stripe,path:'/v1/prices',params:{product:BILLING_PRODUCT},matches:p=>{
-          if(matches(p)&&!reusable){reusable=p;}
+          if(currency==='usd'&&matches(p)&&!reusable){reusable=p;}
           return p.metadata?.pricing_version===id;
         }});
         if(selected&&!matches(selected)){throw problem(409,'BILLING_PRICE_MISMATCH','The original provider price changed and needs review.');}
@@ -112,12 +113,12 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
         if(!selected){
           const age=(await q("SELECT DATEDIFF_BIG(second,created_at,SYSUTCDATETIME()) AS age FROM dbo.management_pricing_versions WHERE id=@id",{id}))[0]?.age;
           if(!Number.isFinite(Number(age))||age>=23*3600){throw problem(409,'BILLING_RECOVERY_EVIDENCE_REQUIRED','The older price publication needs provider evidence.');}
-          await stripe.request('POST','/v1/prices',{product:BILLING_PRODUCT,currency:'usd',unit_amount:rules.baseFeeMinor,
+          await stripe.request('POST','/v1/prices',{product:BILLING_PRODUCT,currency:rules.billingCurrency.toLowerCase(),unit_amount:rules.baseFeeMinor,
             recurring:{interval:'month',usage_type:'licensed'},metadata:{pricing_version:id,market:rules.market}},`quixo:pricing:${id}`);
           selected=await uniqueProviderObject({stripe,path:'/v1/prices',params:{product:BILLING_PRODUCT},matches:p=>p.metadata?.pricing_version===id});
           if(!selected||!matches(selected)){throw problem(503,'BILLING_RECOVERY_UNCONFIRMED','The provider has not confirmed this price.');}
         }
-        await service.price(selected.id);
+        await service.price(selected.id,rules,id);
         await q("UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id=@price,published_at=SYSUTCDATETIME() WHERE id=@id",{id,price:selected.id});
         await store.audit(q,{actorId:req.user.id,action:'pricing.sandbox_published',resourceId:id,previous:record,current:{price:selected.id,rules},reason:rules.reason});
         return {id,stripePriceId:selected.id};
@@ -130,12 +131,15 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
       if(record.status==='sandbox_published') {return {id,stripePriceId:record.stripe_price_id};}
       const rules=parsePricing(JSON.parse(record.rules_json));
       if(!pricingPreview(rules,1).ready) {throw problem(409,'BILLING_PRICING_INCOMPLETE','Set the threshold, adjustment decision and effective date before sandbox publication.');}
+      if(rules.billingCurrency==='LKR'){
+        throw problem(503,'BILLING_RECOVERY_REQUIRED','Sandbox LKR publication requires recoverable price publication.');
+      }
       const prices=await stripe.request('GET','/v1/prices',{product:BILLING_PRODUCT,active:true,limit:100});
       let selected=prices.data.find(p=>p.currency==='usd' && p.unit_amount===rules.baseFeeMinor && p.billing_scheme==='per_unit' &&
         p.recurring?.interval==='month' && p.recurring.interval_count===1 && p.recurring.usage_type==='licensed' && !p.recurring.trial_period_days && !p.transform_quantity);
-      if(!selected) {selected=await stripe.request('POST','/v1/prices',{product:BILLING_PRODUCT,currency:'usd',unit_amount:rules.baseFeeMinor,
+      if(!selected) {selected=await stripe.request('POST','/v1/prices',{product:BILLING_PRODUCT,currency:rules.billingCurrency.toLowerCase(),unit_amount:rules.baseFeeMinor,
         recurring:{interval:'month',usage_type:'licensed'},metadata:{pricing_version:id,market:rules.market}},`quixo:pricing:${id}`);}
-      await service.price(selected.id);
+      await service.price(selected.id,rules,id);
       await q(`UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id=@price,published_at=SYSUTCDATETIME() WHERE id=@id`,{id,price:selected.id});
       await store.audit(q,{actorId:req.user.id,action:'pricing.sandbox_published',resourceId:id,previous:record,current:{price:selected.id,rules},reason:rules.reason});
       return {id,stripePriceId:selected.id};
