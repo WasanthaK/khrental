@@ -4,6 +4,8 @@
 
 This checklist defines the Sri Lanka release boundary from 27 November 2026. The baseline is main at `111f9f5f`. Each numbered row is one deliverable. The earlier 27 ledger IDs group work by subject. The earlier estimate of at least 40 actions preceded this scope decision. Count open rows here once, even when one test or approval supplies evidence for several rows.
 
+Use the [Copilot execution handoff](R5-COPILOT-HANDOFF.md) for the work batches, consolidated commercial reply and final release authorization.
+
 **Next engineering action: 01.** R5 is open. QA and engineering use Stripe sandbox. The owner controls the production release decision. Start commercial inputs 29, 34, 36, 38 and 40–42 alongside engineering. Row 30 can use a test price while 29 is open. An outstanding external approval can block the paid launch while sandbox engineering continues.
 
 ## How to execute and close
@@ -81,7 +83,7 @@ For 01–09 use [tracker #611](https://github.com/WasanthaK/khrental/issues/611)
 
 | Former wording or proposal | Disposition |
 |---|---|
-| “Other” refund, entitlement, transition, obligation, resource, race, route, role and rendered permutations | Backlog. The named checks above exhaust the R5 scope. The approved-settlement and real inventory-change checks are 05 and 06. The accepted canceled-invoice and overpayment checks stay closed. |
+| “Other” refund, entitlement, transition, obligation, resource, race, route, role and rendered permutations | Backlog. The named checks above exhaust the R5 scope. The approved-settlement and real inventory-change checks are 08 and 09. The accepted canceled-invoice and overpayment checks stay closed. |
 | Waiting indefinitely for a naturally paused database (OP10.3) | Field observation after R5. A genuine pause must occur before this can be measured. Application/SQL health is still checked during controlled rollout. |
 | Exceptional bulk pricing (CM01.6) | Later commercial proposal. Ordinary published pricing applies for the launch scope. Any special rate requires a separate decision. |
 | Other collectors, PayHere integration, local incorporation, taxes for other jurisdictions, owner rent collection/payout and owner-issued rent documents | Later product scope. R5 covers LK Quixo platform fees, approved LK tax treatment, configurable issuer and Stripe collector/account. |
