@@ -141,17 +141,17 @@ async function verifyLocalWorkspaceFee(store,actorId) {
       await q(`UPDATE dbo.management_pricing_versions SET status='sandbox_published',stripe_price_id=@price,
         published_at=SYSUTCDATETIME() WHERE id=@versionId`,{versionId,price:provider?.price ?? 'price_fixtureLK'});
       await q(`INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
-        SELECT 'LK',id,DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic only' FROM dbo.management_invoice_issuers
+        SELECT 'XZ',id,DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic only' FROM dbo.management_invoice_issuers
         WHERE country_code='US' AND legal_name='Quixo Inc.'`);
       const laterIssuer=async effectiveAt=>{
         await q(`DECLARE @issuer UNIQUEIDENTIFIER=NEWID();
           INSERT dbo.management_invoice_issuers(id,country_code,legal_name) VALUES(@issuer,'LK','Later synthetic issuer');
           INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
-          VALUES('LK',@issuer,@effectiveAt,'Synthetic cutover')`,{effectiveAt});
-        const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('LK',@effectiveAt)",{effectiveAt});
+          VALUES('XZ',@issuer,@effectiveAt,'Synthetic cutover')`,{effectiveAt});
+        const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('XZ',@effectiveAt)",{effectiveAt});
         assert.equal(now.legal_name,'Later synthetic issuer');
       };
-      await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer,provider});
+      await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer,provider,issuerMarket:'XZ'});
       throw rollback;
     }),error=>error===rollback);
     await verifyInvoice();
