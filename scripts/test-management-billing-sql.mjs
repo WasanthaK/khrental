@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import {once} from 'node:events';
+import express from 'express';
+import {createManagementBillingWebhook} from '../src/api/managementBilling/router.js';
 import {inspectManagementBilling,inspectManagementInventoryStaging,inspectManagementCessation} from './inspect-management-billing-schema.mjs';
 import {inspectManagementBillingApplicationAccess} from './inspect-management-billing-access.mjs';
 import {verifyManagementRecovery} from './test-management-recovery-sql.mjs';
@@ -173,8 +176,43 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
     lines:{data:[{id:'il_fixture',parent:{subscription_item_details:{subscription_item:'si_fixtureA',proration:false}},period:{end:time+2592000}}],has_more:false}};
   checkout.status='complete';checkout.subscription=sub.id;remote.set(`/v1/subscriptions/${sub.id}`,sub);remote.set('/v1/invoices/in_fixtureA',invoice);
   const event={id:'evt_fixturePaid',type:'invoice.paid',livemode:false,data:{object:invoice}};remote.set(`/v1/events/${event.id}`,event);
-  const deliveries=await Promise.all([service.webhook(event),service.webhook(event)]);
-  assert.equal(deliveries.filter(x=>x.duplicate).length,1);
+  // Exercise the signed HTTP receiver with the existing disposable two-organization fixture.
+  const signingSecret = crypto.randomBytes(32).toString('hex');
+  const webhook = express();
+  webhook.use('/stripe', createManagementBillingWebhook({store, stripe, env:{
+    MANAGEMENT_BILLING_SCHEMA_READY:'true', STRIPE_SANDBOX_WEBHOOK_SECRET:signingSecret
+  }}));
+  const server = webhook.listen(0, '127.0.0.1');
+  const eventState = async tenantId => ({
+    account:await store.account(tenantId),
+    events:await store.read('SELECT * FROM dbo.management_billing_events WHERE tenant_id=@tenantId ORDER BY stripe_event_id', {tenantId}),
+    audit:await store.read('SELECT * FROM dbo.management_billing_audit WHERE tenant_id=@tenantId ORDER BY id', {tenantId})
+  });
+  try {
+    await once(server, 'listening');
+    const control = await eventState(tenantB);
+    const raw = JSON.stringify(event);
+    const signature = crypto.createHmac('sha256', signingSecret).update(time + '.' + raw).digest('hex');
+    const deliver = async () => {
+      const response = await fetch('http://127.0.0.1:' + server.address().port + '/stripe', {
+        method:'POST', headers:{'Content-Type':'application/json','Stripe-Signature':`t=${time},v1=${signature}`}, body:raw
+      });
+      const body = await response.json();
+      assert.equal(response.status, 200, JSON.stringify(body));
+      return body.data;
+    };
+    const deliveries = await Promise.all([deliver(), deliver()]);
+    assert.equal(deliveries.filter(result => result.duplicate).length, 1);
+    const applied = await eventState(tenantA);
+    assert.equal(applied.events.filter(row => row.stripe_event_id === event.id).length, 1);
+    assert.equal(applied.audit.filter(row => row.action === 'stripe.event_reconciled' && row.resource_id === event.id).length, 1);
+    assert.equal((await deliver()).duplicate, true);
+    assert.deepEqual(await eventState(tenantA), applied);
+    assert.deepEqual(await eventState(tenantB), control);
+    console.log('R5_07_SIGNED_EVENT=PASS signed_http concurrent_delivery exact_replay one_application second_org_unchanged');
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
   assert.equal((await service.summary(tenantA)).entitlement.management,true);
   assert.equal((await service.summary(tenantB)).entitlement.management,false);
   const crossEvent={id:'evt_fixtureCross',type:'invoice.paid',livemode:false,data:{object:{...invoice,parent:{subscription_details:{subscription:'sub_foreign'}}}}};remote.set(`/v1/events/${crossEvent.id}`,crossEvent);

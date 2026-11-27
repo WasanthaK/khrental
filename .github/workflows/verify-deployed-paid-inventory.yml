@@ -93,7 +93,7 @@ jobs:
           git merge-base --is-ancestor "$EXPECTED_BUILD" "$GITHUB_SHA"
           while IFS= read -r changed; do
             case "$changed" in
-              docs/*|*.md|tests/*|scripts/test-rental-offers-sql.mjs|scripts/test-rental-offers-browser.mjs|scripts/verify-deployed-stock-expiry.mjs|.github/workflows/verify-deployed-stock-expiry.yml|scripts/verify-deployed-retained-history.mjs|.github/workflows/verify-deployed-retained-history.yml|scripts/verify-deployed-reservation-http.mjs|.github/workflows/verify-deployed-reservation-http.yml|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|.github/workflows/diagnose-container-revision.yml) ;;
+              docs/*|*.md|tests/*|scripts/test-billing-two-tenant-sqlserver.mjs|scripts/test-management-billing-sql.mjs|scripts/test-management-recovery-sql.mjs|scripts/test-rental-offers-sql.mjs|scripts/test-rental-offers-browser.mjs|scripts/verify-deployed-stock-expiry.mjs|.github/workflows/verify-deployed-stock-expiry.yml|scripts/verify-deployed-retained-history.mjs|.github/workflows/verify-deployed-retained-history.yml|scripts/verify-deployed-reservation-http.mjs|.github/workflows/verify-deployed-reservation-http.yml|scripts/verify-deployed-paid-inventory.mjs|.github/workflows/verify-deployed-paid-inventory.yml|.github/workflows/diagnose-container-revision.yml) ;;
               *) echo "Unverified runtime difference: $changed" >&2; exit 1 ;;
             esac
           done < <(git diff --name-only "$EXPECTED_BUILD" "$GITHUB_SHA")

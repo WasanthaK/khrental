@@ -1909,6 +1909,25 @@ async function verifyMonthlyManagementAccessAgainstDisposableSql(pool) {
         {id:templateId,name:'Transient updated name'},{id:crypto.randomUUID(),name:'Invalid later row',unknown_import_column:1}]});
       assert.equal(failedUpsert.status,500,JSON.stringify(await failedUpsert.json()));
       assert.deepEqual(await writerSnapshot(),beforeBulk,'Bulk upsert rolls back the first update');
+      const readyBefore = process.env.MANAGEMENT_INVENTORY_SCHEMA_READY;
+      process.env.MANAGEMENT_INVENTORY_SCHEMA_READY = 'true';
+      try {
+        const stock = () => query(pool,'SELECT id,name FROM dbo.properties WHERE tenant_id=@tenantId ORDER BY id',scoped);
+        const originalStock = await stock();
+        const firstDwelling = {id:crypto.randomUUID(),name:'R5 private stock A',propertytype:'house'};
+        const secondDwelling = {id:crypto.randomUUID(),name:'R5 private stock B',propertytype:'house'};
+        for (const payload of [firstDwelling, [firstDwelling,secondDwelling]]) {
+          const deniedStock = await platformCommand({action:'insert',table:'properties',payload});
+          const denial = await deniedStock.json();
+          assert.equal(deniedStock.status,409,JSON.stringify(denial));
+          assert.equal(denial.code,'BILLING_STOCK_PREPARATION_REQUIRED');
+          assert.deepEqual(await stock(),originalStock);
+        }
+        console.log('R5_17_CONTROLLED_STOCK=PASS single_and_bulk_require_preparation no_partial_stock');
+      } finally {
+        if (readyBefore === undefined) { delete process.env.MANAGEMENT_INVENTORY_SCHEMA_READY; }
+        else { process.env.MANAGEMENT_INVENTORY_SCHEMA_READY = readyBefore; }
+      }
       const paidImport = await platformCommand({action:'insert',table:'agreement_templates',payload:[{name:'Permitted atomic import A'},{name:'Permitted atomic import B'}]});
       assert.equal(paidImport.status,200,JSON.stringify(await paidImport.json()));
       assert.equal((await writerSnapshot()).templates,beforeBulk.templates+2);
