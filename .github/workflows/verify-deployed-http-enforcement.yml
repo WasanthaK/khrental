@@ -121,6 +121,7 @@ jobs:
           script -q -e -c "$invocation" /dev/null | tee -a deployed-http.txt
           marker=HTTP_PASS
           grep -Fq "$marker=" deployed-http.txt
+          grep -Fq 'HTTP_CHECK=same_expired_state_unscoped_control_create_and_read_allowed' deployed-http.txt
           echo "Serving revision: $revision" >> "$GITHUB_STEP_SUMMARY"
           grep "^$marker=" deployed-http.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Restore original HTTP enforcement configuration
@@ -158,6 +159,8 @@ jobs:
           image=$(jq -r '.properties.template.containers[0].image' "$RUNNER_TEMP/enforcement-restored.json")
           test "${image##*:}" = "$EXPECTED_BUILD"
           curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/health >/dev/null
+          curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/build-info.json | jq -e --arg sha "$EXPECTED_BUILD" '.buildSha==$sha' >/dev/null
+          curl -fsS --retry 4 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health | jq -e '.ok and .connection=="ready"' >/dev/null
           jq -r '"HTTP_SCOPE_RESTORED="+.properties.latestReadyRevisionName' "$RUNNER_TEMP/enforcement-restored.json" | tee -a enforcement-config.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
