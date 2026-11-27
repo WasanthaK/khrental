@@ -1,15 +1,21 @@
-import {createServer} from 'vite';
+import {build,preview} from 'vite';
+import {tmpdir} from 'node:os';
 import react from '@vitejs/plugin-react';
 import puppeteer from 'puppeteer';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 const output=process.env.BILLING_SCREENSHOT_DIR || '/tmp/khrental-management-billing-screens';
-const vite=await createServer({root:process.cwd(),configFile:false,logLevel:'error',plugins:[react()],
- optimizeDeps:{entries:['tests/fixtures/management-billing/index.html','tests/fixtures/security/index.html']},server:{host:'127.0.0.1',port:0,strictPort:false}});
-let browser;
+const outDir=fs.mkdtempSync(path.join(tmpdir(),'kh-billing-fixtures-'));
+let browser,server;
 try{
- await vite.listen();const origin=`http://127.0.0.1:${vite.httpServer.address().port}`;
+ const config={configFile:false,logLevel:'error',plugins:[react()],build:{outDir,rollupOptions:{
+   input:{billing:'tests/fixtures/management-billing/index.html',security:'tests/fixtures/security/index.html',sanitizer:'src/utils/sanitizeHtml.js'},
+   preserveEntrySignatures:'strict',output:{entryFileNames:'assets/[name].js'}
+ }}};
+ await build(config);
+ server=await preview({...config,preview:{host:'127.0.0.1',port:0,strictPort:true}});
+ const origin='http://127.0.0.1:'+server.httpServer.address().port;
  browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox']});
  fs.mkdirSync(output,{recursive:true});
  for (const width of [390,1440]) {
@@ -202,7 +208,7 @@ try{
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
   await page.screenshot({path:path.join(output,`security-${screen}-initial-${width}.png`),fullPage:true});
   const cases=await page.evaluate(async()=>{
-   const {sanitizeHtml}=await import('/src/utils/sanitizeHtml.js');
+   const {sanitizeHtml}=await import('/assets/sanitizer.js');
    const attacks=['<img src=x onerror="window.attackCount++">','<svg><g onload="window.attackCount++"></g></svg>',
     '<math><mtext><table><mglyph><style><!--</style><img title="--><img src=x onerror=window.attackCount++>">',
     '<a href="jav&#x61;script:window.attackCount++">click</a>','<iframe srcdoc="<script>parent.attackCount++</script>"></iframe>',
@@ -219,4 +225,4 @@ try{
   await page.screenshot({path:path.join(output,`security-${screen}-${width}.png`),fullPage:true});
   await page.close();console.log(`PASS: actual ${screen} initial/update HTML, stored/encoded/mutation XSS denials and preserved formatting at ${width}px`);
  }}
-}finally{await browser?.close();await vite.close();}
+}finally{await browser?.close();if(server){await server.close();}fs.rmSync(outDir,{recursive:true,force:true});}
