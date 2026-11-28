@@ -207,6 +207,17 @@ export const createManagementBillingRouter=({env=process.env,store=createBilling
     exact(req.body,['requestId',...extraKeys]);
     send(res,await run({tenantId:req.tenantId,id:identifier(req.body.requestId),actorId:req.user.id,...Object.fromEntries(extraKeys.map(key=>[key,req.body[key]]))}));
   }));
+  router.post('/reactivation-review',orgAdmin,wrap(async(req,res)=>{
+    exact(req.body,['controlId']);
+    send(res,await service.reviewReactivation({tenantId:req.tenantId,actorId:req.user.id,
+      controlId:req.body.controlId==null?null:identifier(req.body.controlId)}));
+  }));
+  command('reactivation',['controlId','reviewHash'],args=>{
+    if(typeof args.reviewHash!=='string'||!/^[a-f0-9]{64}$/.test(args.reviewHash)){
+      throw problem(400,'BILLING_PREVIEW_REQUIRED','Review the new period before continuing.');
+    }
+    return service.reactivate({...args,controlId:args.controlId==null?null:identifier(args.controlId)});
+  });
   command('checkout',['inventoryHash'],service.checkout);
   command('portal',[],service.portal);
   command('quantity-preview',[],service.quantityPreview);
