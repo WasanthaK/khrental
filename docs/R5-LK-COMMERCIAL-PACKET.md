@@ -2,7 +2,7 @@
 
 **For Wasantha, Finance, the merchant account holder and the privacy owner · 27 November 2026**
 
-Row 29 records the approved base fee. Return the six remaining decisions together. Each responsible role can approve its own line by reference to an existing restricted record. If a provider or adviser is still reviewing a decision, give the pending reference and the responsible role so engineering can continue. Keep account identifiers, bank information, customer records, credentials and identity documents in their existing restricted systems.
+Rows 29 and 36 record the approved base fee and reactivation terms. Return the five remaining decisions together. Each responsible role can approve its own line by reference to an existing restricted record. If a provider or adviser is still reviewing a decision, give the pending reference and the responsible role so engineering can continue. Keep account identifiers, bank information, customer records, credentials and identity documents in their existing restricted systems.
 
 ## Reply form
 
@@ -10,7 +10,7 @@ Row 29 records the approved base fee. Return the six remaining decisions togethe
 |---|---|---|
 | 29 | Product owner / country admin | The owner approved **Rs 1,500 per managed dwelling per month** on 27 November. The country admin sets the effective date at publication. |
 | 34 | Finance or tax adviser | Signed LK platform-fee tax instruction **ref ___**, **effective ___**, approved by **___**. The rule sheet below is completed in that record. |
-| 36 | Product owner | **Approve §36** or replace the quoted wording with **___**. Decision owner and date **___**. |
+| 36 | Product owner | Wasantha Weerakoone approved §36 as written on 28 November 2026. |
 | 38 | Finance and product owner | **Approve §38**, including the correction authority and price notice, or give edits **___**. Approvers and date or decision reference **___**. |
 | 40 | Merchant account holder | Provider approval **ref ___** covers Quixo Inc. (USA), live LKR collection and settlement to approved receiving route **redacted ref ___**. Account holder and verification date **___**. Alternatively, outstanding provider decision and holder **___**. |
 | 41 | Privacy owner | Approved LK processing facts, provider/transfer record and customer notice text **ref ___**, approved by **___**, date **___**. Required notice edits or approval of existing text **___**. |
@@ -32,7 +32,7 @@ Scope is Quixo's monthly platform fee sold to an LK subscriber. Finance can supp
 
 The adviser chooses the registrations, rates and accounting treatment. Engineering will apply the signed version to a sandbox invoice, compare enabled and disabled outcomes, and read back the original invoice after a later rule change.
 
-### 36. Proposed reactivation wording
+### 36. Approved reactivation wording
 
 > If you restore a dwelling during an already paid period, we reuse any remaining paid capacity. We show any additional charge and the renewal quantity before you confirm. Management resumes from the confirmed restoration time. There is no separate reactivation fee.
 >
