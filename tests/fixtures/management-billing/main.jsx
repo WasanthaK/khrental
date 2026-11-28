@@ -51,6 +51,7 @@ function Fixture(){
   if(['zero-preview','zero-ending'].includes(scenario)){Object.assign(data,{inventoryQuantity:0,inventory:[],pendingQuantity:null});}
   if(scenario==='zero-ending'){Object.assign(data,{cancelAtPeriodEnd:true,pendingQuantity:0,entitlement:{state:'ending'}});}
   if(scenario==='interrupted-cancellation'){data.pendingOperation={id:'fixture-interrupted',kind:'cancellation',payload:{cancelAtPeriodEnd:true}};}
+  if(scenario?.startsWith('reactivation-')){Object.assign(data,{status:'canceled',entitlement:{state:'read_only'},reactivationAvailable:true,inventoryQuantity:1,billedQuantity:1,inventory:[data.inventory[0]]});}
   if(['staged-stock','staged-stock-failure'].includes(scenario)){Object.assign(data,{enrolled:false,stagingEnabled:true,inventoryQuantity:0,billedQuantity:0,status:'not_enrolled',inventory:[],
     pendingStock:[{id:'staged-home',kind:'property',label:'Prepared home'}],proposedInventoryQuantity:1});}
   if(scenario?.startsWith('split-')){Object.assign(data,{splitEnabled:true,pendingQuantity:null,inventoryQuantity:1,billedQuantity:1,inventory:[{key:'property:split',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,label:'Retained family home'}]});}
@@ -58,8 +59,10 @@ function Fixture(){
   const cessation=scenario?.startsWith('cessation-')?{label:'Example residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),remainingManagedDwellings:0,timing:scenario==='cessation-local'?'unchanged':'cancel_at_renewal',eligible:scenario!=='cessation-blocked',blockers:scenario!=='cessation-blocked'?[]:[{code:'TENANCY_OPEN',message:'Close or cancel the remaining tenancy/agreement work.',count:1}]}:null;
   if(cessation&&['cessation-grace','cessation-trial'].includes(scenario)){Object.assign(cessation,{cleanupMode:scenario==='cessation-grace'?'grace':'trial',remainingManagedDwellings:scenario==='cessation-grace'?1:0,timing:scenario==='cessation-grace'?'future_invoices':'cancel_at_renewal'});}
   const restoration=scenario?.startsWith('restore-')?{label:'Retained residence',propertyId:'11111111-1111-4111-8111-111111111111',unitId:null,inventoryHash:'a'.repeat(64),to:2,timing:scenario==='restore-additional'?'prorated_next_invoice':scenario==='restore-ending'?'paid_capacity':scenario==='restore-complimentary'?'unchanged':'next_renewal'}:null;
+  const reactivation=scenario?.startsWith('reactivation-')?{controlId:null,reviewHash:'a'.repeat(64),quantity:1,currency:'lkr',amountMinor:150000,
+    dues:scenario==='reactivation-dues'?[{currency:'lkr',amountMinor:300000}]:[]}:null;
   if(restoration){data.restorationEnabled=true;data.ceasedStock=[{id:'ceased-home',propertyId:restoration.propertyId,unitId:null,label:'Retained residence'}];}
-  return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} loading={loading}
+  return <ManagementSubscriptionView data={data} preview={quantityPreview} notice={notice} loading={loading} reactivation={reactivation}
     restoration={restoration} restorationReason={restorationReason} onRestorationReason={setRestorationReason}
     stockDraft={stockDraft} onStockDraftChange={setStockDraft} cessation={cessation} cessationReason={cessationReason} onCessationReason={setCessationReason}
     onAction={async(kind,payload)=>{
