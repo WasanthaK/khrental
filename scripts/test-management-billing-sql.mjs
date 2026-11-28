@@ -86,6 +86,24 @@ export const verifyManagementBilling=async pool=>{
   console.log('PASS: management billing double migration, constraint drift denial, concurrent version serialization and atomic audit/rollback');
   await verifyBillingTransactions(pool,store,actor.id);
   await pool.request().batch(fs.readFileSync('migrations/20261124_01_market_invoice_issuers.sql','utf8'));
+  const taxSql=fs.readFileSync('migrations/20261128_02_market_tax_rules.sql','utf8');
+  await pool.request().batch(taxSql);await pool.request().batch(taxSql);
+  const firstTax=crypto.randomUUID(),laterTax=crypto.randomUUID();
+  await store.read(`INSERT dbo.management_market_tax_rules(id,market,effective_at_utc,approval_reference,
+      vat_status,vat_rate_basis_points,vat_invoice_treatment,withholding_status,
+      withholding_rate_basis_points,withholding_basis,withholding_settlement_treatment,created_by)
+    VALUES(@first,'ZZ','2098-01-01','Synthetic disabled tax fixture',
+      'disabled',0,'none','disabled',0,'none','none',@actor),
+      (@later,'ZZ','2099-01-01','Synthetic enabled tax fixture',
+      'enabled',1800,'exclusive','enabled',500,'gross_invoice','deducted_from_settlement',@actor)`,
+  {first:firstTax,later:laterTax,actor:actor.id});
+  assert.equal((await store.read("SELECT id FROM dbo.management_market_tax_rule_at('ZZ','2098-06-01')"))[0].id,firstTax);
+  assert.equal((await store.read("SELECT id FROM dbo.management_market_tax_rule_at('ZZ','2099-06-01')"))[0].id,laterTax);
+  await assert.rejects(store.read('UPDATE dbo.management_market_tax_rules SET vat_rate_basis_points=1900 WHERE id=@id',{id:laterTax}),
+    /Approved tax-rule history is immutable/);
+  await assert.rejects(store.read('DELETE dbo.management_market_tax_rules WHERE id=@id',{id:firstTax}),
+    /Approved tax-rule history is immutable/);
+  console.log('PASS: effective-dated disabled/enabled tax switches and immutable approved history');
   await verifyLocalWorkspaceFee(store,actor.id);
   await verifyPricePublicationRecovery(store,actor.id);
 };
@@ -143,13 +161,27 @@ async function verifyLocalWorkspaceFee(store,actorId) {
       await q(`INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
         SELECT 'XZ',id,DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic only' FROM dbo.management_invoice_issuers
         WHERE country_code='US' AND legal_name='Quixo Inc.'`);
+      await q(`INSERT dbo.management_market_tax_rules(id,market,effective_at_utc,approval_reference,
+          vat_status,vat_rate_basis_points,vat_invoice_treatment,withholding_status,
+          withholding_rate_basis_points,withholding_basis,withholding_settlement_treatment,created_by)
+        VALUES(@id,'XZ',DATEADD(day,-1,SYSUTCDATETIME()),'Synthetic disabled treatment only',
+          'disabled',0,'none','disabled',0,'none','none',@actor)`,
+      {id:crypto.randomUUID(),actor:actorId});
       const laterIssuer=async effectiveAt=>{
         await q(`DECLARE @issuer UNIQUEIDENTIFIER=NEWID();
           INSERT dbo.management_invoice_issuers(id,country_code,legal_name) VALUES(@issuer,'LK','Later synthetic issuer');
           INSERT dbo.management_market_issuer_assignments(market,issuer_id,effective_at_utc,approval_reference)
           VALUES('XZ',@issuer,@effectiveAt,'Synthetic cutover')`,{effectiveAt});
+        await q(`INSERT dbo.management_market_tax_rules(id,market,effective_at_utc,approval_reference,
+            vat_status,vat_rate_basis_points,vat_invoice_treatment,withholding_status,
+            withholding_rate_basis_points,withholding_basis,withholding_settlement_treatment,created_by)
+          VALUES(@id,'XZ',@effectiveAt,'Synthetic later enabled treatment',
+            'enabled',1800,'exclusive','enabled',500,'gross_invoice','deducted_from_settlement',@actor)`,
+        {id:crypto.randomUUID(),effectiveAt,actor:actorId});
         const [now]=await q("SELECT legal_name FROM dbo.management_invoice_issuer_at('XZ',@effectiveAt)",{effectiveAt});
         assert.equal(now.legal_name,'Later synthetic issuer');
+        const [tax]=await q("SELECT vat_status FROM dbo.management_market_tax_rule_at('XZ',@effectiveAt)",{effectiveAt});
+        assert.equal(tax.vat_status,'enabled');
       };
       await verifyLocalRenewal({store,q,tenantId,versionId,laterIssuer,provider,issuerMarket:'XZ'});
       throw rollback;
