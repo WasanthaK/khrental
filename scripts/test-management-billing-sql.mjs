@@ -97,8 +97,8 @@ export const verifyManagementBilling=async pool=>{
       (@later,'ZZ','2099-01-01','Synthetic enabled tax fixture',
       'enabled',1800,'exclusive','enabled',500,'gross_invoice','deducted_from_settlement',@actor)`,
   {first:firstTax,later:laterTax,actor:actor.id});
-  assert.equal((await store.read("SELECT id FROM dbo.management_market_tax_rule_at('ZZ','2098-06-01')"))[0].id,firstTax);
-  assert.equal((await store.read("SELECT id FROM dbo.management_market_tax_rule_at('ZZ','2099-06-01')"))[0].id,laterTax);
+  assert.equal((await store.read("SELECT id FROM dbo.management_market_tax_rule_at('ZZ','2098-06-01')"))[0].id.toLowerCase(),firstTax);
+  assert.equal((await store.read("SELECT id FROM dbo.management_market_tax_rule_at('ZZ','2099-06-01')"))[0].id.toLowerCase(),laterTax);
   await assert.rejects(store.read('UPDATE dbo.management_market_tax_rules SET vat_rate_basis_points=1900 WHERE id=@id',{id:laterTax}),
     /Approved tax-rule history is immutable/);
   await assert.rejects(store.read('DELETE dbo.management_market_tax_rules WHERE id=@id',{id:firstTax}),
