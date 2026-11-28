@@ -388,6 +388,52 @@ const inspectPublicListingProjection = async (pool) => {
     detail:`tables=${row.tables_ready}/4, triggers=${row.triggers_ready}/3, trusted_fks=${row.trusted_fks}/4, indexes=${row.indexes_ready}/3`};
 };
 
+const inspectR5IssuerFixtureCleanup = async (pool) => {
+  const result=await pool.request().query(`
+    DECLARE @operation UNIQUEIDENTIFIER='92019876-cdeb-47d3-ae8b-9a0fdd4cb22d';
+    DECLARE @initial_assignment UNIQUEIDENTIFIER='4a1aa809-e3ea-4c74-9c63-c18c7494d994';
+    DECLARE @initial_issuer UNIQUEIDENTIFIER='30f19aad-923c-44c5-993b-6980dbfec67a';
+    DECLARE @later_assignment UNIQUEIDENTIFIER='abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88';
+    DECLARE @later_issuer UNIQUEIDENTIFIER='7744c522-545e-4373-9ba5-305c338fb227';
+    DECLARE @email NVARCHAR(320)=N'r5-issuer-92019876-cdeb-47d3-ae8b-9a0fdd4cb22d@example.invalid';
+    SELECT
+      (SELECT COUNT_BIG(*) FROM dbo.tenants WHERE id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.app_users WHERE tenant_id=@operation OR email=@email)
+      +(SELECT COUNT_BIG(*) FROM dbo.tenant_memberships WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.properties WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.public_listing_preferences WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.agreements WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_billing_accounts WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_billing_events WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_billing_audit WHERE tenant_id=@operation)
+      +(SELECT COUNT_BIG(*) FROM dbo.auth_users WHERE email=@email)
+      +(SELECT COUNT_BIG(*) FROM dbo.auth_sessions s JOIN dbo.auth_users u ON u.id=s.auth_user_id WHERE u.email=@email)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_market_issuer_assignments WHERE id=@later_assignment OR issuer_id=@later_issuer)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_invoice_issuers WHERE id=@later_issuer) AS mutable_count,
+      (SELECT COUNT_BIG(*) FROM dbo.management_market_issuer_assignments WHERE market='XZ' AND id<>@initial_assignment)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_invoice_issuers
+        WHERE legal_name IN(N'R5 Synthetic Initial Issuer',N'R5 Synthetic Later Issuer') AND id<>@initial_issuer) AS unexpected_count,
+      (SELECT COUNT_BIG(*) FROM dbo.management_market_issuer_assignments WHERE id=@initial_assignment)
+      +(SELECT COUNT_BIG(*) FROM dbo.management_invoice_issuers WHERE id=@initial_issuer) AS initial_count,
+      (SELECT COUNT_BIG(*) FROM dbo.management_market_issuer_assignments a
+        JOIN dbo.management_invoice_issuers i ON i.id=a.issuer_id
+        WHERE a.id=@initial_assignment AND a.market='XZ' AND a.issuer_id=@initial_issuer
+          AND a.effective_at_utc=CONVERT(DATETIME2(7),'2026-11-28T00:01:57.7000000')
+          AND a.approval_reference=N'R5 row 32 isolated synthetic schedule'
+          AND i.legal_name=N'R5 Synthetic Initial Issuer' AND i.country_code='US'
+          AND NOT EXISTS(SELECT 1 FROM dbo.management_market_issuer_assignments other
+            WHERE other.issuer_id=i.id AND other.id<>a.id)) AS retained_count;
+  `);
+  const row=result.recordset?.[0]||{};
+  const mutable=Number(row.mutable_count||0);
+  const unexpected=Number(row.unexpected_count||0);
+  const initial=Number(row.initial_count||0);
+  const retained=Number(row.retained_count||0);
+  return {satisfied:mutable===0 && unexpected===0
+      && ((initial===0 && retained===0) || (initial===2 && retained===1)),
+    detail:`mutable=${mutable}, unexpected=${unexpected}, initial=${initial}, retained=${retained}`};
+};
+
 const MIGRATIONS = [
   {
     id: '20260920_01_add_tenancy_billing_adjustments',
@@ -563,6 +609,12 @@ const MIGRATIONS = [
     file:'migrations/20261127_01_market_sandbox_collectors.sql',
     inspect:inspectSandboxCollectors,
     verify:async pool=>assertSatisfied(inspectSandboxCollectors(pool),'Sandbox collector schema verification failed.')
+  },
+  {
+    id:'20261128_01_cleanup_r5_lk_issuer_fixture',
+    file:'migrations/20261128_01_cleanup_r5_lk_issuer_fixture.sql',
+    inspect:inspectR5IssuerFixtureCleanup,
+    verify:async pool=>assertSatisfied(inspectR5IssuerFixtureCleanup(pool),'R5 issuer fixture cleanup verification failed.')
   }
 ];
 

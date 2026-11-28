@@ -128,10 +128,10 @@ jobs:
 
           # Both entrypoints are read-only and require the isolated identity.
           verification_script="scripts/run-production-migration-verify.sh"
-          verification_marker="Strict read-only migration verification passed for 25 managed migrations;"
+          verification_marker="Strict read-only migration verification passed for 26 managed migrations;"
           if [ "$VERIFICATION_MODE" = "preflight" ]; then
             verification_script="scripts/run-production-migration-preflight.sh"
-            verification_marker="Read-only executor preflight passed for 25 managed migrations;"
+            verification_marker="Read-only executor preflight passed for 26 managed migrations;"
           fi
 
           # Per-execution overrides do not change the resting job definition.
@@ -200,7 +200,8 @@ jobs:
             20261112_02_management_restoration
             20261112_03_management_splits
             20261124_01_market_invoice_issuers
-            20261127_01_market_sandbox_collectors"
+            20261127_01_market_sandbox_collectors
+            20261128_01_cleanup_r5_lk_issuer_fixture"
 
             local -a preflight_rows=()
             local state
@@ -241,7 +242,7 @@ jobs:
                   echo "| $migration_id | LEDGERED | SCHEMA_OK |"
                 done
                 echo
-                echo "**25/25 ledger/schema checks passed.** Raw Azure logs are not published."
+                echo "**26/26 ledger/schema checks passed.** Raw Azure logs are not published."
               else
                 echo "| Migration | Preflight state |"
                 echo "| --- | --- |"
