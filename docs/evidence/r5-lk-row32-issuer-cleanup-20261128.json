@@ -30,7 +30,8 @@
     "https://github.com/WasanthaK/khrental/actions/runs/46092506716/job/140816900963",
     "https://github.com/WasanthaK/khrental/actions/runs/46094227493/job/140822557925",
     "https://github.com/WasanthaK/khrental/actions/runs/46095812502/job/140827295126",
-    "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824"
+    "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824",
+    "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111"
   ],
   "lastTestedBuild": "af320236102b614a4a659c4481d58870014e9316",
   "runs": [
@@ -125,6 +126,12 @@
       "url": "https://github.com/WasanthaK/khrental/actions/runs/46103427618/job/140850763896",
       "conclusion": "success",
       "observation": "Read-only plan on the serving revision found the exact pending migration with mutable=21, unexpected=2, initial=2 and retained=1. It made no database change. The unexpected pair is the exact removable later assignment and issuer."
+    },
+    {
+      "task": "Protected deployment 1977",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111",
+      "conclusion": "success",
+      "observation": "The evidence-only merge moved main after plan 76. The protected deployment verified serving SHA 7124ea4ff1496b4938436521ec2df7042f530064 on ready revision ending in 0000555 and live SQL connectivity. The public build-info receipt independently returned the same SHA."
     }
   ],
   "ownerDisposition": {
@@ -132,7 +139,12 @@
     "scope": "Initial synthetic XZ assignment and its issuer only",
     "terms": "Keep these two records if there are no charges or costs associated with retaining them. Otherwise document and remove them.",
     "remainingMutableRecords": 21,
-    "protectedRecords": 2
+    "protectedRecords": 2,
+    "remainingMutableScope": {
+      "workspaceRecords": 19,
+      "laterIssuer": 1,
+      "laterAssignment": 1
+    }
   },
   "costEvidence": {
     "asOfUtc": "2026-11-28T02:12:33.340667+00:00",
@@ -243,6 +255,8 @@
     "owner": "Authorized Azure SQL release operator",
     "action": "Apply only migration 20261128_01_cleanup_r5_lk_issuer_fixture through the governed production migration workflow with mode apply, target through this migration and exact confirmation APPLY-PRODUCTION. Dispatch once, then independently read back every count. The protected serving-source check and read-only plan already passed on af320236102b614a4a659c4481d58870014e9316.",
     "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
-    "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous."
+    "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous.",
+    "applyBuild": "7124ea4ff1496b4938436521ec2df7042f530064",
+    "confirmationScope": "Permanently remove the 21 mutable synthetic records, including the later issuer and its assignment. Retain the exact original issuer and assignment. The latest registered migration was read-only plan 76 at preparation."
   }
 }
