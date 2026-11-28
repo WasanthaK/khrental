@@ -1,7 +1,7 @@
 // R5 row 32: exact SQL cleanup for one reconciled disposable issuer-cutover fixture.
 import assert from 'node:assert/strict';
 import {createBillingStore} from '/app/src/api/managementBilling/store.js';
-import {fixtureFailure, readIssuerCleanupFixture} from './lk-issuer-cleanup-fixture.mjs';
+import {fixtureFailure, mutableIssuerIds, readIssuerCleanupFixture, verifyResidueCounts, verifyRetainedIssuer} from './lk-issuer-cleanup-fixture.mjs';
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
 const operation=process.env.R5_LK_ISSUER_OPERATION;
@@ -13,19 +13,19 @@ const deleted=async(q,statement,params)=>Number((await q(statement+'; SELECT @@R
 
 try{
   assert.match(operation||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
-  assert.equal(confirmation,'CLEANUP-DEPLOYED-LK-ISSUER');
+  const mutableOnly=confirmation==='CLEANUP-DEPLOYED-LK-ISSUER-MUTABLE-ONLY';
+  assert.ok(mutableOnly || confirmation==='CLEANUP-DEPLOYED-LK-ISSUER');
   const result=await store.locked(operation,async q=>{
-    const {actor,issuerIds,email,slug,propertyId,preferenceId,issuerHistory}=await readIssuerCleanupFixture(q,operation);
+    const {actor,email,slug,propertyId,preferenceId,issuerHistory}=await readIssuerCleanupFixture(q,operation);
 
-    assert.ok(issuerHistory.every(row=>!row.historical),'fixture.assignment.historical');
+    const removable=mutableIssuerIds(operation,issuerHistory,mutableOnly);
 
     stage='exact_sql_cleanup';
     const counts={};
     counts.authSessions=await deleted(q,`DELETE s FROM dbo.auth_sessions s JOIN dbo.auth_users u ON u.id=s.auth_user_id
       WHERE u.app_user_id=@actor AND u.email=@email`,{actor:actor.id,email});
     counts.events=await deleted(q,'DELETE dbo.management_billing_events WHERE tenant_id=@id',{id:operation});
-    counts.audits=await deleted(q,'DELETE dbo.management_billing_audit WHERE tenant_id=@id OR actor_id=@actor',
-      {id:operation,actor:actor.id});
+    counts.audits=await deleted(q,'DELETE dbo.management_billing_audit WHERE tenant_id=@id',{id:operation});
     counts.accounts=await deleted(q,'DELETE dbo.management_billing_accounts WHERE tenant_id=@id',{id:operation});
     counts.agreements=await deleted(q,'DELETE dbo.agreements WHERE tenant_id=@id',{id:operation});
     counts.listingPreferences=await deleted(q,`DELETE dbo.public_listing_preferences
@@ -38,15 +38,20 @@ try{
     counts.users=await deleted(q,'DELETE dbo.app_users WHERE tenant_id=@id AND id=@actor AND email=@email',
       {id:operation,actor:actor.id,email});
     counts.tenants=await deleted(q,'DELETE dbo.tenants WHERE id=@id AND slug=@slug',{id:operation,slug});
-    counts.assignments=await deleted(q,`DELETE dbo.management_market_issuer_assignments
-      WHERE market='XZ' AND issuer_id IN (@initial,@later)`,{initial:issuerIds[0],later:issuerIds[1]});
-    counts.issuers=await deleted(q,`DELETE dbo.management_invoice_issuers WHERE id IN (@initial,@later)
-      AND legal_name IN ('R5 Synthetic Initial Issuer','R5 Synthetic Later Issuer')`,
-    {initial:issuerIds[0],later:issuerIds[1]});
+    counts.assignments=0;
+    counts.issuers=0;
+    for (const issuer of removable) {
+      const removed=await deleted(q,`DELETE dbo.management_market_issuer_assignments
+        WHERE market='XZ' AND issuer_id=@issuer AND effective_at_utc>SYSUTCDATETIME()`,{issuer});
+      assert.equal(removed,1);
+      counts.assignments+=removed;
+      counts.issuers+=await deleted(q,`DELETE dbo.management_invoice_issuers WHERE id=@issuer
+        AND legal_name IN ('R5 Synthetic Initial Issuer','R5 Synthetic Later Issuer')`,{issuer});
+    }
     assert.deepEqual([counts.accounts,counts.agreements,counts.properties,counts.authUsers,counts.memberships,
-      counts.users,counts.tenants,counts.assignments,counts.issuers],[1,1,1,1,1,1,1,2,2]);
+      counts.users,counts.tenants,counts.assignments,counts.issuers],[1,1,1,1,1,1,1,removable.length,removable.length]);
 
-    stage='verify_zero_residue';
+    stage='verify_remaining_records';
     const [residue]=await q(`SELECT
       (SELECT COUNT_BIG(*) FROM dbo.tenants WHERE id=@id) AS tenants,
       (SELECT COUNT_BIG(*) FROM dbo.management_market_issuer_assignments WHERE market='XZ') AS assignments,
@@ -64,8 +69,9 @@ try{
       (SELECT COUNT_BIG(*) FROM dbo.auth_sessions s JOIN dbo.auth_users u ON u.id=s.auth_user_id WHERE u.email=@email) AS authSessions`,
     {id:operation,email});
     const remaining=Object.fromEntries(Object.entries(residue).map(([key,value])=>[key,Number(value)]));
-    assert.ok(Object.values(remaining).every(value=>value===0));
-    return {operation,cleaned:true,readOnlyPreflight:true,liveChargingEnabled:false,counts,remaining};
+    verifyResidueCounts(remaining,mutableOnly);
+    const retainedIssuer=mutableOnly ? await verifyRetainedIssuer(q,operation) : null;
+    return {operation,cleaned:!mutableOnly,workspaceRemoved:true,retainedIssuer,readOnlyPreflight:true,liveChargingEnabled:false,counts,remaining};
   });
   console.log('LK_ISSUER_EXACT_CLEANUP='+JSON.stringify(result));
 }catch(error){

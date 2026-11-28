@@ -101,3 +101,44 @@ export function fixtureFailure(error) {
   return error.code === 'ERR_ASSERTION' && /^fixture\.[a-z]+\.[a-z]+$/.test(error.message)
     ? error.message : 'query_or_internal_error';
 }
+
+// Identifiers and full-precision SQL dates verified by read-only inspection #7.
+export const reconciledOperation = '92019876-cdeb-47d3-ae8b-9a0fdd4cb22d';
+const initialHistory = {
+  assignmentId:'4a1aa809-e3ea-4c74-9c63-c18c7494d994', issuerId:'30f19aad-923c-44c5-993b-6980dbfec67a',
+  effectiveUtc:'2026-11-28T00:01:57.7000000', historical:true,
+};
+const laterSchedule = {
+  assignmentId:'abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88', issuerId:'7744c522-545e-4373-9ba5-305c338fb227',
+  effectiveUtc:'2026-12-27T18:01:54', historical:false,
+};
+
+export function mutableIssuerIds(operation, history, mutableOnly) {
+  if (mutableOnly) {
+    assert.equal(operation,reconciledOperation,'fixture.operation.identity');
+    assert.deepEqual(history,[initialHistory,laterSchedule],'fixture.assignment.identity');
+    return [laterSchedule.issuerId];
+  }
+  assert.ok(history.every(row=>!row.historical),'fixture.assignment.historical');
+  return history.map(row=>row.issuerId);
+}
+
+export function verifyResidueCounts(counts, mutableOnly) {
+  for (const [name,value] of Object.entries(counts)) {
+    const retained = mutableOnly && (name === 'assignments' || name === 'issuers');
+    assert.equal(value,retained ? 1 : 0,'Unexpected residual count for '+name);
+  }
+}
+
+export async function verifyRetainedIssuer(query, operation) {
+  assert.equal(operation,reconciledOperation,'fixture.operation.identity');
+  const rows = await query(`SELECT CONVERT(VARCHAR(33),a.effective_at_utc,126) AS effective_utc
+    FROM dbo.management_market_issuer_assignments a JOIN dbo.management_invoice_issuers i ON i.id=a.issuer_id
+    WHERE a.id=@assignment AND a.market='XZ' AND a.issuer_id=@issuer AND a.effective_at_utc<=SYSUTCDATETIME()
+      AND a.approval_reference='R5 row 32 isolated synthetic schedule'
+      AND i.legal_name='R5 Synthetic Initial Issuer' AND i.country_code='US'
+      AND NOT EXISTS (SELECT 1 FROM dbo.management_market_issuer_assignments other
+        WHERE other.issuer_id=i.id AND other.id<>a.id)`, {assignment:initialHistory.assignmentId,issuer:initialHistory.issuerId});
+  assert.deepEqual(rows,[{effective_utc:initialHistory.effectiveUtc}],'fixture.assignment.retained');
+  return initialHistory;
+}

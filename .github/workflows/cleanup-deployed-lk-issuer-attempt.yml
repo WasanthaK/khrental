@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       confirmation:
-        description: CLEANUP-DEPLOYED-LK-ISSUER
+        description: CLEANUP-DEPLOYED-LK-ISSUER or CLEANUP-DEPLOYED-LK-ISSUER-MUTABLE-ONLY for the reconciled November fixture
         required: true
         type: string
 permissions:
@@ -43,7 +43,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$CONFIRMATION" = CLEANUP-DEPLOYED-LK-ISSUER
+          case "$CONFIRMATION" in
+            CLEANUP-DEPLOYED-LK-ISSUER) ;;
+            CLEANUP-DEPLOYED-LK-ISSUER-MUTABLE-ONLY) test "$OPERATION_ID" = 92019876-cdeb-47d3-ae8b-9a0fdd4cb22d ;;
+            *) exit 1 ;;
+          esac
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           test "$EXPECTED_BUILD" = "$GITHUB_SHA"
@@ -131,8 +135,12 @@ jobs:
           ! grep -Fq 'LK_ISSUER_EXACT_CLEANUP_FAILED=' lk-issuer-exact-cleanup.txt
           grep -Eo 'LK_ISSUER_EXACT_CLEANUP=\{.*\}' lk-issuer-exact-cleanup.txt | tail -n 1 |
             sed 's/^LK_ISSUER_EXACT_CLEANUP=//' > lk-issuer-exact-cleanup-summary.json
-          jq -e --arg operation "$OPERATION_ID" '.operation==$operation and .cleaned and .readOnlyPreflight and
-            .liveChargingEnabled==false and ([.remaining[]] | all(.==0))' lk-issuer-exact-cleanup-summary.json
+          jq -e --arg operation "$OPERATION_ID" --arg confirmation "$CONFIRMATION" '
+            .operation==$operation and .readOnlyPreflight and .workspaceRemoved and .liveChargingEnabled==false and
+            (if ($confirmation|endswith("-MUTABLE-ONLY")) then
+              .cleaned==false and .retainedIssuer.historical and .remaining.assignments==1 and .remaining.issuers==1 and
+              ([.remaining|del(.assignments,.issuers)[]] | all(.==0))
+             else .cleaned and .retainedIssuer==null and ([.remaining[]] | all(.==0)) end)' lk-issuer-exact-cleanup-summary.json
           az containerapp job show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" -o json |
             jq -S '.properties.template' > "$RUNNER_TEMP/migrator-template-after.json"
           diff -u "$RUNNER_TEMP/migrator-template-before.json" "$RUNNER_TEMP/migrator-template-after.json"

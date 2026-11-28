@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {fixtureFailure, readIssuerCleanupFixture} from '../scripts/lk-issuer-cleanup-fixture.mjs';
+import {fixtureFailure, mutableIssuerIds, readIssuerCleanupFixture, reconciledOperation, verifyResidueCounts, verifyRetainedIssuer} from '../scripts/lk-issuer-cleanup-fixture.mjs';
 import {BILLING_ACCOUNT} from '../src/api/managementBilling/contract.js';
 
 const operation = '11111111-2222-4333-8444-555555555555';
@@ -69,4 +69,28 @@ test('reports the database effective-date classification for each validated synt
   assert.deepEqual(result.issuerHistory.map(row => [row.assignmentId,row.historical]),
     [['initial-assignment',true],['later-assignment',false]]);
   assert.equal(result.preferenceId, 'preference');
+});
+
+test('only the exact recorded fixture may remove the future schedule and preserve history', async () => {
+  const history = [
+    {assignmentId:'4a1aa809-e3ea-4c74-9c63-c18c7494d994',issuerId:'30f19aad-923c-44c5-993b-6980dbfec67a',
+      effectiveUtc:'2026-11-28T00:01:57.7000000',historical:true},
+    {assignmentId:'abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88',issuerId:'7744c522-545e-4373-9ba5-305c338fb227',
+      effectiveUtc:'2026-12-27T18:01:54',historical:false},
+  ];
+  assert.deepEqual(mutableIssuerIds(reconciledOperation,history,true),[history[1].issuerId]);
+  assert.throws(()=>mutableIssuerIds(reconciledOperation,history,false));
+  assert.throws(()=>mutableIssuerIds(operation,history,true));
+  assert.throws(()=>mutableIssuerIds(reconciledOperation,[history[0],{...history[1],historical:true}],true));
+  verifyResidueCounts({assignments:1,issuers:1,users:0},true);
+  assert.throws(()=>verifyResidueCounts({assignments:1,issuers:1,users:1},true));
+  assert.throws(()=>verifyResidueCounts({assignments:1,issuers:1,users:0},false));
+  await assert.rejects(verifyRetainedIssuer(async()=>[],reconciledOperation));
+  const retained=await verifyRetainedIssuer(async(sql,params)=>{
+    assert.equal(params.assignment,history[0].assignmentId);
+    assert.equal(params.issuer,history[0].issuerId);
+    assert.match(sql,/other.issuer_id=i.id AND other.id<>a.id/);
+    return [{effective_utc:history[0].effectiveUtc}];
+  },reconciledOperation);
+  assert.deepEqual(retained,history[0]);
 });
