@@ -3,7 +3,7 @@
   "asOf": "2026-11-28",
   "environment": "Deployed application, isolated synthetic XZ issuer schedule and Stripe sandbox",
   "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
-  "status": "Blocked on scoped Azure SQL cleanup",
+  "status": "Governed cleanup plan passed; one-shot apply pending",
   "acceptedBusinessBehavior": {
     "mountedRenewal": "https://github.com/WasanthaK/khrental/actions/runs/46001525355/job/140514099650",
     "deployedBuild": "769ab32c603f21073fb7c42dcef92902254326e4",
@@ -22,15 +22,17 @@
     "https://github.com/WasanthaK/khrental/pull/785",
     "https://github.com/WasanthaK/khrental/pull/787",
     "https://github.com/WasanthaK/khrental/pull/788",
-    "https://github.com/WasanthaK/khrental/pull/789"
+    "https://github.com/WasanthaK/khrental/pull/789",
+    "https://github.com/WasanthaK/khrental/pull/791"
   ],
   "protectedDeployments": [
     "https://github.com/WasanthaK/khrental/actions/runs/46050844384",
     "https://github.com/WasanthaK/khrental/actions/runs/46092506716/job/140816900963",
     "https://github.com/WasanthaK/khrental/actions/runs/46094227493/job/140822557925",
-    "https://github.com/WasanthaK/khrental/actions/runs/46095812502/job/140827295126"
+    "https://github.com/WasanthaK/khrental/actions/runs/46095812502/job/140827295126",
+    "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824"
   ],
-  "lastTestedBuild": "8df7c3dd207933ff4bb29c1d1d8370b19f5e2ca8",
+  "lastTestedBuild": "af320236102b614a4a659c4481d58870014e9316",
   "runs": [
     {
       "task": "Deployed historical receipt",
@@ -111,6 +113,18 @@
       "artifact": 15244041347,
       "sha256": "5795a15e9267894ff865c3ae679498d1b858dad5181ac7e10bc8fe859478a4fc",
       "observation": "The SQL and provider reports matched inspection 7 field for field. The operation remains occupied."
+    },
+    {
+      "task": "Protected deployment 1975",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824",
+      "conclusion": "success",
+      "observation": "The protected manual deployment served reviewed main af320236102b614a4a659c4481d58870014e9316 on revision khrental-app--0000554, preserving the serving-source parity gate."
+    },
+    {
+      "task": "Governed cleanup plan 76",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46103427618/job/140850763896",
+      "conclusion": "success",
+      "observation": "Read-only plan on the serving revision found the exact pending migration with mutable=21, unexpected=2, initial=2 and retained=1. It made no database change. The unexpected pair is the exact removable later assignment and issuer."
     }
   ],
   "ownerDisposition": {
@@ -227,8 +241,8 @@
   },
   "nextAcceptance": {
     "owner": "Authorized Azure SQL release operator",
-    "action": "Resolve SQL error 229 through the existing governed release process for this fixture. Use the reviewed mutable-only transaction for this operation once authority is established, then independently read back every count. Check current main, serving source and registered runs before action.",
+    "action": "Apply only migration 20261128_01_cleanup_r5_lk_issuer_fixture through the governed production migration workflow with mode apply, target through this migration and exact confirmation APPLY-PRODUCTION. Dispatch once, then independently read back every count. The protected serving-source check and read-only plan already passed on af320236102b614a4a659c4481d58870014e9316.",
     "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
-    "unchangedOperation": "Do not replay the invoice acceptance or redispatch unchanged cleanup under the denied identity."
+    "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous."
   }
 }
