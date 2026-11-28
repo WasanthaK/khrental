@@ -206,6 +206,24 @@ Fresh 10 November connector inventory exposes only the approved Quixo Homes sand
 
 This runbook is preparation, not an invented received request, completed deletion, legal approval or operational acceptance. A controlled end-to-end request and actual backup evidence remain open. The consolidated readiness and task dispositions are in `R5-LIFECYCLE-ACCEPTANCE-20261105.md`.
 
+#### LK row 43 controlled access request
+
+QA can use the following wording once row 42 has a signed reference and the privacy owner identifies an authorized synthetic renter, organization and enquiry. Substitute the fixture aliases in the private case and use the existing privacy contact in the [published notice](../marketing/privacy/index.html).
+
+> I am requesting access to my enquiry about [synthetic listing] with [test organization], submitted on [date]. Please provide my enquiry message and its current status through the agreed private channel.
+
+Verify the requester through their existing authenticated renter identity and match the enquiry to the nominated organization. From that renter's session, use the existing personal enquiry list (`GET /api/property-enquiries`). Select the matching receipt and compare its message and status with the permitted response. The [renter receipt](../src/api/enquiries/contract.js) also contains other fields. Keep those fields and any other enquiries out of this scoped response. If identity, scope or a disclosure exception is unresolved, record the pending item in the private case and leave delivery pending. This access request requires no change to the enquiry.
+
+| Evidence to index after processing | Redacted entry |
+| --- | --- |
+| Receipt | Private case reference, received time in UTC and handler role |
+| Identity and scope | Verification reference, fixture aliases and result of matching the renter, organization and enquiry |
+| Retention and exceptions | Signed row 42 reference, applicable exceptions and backup limits, and the privacy owner's disposition for this record |
+| Outcome and independent readback | Fields released, source version or update time, and whether the permitted response matched the authenticated readback |
+| Delivery | Private response reference, delivery time in UTC and handler role |
+
+Store the message text, contact details and raw response in the controlled case only. The checklist takes the redacted case reference after confirmed delivery.
+
 
 ## Controlling billing test-account decision — 2026-10-27
 
