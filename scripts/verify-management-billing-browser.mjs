@@ -129,7 +129,7 @@ try{
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
     await page.screenshot({path:path.join(output,`subscription-${scenario}-${width}.png`),fullPage:true});
    }
-   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local','cessation-grace','cessation-trial','restore-paid','restore-ending','restore-complimentary','restore-additional','split-active','split-complimentary']){
+   for(const scenario of ['zero-preview','zero-ending','interrupted-cancellation','staged-stock','staged-stock-failure','cessation-ready','cessation-blocked','cessation-local','cessation-grace','cessation-trial','restore-paid','restore-ending','restore-complimentary','restore-additional','reactivation-dues','reactivation-settled','split-active','split-complimentary']){
     await page.goto(`${origin}/tests/fixtures/management-billing/index.html?screen=subscription&scenario=${scenario}`,{waitUntil:'networkidle2'});
     if(scenario.startsWith('split-')){
      await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Split into units').click());
@@ -145,6 +145,18 @@ try{
      await page.keyboard.press('Enter');
      await page.waitForFunction(()=>window.splitPayload?.units.length===2);
      assert.equal(await page.evaluate(()=>window.splitPayload.units[0].unitnumber),'Unit 1 A');
+    }else if(scenario.startsWith('reactivation-')){
+     const section=await page.$eval('section[aria-labelledby="reactivation-title"]',el=>el.innerText);
+     assert.match(section,/no restart fee or charge for the inactive gap/);assert.match(section,/Authorized property history remains available|support/);
+     assert.match(section,/LKR\s*1,500\.00/);
+     const disabled=await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Continue to sandbox payment').disabled);
+     assert.equal(disabled,scenario==='reactivation-dues');
+     if(scenario==='reactivation-dues'){assert.match(section,/LKR\s*3,000\.00 outstanding/);assert.match(section,/Paying arrears alone does not restore paid access/);}
+     else{
+      assert.match(section,/Previous dues are settled/);assert.match(section,/new checkout payment is confirmed/);
+      await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Continue to sandbox payment').focus());await page.keyboard.press('Enter');
+      await page.waitForFunction(()=>document.body.innerText.includes('Fixture action: reactivation'));
+     }
     }else if(scenario==='zero-preview'){
      const confirm=await page.waitForSelector('button');
      assert.ok(confirm);
