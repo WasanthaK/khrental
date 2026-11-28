@@ -3,7 +3,7 @@
   "asOf": "2026-11-28",
   "environment": "Deployed application, isolated synthetic XZ issuer schedule and Stripe sandbox",
   "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
-  "status": "Governed cleanup plan passed; one-shot apply pending",
+  "status": "Done. Deployed historical invoice, authorized fixture cleanup, independent retained-issuer and Stripe readback, and governed ledger adoption verified.",
   "acceptedBusinessBehavior": {
     "mountedRenewal": "https://github.com/WasanthaK/khrental/actions/runs/46001525355/job/140514099650",
     "deployedBuild": "769ab32c603f21073fb7c42dcef92902254326e4",
@@ -30,9 +30,11 @@
     "https://github.com/WasanthaK/khrental/actions/runs/46092506716/job/140816900963",
     "https://github.com/WasanthaK/khrental/actions/runs/46094227493/job/140822557925",
     "https://github.com/WasanthaK/khrental/actions/runs/46095812502/job/140827295126",
-    "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824"
+    "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824",
+    "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111",
+    "https://github.com/WasanthaK/khrental/actions/runs/46136523185/job/140953239240"
   ],
-  "lastTestedBuild": "af320236102b614a4a659c4481d58870014e9316",
+  "lastTestedBuild": "6651c860760040f67247fe528736961b01797be4",
   "runs": [
     {
       "task": "Deployed historical receipt",
@@ -125,17 +127,78 @@
       "url": "https://github.com/WasanthaK/khrental/actions/runs/46103427618/job/140850763896",
       "conclusion": "success",
       "observation": "Read-only plan on the serving revision found the exact pending migration with mutable=21, unexpected=2, initial=2 and retained=1. It made no database change. The unexpected pair is the exact removable later assignment and issuer."
+    },
+    {
+      "task": "Protected deployment 1977",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111",
+      "conclusion": "success",
+      "observation": "The evidence-only merge moved main after plan 76. The protected deployment verified serving SHA 7124ea4ff1496b4938436521ec2df7042f530064 on ready revision ending in 0000555 and live SQL connectivity. The public build-info receipt independently returned the same SHA."
+    },
+    {
+      "task": "Protected deployment 1990",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46136523185/job/140953239240",
+      "conclusion": "success",
+      "observation": "Public build, Ready revision khrental-app--0000556, dedicated apply and read-only plan matched 6651c860760040f67247fe528736961b01797be4. Independent SQL health reported ready."
+    },
+    {
+      "task": "Owner manual apply 78",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46136236863/job/140952069312",
+      "conclusion": "failure",
+      "observation": "Input through=all skipped 25 recorded migrations. The sole pending migration 20261128_01_cleanup_r5_lk_issuer_fixture reached its first DELETE. The dedicated identity was denied on dbo.auth_sessions."
+    },
+    {
+      "task": "Independent post-failure plan 79",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46137203094/job/140955043616",
+      "conclusion": "success",
+      "observation": "The exact cleanup remained PENDING. The read-only SQL check found mutable=21, unexpected=2, initial=2, retained=1, matching plan 77 before the failed apply."
+    },
+    {
+      "task": "Post-cleanup SQL and Stripe inspection 10",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46138053871/job/140957667945",
+      "conclusion": "success",
+      "artifact": 15260552118,
+      "sha256": "9e2a3e6de45068c37fa9efb76edb18a79af428a304f5d02f0469abb8953000ca",
+      "observation": "The workspace and later issuer pair were removed. The exact historical assignment and issuer remain. Stripe returned zero matching clocks, customers or live objects. Live charging was off. SQL health passed."
+    },
+    {
+      "task": "Independent post-cleanup plan 80",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46138083913/job/140957762618",
+      "conclusion": "success",
+      "observation": "The cleanup was satisfied and untracked. The plan verified zero mutable and unexpected records and the two initial history records."
+    },
+    {
+      "task": "Governed ledger adoption 81",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46138277300/job/140958358815",
+      "conclusion": "success",
+      "observation": "The dedicated executor verified the existing cleanup state and recorded the migration without replaying its SQL."
+    },
+    {
+      "task": "Final migration ledger plan 82",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46138489304/job/140959002954",
+      "conclusion": "success",
+      "observation": "Independent read-only plan reported APPLIED with the reviewed checksum. All 26 migrations through this target were recorded."
     }
   ],
   "ownerDisposition": {
     "date": "2026-11-28",
     "scope": "Initial synthetic XZ assignment and its issuer only",
     "terms": "Keep these two records if there are no charges or costs associated with retaining them. Otherwise document and remove them.",
-    "remainingMutableRecords": 21,
-    "protectedRecords": 2
+    "protectedRecords": 2,
+    "mutableCleanupApproval": {
+      "date": "2026-11-28",
+      "scope": "One permanent deletion of 21 synthetic records in total, including the later issuer and assignment, retaining the initial historical pair.",
+      "source": "Owner's affirmative response to the explicit 21-record cleanup question."
+    },
+    "mutableRecordsApprovedForRemoval": 21,
+    "approvedMutableScope": {
+      "workspaceRecords": 19,
+      "laterIssuer": 1,
+      "laterAssignment": 1
+    },
+    "remainingMutableRecords": 0
   },
   "costEvidence": {
-    "asOfUtc": "2026-11-28T02:12:33.340667+00:00",
+    "asOfUtc": "2026-11-28T11:04:05.225915+00:00",
     "readOnly": true,
     "unavailable": {
       "billing": "read_failed"
@@ -155,31 +218,31 @@
     },
     "data": {
       "storage": {
-        "latestUtc": "2026-11-27T02:12:00Z",
-        "latestMaximumBytes": 46530560,
-        "fourDayMaximumBytes": 46530560
+        "latestUtc": "2026-11-27T11:04:00Z",
+        "latestMaximumBytes": 46530560.0,
+        "fourDayMaximumBytes": 46530560.0
       },
       "allocated_data_storage": {
-        "latestUtc": "2026-11-27T02:12:00Z",
-        "latestMaximumBytes": 67108864,
-        "fourDayMaximumBytes": 67108864
+        "latestUtc": "2026-11-27T11:04:00Z",
+        "latestMaximumBytes": 67108864.0,
+        "fourDayMaximumBytes": 67108864.0
       }
     },
     "backups": {
       "full_backup_size_bytes": {
-        "latestUtc": "2026-11-27T02:12:00Z",
-        "latestMaximumBytes": 7340032,
-        "fourDayMaximumBytes": 7340032
+        "latestUtc": "2026-11-27T11:04:00Z",
+        "latestMaximumBytes": 7340032.0,
+        "fourDayMaximumBytes": 7340032.0
       },
       "diff_backup_size_bytes": {
-        "latestUtc": "2026-11-27T02:12:00Z",
-        "latestMaximumBytes": 28311552,
-        "fourDayMaximumBytes": 65011712
+        "latestUtc": "2026-11-27T11:04:00Z",
+        "latestMaximumBytes": 33554432.0,
+        "fourDayMaximumBytes": 65011712.0
       },
       "log_backup_size_bytes": {
-        "latestUtc": "2026-11-27T02:12:00Z",
-        "latestMaximumBytes": 182452224,
-        "fourDayMaximumBytes": 356515840
+        "latestUtc": "2026-11-27T11:04:00Z",
+        "latestMaximumBytes": 223346688.0,
+        "fourDayMaximumBytes": 356515840.0
       }
     },
     "backupFourDayUpperBoundMiB": 409,
@@ -192,42 +255,27 @@
     "sql": {
       "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
       "readOnly": true,
-      "tenants": 1,
-      "assignments": 2,
-      "issuers": 2,
-      "accounts": 1,
-      "users": 1,
-      "memberships": 1,
-      "properties": 1,
-      "agreements": 1,
-      "events": 5,
-      "audits": 5,
-      "authUsers": 1,
-      "authSessions": 1,
-      "listingPreferences": 1,
+      "tenants": 0,
+      "assignments": 1,
+      "issuers": 1,
+      "accounts": 0,
+      "users": 0,
+      "memberships": 0,
+      "properties": 0,
+      "agreements": 0,
+      "events": 0,
+      "audits": 0,
+      "authUsers": 0,
+      "authSessions": 0,
+      "listingPreferences": 0,
       "safeToRetry": false,
-      "cleanupPreflight": {
-        "matched": true,
-        "subscriptionStatus": "canceled",
-        "issuerHistory": [
-          {
-            "assignmentId": "4a1aa809-e3ea-4c74-9c63-c18c7494d994",
-            "issuerId": "30f19aad-923c-44c5-993b-6980dbfec67a",
-            "effectiveUtc": "2026-11-28T00:01:57.7000000",
-            "historical": true
-          },
-          {
-            "assignmentId": "abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88",
-            "issuerId": "7744c522-545e-4373-9ba5-305c338fb227",
-            "effectiveUtc": "2026-12-27T18:01:54",
-            "historical": false
-          }
-        ],
-        "fullCleanupAllowed": false,
-        "unmodifiedListingPreference": true,
-        "listingMedia": 0,
-        "listingEnquiries": 0
-      }
+      "retainedIssuer": {
+        "assignmentId": "4a1aa809-e3ea-4c74-9c63-c18c7494d994",
+        "issuerId": "30f19aad-923c-44c5-993b-6980dbfec67a",
+        "effectiveUtc": "2026-11-28T00:01:57.7000000",
+        "historical": true
+      },
+      "workspaceRemoved": true
     },
     "provider": {
       "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
@@ -239,10 +287,216 @@
       "safeToRetry": true
     }
   },
-  "nextAcceptance": {
-    "owner": "Authorized Azure SQL release operator",
-    "action": "Apply only migration 20261128_01_cleanup_r5_lk_issuer_fixture through the governed production migration workflow with mode apply, target through this migration and exact confirmation APPLY-PRODUCTION. Dispatch once, then independently read back every count. The protected serving-source check and read-only plan already passed on af320236102b614a4a659c4481d58870014e9316.",
-    "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
-    "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous."
+  "dispatchReconciliation": {
+    "checkedAtUtc": "2026-11-28T04:14:48+00:00",
+    "branch": "main",
+    "servingSha": "7124ea4ff1496b4938436521ec2df7042f530064",
+    "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+    "apply": {
+      "workflow": "run-production-db-migrations.yml",
+      "mode": "apply",
+      "through": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "confirmation": "APPLY-PRODUCTION",
+      "submissionCount": 2,
+      "runId": null,
+      "priorRegisteredRun": 46103427618,
+      "firstSubmissionResult": "No matching GitHub run or Azure job start. Protected plan 77 verified that the migration and all 21 records were still pending.",
+      "secondSubmission": {
+        "precedingPlanRun": 46134302555,
+        "windowUtc": "2026-11-28T10:17:24Z/2026-11-28T10:19:16Z",
+        "githubResponse": "Workflow run was successfully requested.",
+        "checkedAtUtc": "2026-11-28T10:20:26Z",
+        "registeredRunId": null,
+        "azureExecution": null,
+        "observed": "After refresh the workflow register still ended at plan 77. There was no later registered main dispatch and no new execution in the Azure migration job history. SQL counts from plan 77 predate this request."
+      }
+    },
+    "readback": {
+      "workflow": "inspect-deployed-lk-issuer-attempt.yml",
+      "expected_build": "7124ea4ff1496b4938436521ec2df7042f530064",
+      "operation_id": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+      "confirmation": "INSPECT-DEPLOYED-LK-ISSUER-MUTABLE-ONLY",
+      "submissionCount": 1,
+      "runId": null,
+      "priorRegisteredRun": 46097193078
+    },
+    "observed": "Both dispatch forms were submitted. The workflow lists and repository manual-run API contained no corresponding run ID when checked. The production database result remains unverified.",
+    "azureControlPlane": {
+      "checkedThroughUtc": "2026-11-28T10:13:00Z",
+      "resourceGroup": "khrental-prod-rg",
+      "job": "khrental-db-migrator",
+      "executionHistory": "The newest listed execution was khrental-db-migrator-v86yjkz, started at 02:16:23 UTC, before the two form submissions. Its execution status was Failed.",
+      "activityLog": "The 24-hour resource activity log contained 36 entries. Its newest Start a Container Apps Job entry was at 02:16:23 UTC on 28 November. Neither submitted operation had a corresponding later job start.",
+      "github": "Before plan 77, deployment 1977 was the only registered Actions run at the serving SHA. The latest registered migration was plan 76 and the latest issuer inspection was 9.",
+      "scope": "These observations cover job registration and starts. The resource activity log does not report the fixture's database contents."
+    },
+    "ownerManualApply": {
+      "run": 46136236863,
+      "job": 140952069312,
+      "workflowNumber": 78,
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46136236863/job/140952069312",
+      "createdAtUtc": "2026-11-28T10:39:57Z",
+      "actor": "WasanthaK",
+      "branch": "main",
+      "headSha": "6651c860760040f67247fe528736961b01797be4",
+      "mode": "apply",
+      "registration": "The owner reported this manual dispatch. GitHub registered it on the later main commit. The earlier acknowledgment on 7124ea4f has no corresponding run ID in the register.",
+      "precedingServingSha": "7124ea4ff1496b4938436521ec2df7042f530064",
+      "matchingDeployment": "https://github.com/WasanthaK/khrental/actions/runs/46136523185/job/140953239240",
+      "servingRevision": "khrental-app--0000556",
+      "servingCheckPassedAtUtc": "2026-11-28T10:50:03Z",
+      "publicHealth": {
+        "ok": true,
+        "connection": "ready"
+      },
+      "through": "all",
+      "previouslyAppliedMigrations": 25,
+      "onlyPendingMigration": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "checksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "execution": "khrental-db-migrator-v2nocag",
+      "conclusion": "failure",
+      "failedAtUtc": "2026-11-28T10:50:56Z",
+      "reason": "Azure SQL denied DELETE on dbo.auth_sessions to the dedicated migration executor. This was the first DELETE in the guarded transaction."
+    },
+    "subsequentReadOnlyPlan": {
+      "run": 46134302555,
+      "job": 140946067848,
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46134302555/job/140946067848",
+      "workflowNumber": 77,
+      "servingSha": "7124ea4ff1496b4938436521ec2df7042f530064",
+      "sqlReadUtc": "2026-11-28T10:16:59Z",
+      "conclusion": "success",
+      "appliedMigrations": 25,
+      "pendingMigrations": 1,
+      "pendingId": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "pendingChecksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "mutable": 21,
+      "unexpected": 2,
+      "initial": 2,
+      "retained": 1,
+      "result": "The protected plan verified the Ready revision against the workflow SHA and independently found the original 21 records still present. No cleanup had taken place. Plan 77 directly followed plan 76. GitHub had no queued, waiting or running main job at the subsequent check."
+    },
+    "postFailureReadOnlyPlan": {
+      "run": 46137203094,
+      "job": 140955043616,
+      "workflowNumber": 79,
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46137203094/job/140955043616",
+      "mode": "plan",
+      "through": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "sqlReadUtc": "2026-11-28T10:53:48Z",
+      "expectedAndServingSha": "6651c860760040f67247fe528736961b01797be4",
+      "revision": "khrental-app--0000556",
+      "appliedMigrations": 25,
+      "pendingMigrations": 1,
+      "pendingChecksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "mutable": 21,
+      "unexpected": 2,
+      "initial": 2,
+      "retained": 1,
+      "conclusion": "success"
+    },
+    "beforeCleanupIndependentReadback": {
+      "sql": {
+        "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+        "readOnly": true,
+        "tenants": 1,
+        "assignments": 2,
+        "issuers": 2,
+        "accounts": 1,
+        "users": 1,
+        "memberships": 1,
+        "properties": 1,
+        "agreements": 1,
+        "events": 5,
+        "audits": 5,
+        "authUsers": 1,
+        "authSessions": 1,
+        "listingPreferences": 1,
+        "safeToRetry": false,
+        "cleanupPreflight": {
+          "matched": true,
+          "subscriptionStatus": "canceled",
+          "issuerHistory": [
+            {
+              "assignmentId": "4a1aa809-e3ea-4c74-9c63-c18c7494d994",
+              "issuerId": "30f19aad-923c-44c5-993b-6980dbfec67a",
+              "effectiveUtc": "2026-11-28T00:01:57.7000000",
+              "historical": true
+            },
+            {
+              "assignmentId": "abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88",
+              "issuerId": "7744c522-545e-4373-9ba5-305c338fb227",
+              "effectiveUtc": "2026-12-27T18:01:54",
+              "historical": false
+            }
+          ],
+          "fullCleanupAllowed": false,
+          "unmodifiedListingPreference": true,
+          "listingMedia": 0,
+          "listingEnquiries": 0
+        }
+      },
+      "provider": {
+        "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+        "readOnly": true,
+        "liveChargingEnabled": false,
+        "clocks": 0,
+        "customers": 0,
+        "liveObjects": 0,
+        "safeToRetry": true
+      }
+    }
+  },
+  "postCleanupEvidence": {
+    "operatorReceipt": {
+      "source": "Owner-reported Azure SQL Query editor result",
+      "reportedLocalTime": "16:31:41",
+      "date": "2026-11-28",
+      "timeZoneAssumption": "Asia/Colombo",
+      "affectedRows": 21,
+      "message": "Query executed successfully"
+    },
+    "inspection": {
+      "workflowRun": 46138053871,
+      "job": 140957667945,
+      "scope": "Read-only SQL and Stripe inspection of the original operation",
+      "sha": "6651c860760040f67247fe528736961b01797be4",
+      "artifactId": 15260552118,
+      "sha256": "9e2a3e6de45068c37fa9efb76edb18a79af428a304f5d02f0469abb8953000ca",
+      "sqlHealth": "ready"
+    },
+    "postCleanupPlan": {
+      "workflowRun": 46138083913,
+      "job": 140957762618,
+      "sqlReadUtc": "2026-11-28T11:04:52Z",
+      "target": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "status": "SATISFIED_UNTRACKED",
+      "mutable": 0,
+      "unexpected": 0,
+      "initial": 2,
+      "retained": 1,
+      "checksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c"
+    },
+    "ledgerAdoption": {
+      "workflowRun": 46138277300,
+      "job": 140958358815,
+      "execution": "khrental-db-migrator-qvh44u6",
+      "recordedUtc": "2026-11-28T11:07:57Z",
+      "target": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "verifiedSatisfied": true,
+      "replayedMigrationSql": false
+    },
+    "finalLedgerReadback": {
+      "workflowRun": 46138489304,
+      "job": 140959002954,
+      "sqlReadUtc": "2026-11-28T11:10:18Z",
+      "mode": "plan",
+      "servingRevision": "khrental-app--0000556",
+      "target": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "checksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "ledgerState": "APPLIED",
+      "appliedMigrations": 26,
+      "pendingMigrations": 0
+    }
   }
 }
