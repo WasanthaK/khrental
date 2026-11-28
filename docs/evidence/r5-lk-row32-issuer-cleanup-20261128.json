@@ -1,0 +1,234 @@
+{
+  "row": "32",
+  "asOf": "2026-11-28",
+  "environment": "Deployed application, isolated synthetic XZ issuer schedule and Stripe sandbox",
+  "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+  "status": "Blocked on scoped Azure SQL cleanup",
+  "acceptedBusinessBehavior": {
+    "mountedRenewal": "https://github.com/WasanthaK/khrental/actions/runs/46001525355/job/140514099650",
+    "deployedBuild": "769ab32c603f21073fb7c42dcef92902254326e4",
+    "currency": "LKR",
+    "invoiceTotalMinor": 300000,
+    "initialIssuer": "R5 Synthetic Initial Issuer (US)",
+    "laterIssuer": "R5 Synthetic Later Issuer (LK)",
+    "observations": [
+      "Genuine recurring invoice event signed to the deployed receiver",
+      "Authenticated historical invoice retained its initial issuer after the later assignment",
+      "Viewer denied",
+      "Serving settings restored and migrator returned to plan-only"
+    ]
+  },
+  "reviewedChanges": [
+    "https://github.com/WasanthaK/khrental/pull/785",
+    "https://github.com/WasanthaK/khrental/pull/787",
+    "https://github.com/WasanthaK/khrental/pull/788",
+    "https://github.com/WasanthaK/khrental/pull/789"
+  ],
+  "protectedDeployments": [
+    "https://github.com/WasanthaK/khrental/actions/runs/46050844384",
+    "https://github.com/WasanthaK/khrental/actions/runs/46092506716/job/140816900963",
+    "https://github.com/WasanthaK/khrental/actions/runs/46094227493/job/140822557925",
+    "https://github.com/WasanthaK/khrental/actions/runs/46095812502/job/140827295126"
+  ],
+  "lastTestedBuild": "8df7c3dd207933ff4bb29c1d1d8370b19f5e2ca8",
+  "runs": [
+    {
+      "task": "Deployed historical receipt",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46046079787/job/140665602782",
+      "conclusion": "failure",
+      "artifact": 15221723836,
+      "sha256": "68785fc68e97715ecc7f496b1abb842e7c6d627b133e899c7c748f84656623c0",
+      "observation": "Behavior passed. SQL teardown reported EREQUEST."
+    },
+    {
+      "task": "Inspection 4",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46046969759/job/140668541430",
+      "conclusion": "failure",
+      "artifact": 15222931866,
+      "sha256": "db6f666a76b48021671c54d81dfcdfbf52c65be816376abec69cd6d1946fd7d0",
+      "observation": "Provider readback clear. SQL residue remained."
+    },
+    {
+      "task": "Cleanup 1",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46091254298/job/140812431014",
+      "conclusion": "failure",
+      "artifact": 15241496117,
+      "sha256": "7e48fb1733ba0a009fae037f72bbd19c8e2a1e65c29565c5630152cd5dbf2125",
+      "observation": "Fixture preflight stopped before deletion."
+    },
+    {
+      "task": "Inspection 5",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46091548492/job/140813379825",
+      "conclusion": "failure",
+      "artifact": 15241566310,
+      "sha256": "5a61e47e9ba0b710d9b30f0f37e90613468d48be60aeb45f14d52584dfabebf2",
+      "observation": "Verified retained SQL counts and zero provider objects."
+    },
+    {
+      "task": "Inspection 6",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46093272524/job/140818852771",
+      "conclusion": "failure",
+      "artifact": 15241169438,
+      "sha256": "9b3f4731d23133f520ddeeb0f3ea7202b4c486e57f9aeb99c41322e844b92eaf",
+      "observation": "Matched the exact fixture and canceled subscription. Residue prevented all-zero acceptance."
+    },
+    {
+      "task": "Cleanup 2",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46093488183/job/140819527414",
+      "conclusion": "failure",
+      "artifact": 15242550349,
+      "sha256": "fccb099872c278b3c1a9b9166c3d38b34dd5bfe2aa9008d8b07f298ba80acbc5",
+      "observation": "Provider and identity checks passed. A SQL request failed within the transaction."
+    },
+    {
+      "task": "Inspection 7",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46095007904/job/140824250967",
+      "conclusion": "failure",
+      "artifact": 15242626968,
+      "sha256": "62526b2c59927c117a7b3f482e3e6c6e5117775b66bb595c5ec275bce063b20e",
+      "observation": "Verified rollback, the unmodified listing preference, one effective and one future synthetic assignment."
+    },
+    {
+      "task": "Mutable cleanup 3",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46096602595/job/140829268432",
+      "conclusion": "failure",
+      "artifact": 15242704023,
+      "sha256": "39361847c76cad4946818537759ae7ad3393682c4d5eaddc0e72de0934f98f56",
+      "observation": "The exact cleanup transaction received SQL error 229 (permission denied). The artifact does not identify the denied object."
+    },
+    {
+      "task": "Cost and post-cleanup inspection 8",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46096872100/job/140830145844",
+      "conclusion": "failure",
+      "artifact": 15244020947,
+      "sha256": "b5c3fa27494c79c2b5473e06b20fc07b54f5307cf1326b95241e8da6eeaa59b9",
+      "observation": "Captured provider, capacity and backup evidence. The mutable-cleanup postcondition did not pass. The itemized billing query did not return data."
+    },
+    {
+      "task": "Rollback inspection 9",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46097193078/job/140831154371",
+      "conclusion": "failure",
+      "artifact": 15244041347,
+      "sha256": "5795a15e9267894ff865c3ae679498d1b858dad5181ac7e10bc8fe859478a4fc",
+      "observation": "The SQL and provider reports matched inspection 7 field for field. The operation remains occupied."
+    }
+  ],
+  "ownerDisposition": {
+    "date": "2026-11-28",
+    "scope": "Initial synthetic XZ assignment and its issuer only",
+    "terms": "Keep these two records if there are no charges or costs associated with retaining them. Otherwise document and remove them.",
+    "remainingMutableRecords": 21,
+    "protectedRecords": 2
+  },
+  "costEvidence": {
+    "asOfUtc": "2026-11-28T02:12:33.340667+00:00",
+    "readOnly": true,
+    "unavailable": {
+      "billing": "read_failed"
+    },
+    "pooled": false,
+    "database": {
+      "exhaustion": "BillOverUsage",
+      "maxSizeBytes": 34359738368,
+      "sku": "GP_S_Gen5_2",
+      "tier": "GeneralPurpose",
+      "useFreeLimit": true
+    },
+    "longTermRetention": {
+      "monthly": "PT0S",
+      "weekly": "PT0S",
+      "yearly": "PT0S"
+    },
+    "data": {
+      "storage": {
+        "latestUtc": "2026-11-27T02:12:00Z",
+        "latestMaximumBytes": 46530560,
+        "fourDayMaximumBytes": 46530560
+      },
+      "allocated_data_storage": {
+        "latestUtc": "2026-11-27T02:12:00Z",
+        "latestMaximumBytes": 67108864,
+        "fourDayMaximumBytes": 67108864
+      }
+    },
+    "backups": {
+      "full_backup_size_bytes": {
+        "latestUtc": "2026-11-27T02:12:00Z",
+        "latestMaximumBytes": 7340032,
+        "fourDayMaximumBytes": 7340032
+      },
+      "diff_backup_size_bytes": {
+        "latestUtc": "2026-11-27T02:12:00Z",
+        "latestMaximumBytes": 28311552,
+        "fourDayMaximumBytes": 65011712
+      },
+      "log_backup_size_bytes": {
+        "latestUtc": "2026-11-27T02:12:00Z",
+        "latestMaximumBytes": 182452224,
+        "fourDayMaximumBytes": 356515840
+      }
+    },
+    "backupFourDayUpperBoundMiB": 409,
+    "storageAndBackupAllowanceBytesEach": 34359738368,
+    "pricingReference": "https://learn.microsoft.com/en-us/azure/azure-sql/database/free-offer-faq",
+    "finding": "The two existing passive records fit within the existing data allocation and the free data and backup allowances at measured usage. Long-term retention was disabled. No extra retention charge is indicated. The month-to-date billing query returned no usable result.",
+    "futureCostCondition": "Document and remove the two records through the governed data-owner process if retention starts incurring a charge."
+  },
+  "lastIndependentReadback": {
+    "sql": {
+      "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+      "readOnly": true,
+      "tenants": 1,
+      "assignments": 2,
+      "issuers": 2,
+      "accounts": 1,
+      "users": 1,
+      "memberships": 1,
+      "properties": 1,
+      "agreements": 1,
+      "events": 5,
+      "audits": 5,
+      "authUsers": 1,
+      "authSessions": 1,
+      "listingPreferences": 1,
+      "safeToRetry": false,
+      "cleanupPreflight": {
+        "matched": true,
+        "subscriptionStatus": "canceled",
+        "issuerHistory": [
+          {
+            "assignmentId": "4a1aa809-e3ea-4c74-9c63-c18c7494d994",
+            "issuerId": "30f19aad-923c-44c5-993b-6980dbfec67a",
+            "effectiveUtc": "2026-11-28T00:01:57.7000000",
+            "historical": true
+          },
+          {
+            "assignmentId": "abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88",
+            "issuerId": "7744c522-545e-4373-9ba5-305c338fb227",
+            "effectiveUtc": "2026-12-27T18:01:54",
+            "historical": false
+          }
+        ],
+        "fullCleanupAllowed": false,
+        "unmodifiedListingPreference": true,
+        "listingMedia": 0,
+        "listingEnquiries": 0
+      }
+    },
+    "provider": {
+      "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+      "readOnly": true,
+      "liveChargingEnabled": false,
+      "clocks": 0,
+      "customers": 0,
+      "liveObjects": 0,
+      "safeToRetry": true
+    }
+  },
+  "nextAcceptance": {
+    "owner": "Authorized Azure SQL release operator",
+    "action": "Resolve SQL error 229 through the existing governed release process for this fixture. Use the reviewed mutable-only transaction for this operation once authority is established, then independently read back every count. Check current main, serving source and registered runs before action.",
+    "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
+    "unchangedOperation": "Do not replay the invoice acceptance or redispatch unchanged cleanup under the denied identity."
+  }
+}
