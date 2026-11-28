@@ -172,6 +172,23 @@ const inspectSandboxCollectors = async pool => {
   return {satisfied:Boolean(recordset[0].ready),detail:'Dated sandbox collector assignments, immutable history and billing-account binding'};
 };
 
+const inspectMarketTaxRules = async pool => {
+  const {recordset} = await pool.request().query(`
+    SELECT CASE WHEN OBJECT_ID(N'dbo.management_market_tax_rules',N'U') IS NOT NULL
+      AND OBJECT_ID(N'dbo.management_market_tax_rule_at',N'IF') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID(N'dbo.management_market_tax_rules')
+        AND name=N'UQ_management_market_tax_rule_date' AND is_unique=1 AND is_disabled=0)
+      AND EXISTS (SELECT 1 FROM sys.triggers WHERE object_id=OBJECT_ID(N'dbo.management_market_tax_rule_history')
+        AND is_disabled=0)
+      AND (SELECT COUNT(*) FROM sys.check_constraints
+        WHERE parent_object_id=OBJECT_ID(N'dbo.management_market_tax_rules')
+          AND name IN(N'CK_management_market_tax_vat',N'CK_management_market_tax_withholding')
+          AND is_disabled=0 AND is_not_trusted=0)=2
+      THEN 1 ELSE 0 END AS ready`);
+  return {satisfied:Boolean(recordset[0].ready),
+    detail:'Effective-dated immutable VAT and withholding rule switches'};
+};
+
 const inspectMarketIssuers = async pool => {
   const {recordset} = await pool.request().query(`
     SELECT CASE WHEN OBJECT_ID(N'dbo.management_invoice_issuers', N'U') IS NOT NULL
@@ -615,6 +632,12 @@ const MIGRATIONS = [
     file:'migrations/20261128_01_cleanup_r5_lk_issuer_fixture.sql',
     inspect:inspectR5IssuerFixtureCleanup,
     verify:async pool=>assertSatisfied(inspectR5IssuerFixtureCleanup(pool),'R5 issuer fixture cleanup verification failed.')
+  },
+  {
+    id:'20261128_02_market_tax_rules',
+    file:'migrations/20261128_02_market_tax_rules.sql',
+    inspect:inspectMarketTaxRules,
+    verify:async pool=>assertSatisfied(inspectMarketTaxRules(pool),'Market tax-rule schema verification failed.')
   }
 ];
 

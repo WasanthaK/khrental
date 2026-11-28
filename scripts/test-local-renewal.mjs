@@ -85,6 +85,8 @@ export async function verifyLocalRenewal({store, q, tenantId, versionId, laterIs
     assert.equal(before.issuer.legalName, 'Quixo Inc.');
     assert.equal(before.issuer.country, 'US');
     assert.equal(before.monthlyFeeMinor, 210002);
+    assert.equal(before.invoiceTotalMinor, 210002);
+    assert.deepEqual([before.tax.vat.status,before.tax.withholding.status],['disabled','disabled']);
     await laterIssuer(new Date((invoice.created + 1) * 1000));
     assert.deepEqual((await (await receipt()).json()).data, before);
     role = 'viewer';

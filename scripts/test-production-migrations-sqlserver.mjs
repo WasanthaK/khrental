@@ -65,7 +65,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261112_03_management_splits',
   '20261124_01_market_invoice_issuers',
   '20261127_01_market_sandbox_collectors',
-  '20261128_01_cleanup_r5_lk_issuer_fixture'
+  '20261128_01_cleanup_r5_lk_issuer_fixture',
+  '20261128_02_market_tax_rules'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
