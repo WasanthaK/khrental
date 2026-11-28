@@ -26,6 +26,8 @@ let cessationMaintenanceId=null;
 let cessationInvoiceId=null,cessationPaymentId=null;
 let cessationSettlementId=null,cessationDepositId=null;
 let cessationEnquiryId=null,cessationOfferId=null;
+const endedRestart=scenario==='ended-subscription-restart';
+let restartDuesId=null;
 const hostedCheckout=scenario==='http-hosted-checkout';
 let checkoutSessionId=null,checkoutCommandId=null;
 const env={...process.env,MANAGEMENT_INVENTORY_SCHEMA_READY:'true',MANAGEMENT_CESSATION_SCHEMA_READY:'true',
@@ -81,6 +83,7 @@ const cleanupFixture=async()=>{
   // Keep evidence on failure; never replay an ambiguous creation. Known fixture
   // subscription cancellation is bounded and verified, with no proration/invoice.
   try{
+    if(endedRestart){await cleanupEndedRestart();}
     if(hostedCheckout&&checkoutSessionId){
       let session=await read('/v1/checkout/sessions/'+checkoutSessionId);
       assert.equal(session.livemode,false);assert.equal(String(session.metadata.quixo_tenant).toLowerCase(),tenantId);
@@ -166,6 +169,104 @@ const cleanupFixture=async()=>{
   await closeMssqlPool();
 };
 
+
+async function verifyEndedRestart() {
+  stage='ended_subscription_dues';
+  const original=await provider(), initialInventory=await store.inventory(tenantId);
+  assert.equal(original.metadata.acceptance_fixture,tenantId);
+  const bill=await write('/v1/invoices',{customer:customer.id,subscription:original.id,auto_advance:false,
+    pending_invoice_items_behavior:'exclude',metadata:{acceptance_fixture:tenantId}},'prior-dues-invoice');
+  restartDuesId=bill.id;
+  await write('/v1/invoiceitems',{customer:customer.id,invoice:bill.id,currency:'usd',amount:200,
+    description:'Prior management dues for private sandbox restart acceptance'},'prior-dues-line');
+  const due=await write('/v1/invoices/'+bill.id+'/finalize',{auto_advance:false},'finalize-prior-dues');
+  assert.equal(due.status,'open');assert.equal(due.amount_remaining,200);
+  await stripe.request('DELETE','/v1/subscriptions/'+original.id,{prorate:false,invoice_now:false},'paid-stock:'+tenantId+':end-prior-period');
+  const ended=await service.refresh(tenantId);
+  assert.equal(ended.status,'canceled');assert.equal(ended.entitlement.management,false);assert.equal(ended.entitlement.historicalAccess,true);
+  const review=await service.reviewReactivation({tenantId,actorId});
+  assert.deepEqual(review.dues,[{currency:'usd',amountMinor:200}]);assert.equal(review.quantity,2);assert.equal(review.amountMinor,1000);
+  const command={id:randomUUID(),tenantId,actorId,controlId:null,reviewHash:review.reviewHash};
+  await assert.rejects(service.reactivate(command),{code:'BILLING_REACTIVATION_DUES'});
+  const sessions=()=>read('/v1/checkout/sessions',{customer:customer.id,limit:100});
+  const blocked=await sessions();assert.equal(blocked.has_more,false);assert.equal(blocked.data.length,0);
+  check('all_prior_dues_block_checkout_and_preserve_history');
+  const settled=await write('/v1/invoices/'+due.id+'/pay',{payment_method:objectId(customer.invoice_settings.default_payment_method)},'settle-prior-dues');
+  assert.equal(settled.status,'paid');assert.equal(settled.amount_paid,200);assert.equal(settled.amount_remaining,0);
+  assert.equal((await service.refresh(tenantId)).entitlement.management,false);
+  const approved=await service.reviewReactivation({tenantId,actorId});
+  assert.deepEqual(approved.dues,[]);assert.equal(approved.reviewHash,review.reviewHash);
+  stage='ended_subscription_checkout';
+  checkoutCommandId=command.id;
+  const opened=await service.reactivate(command);
+  assert.equal(new URL(opened.url).hostname,'checkout.stripe.com');
+  assert.equal((await service.reactivate({...command,id:randomUUID()})).url,opened.url);
+  const listing=await sessions();assert.equal(listing.has_more,false);assert.equal(listing.data.length,1);
+  const checkout=listing.data[0];checkoutSessionId=checkout.id;
+  assert.equal(checkout.livemode,false);assert.equal(checkout.status,'open');assert.equal(checkout.mode,'subscription');
+  assert.equal(String(checkout.metadata.quixo_operation).toLowerCase(),command.id);assert.equal(checkout.amount_total,1000);
+  assert.equal((await service.refresh(tenantId)).entitlement.management,false);
+  check('settled_dues_and_open_checkout_keep_paid_management_locked');
+  // Only the opaque test session ID is logged. Obtain the payment link privately.
+  console.log('PAID_HOSTED_CHECKOUT_READY='+JSON.stringify({operation:tenantId,commandId:command.id,sessionId:checkoutSessionId,waitSeconds:600}));
+  let paid;
+  for(let attempt=0;attempt<120;attempt++){
+    paid=await read('/v1/checkout/sessions/'+checkoutSessionId);
+    if(paid.status==='complete'){break;}
+    assert.equal(paid.status,'open');await delay(5000);
+  }
+  assert.equal(paid.status,'complete');assert.equal(paid.payment_status,'paid');assert.equal(paid.livemode,false);
+  assert.equal(objectId(paid.customer),customer.id);
+  const newId=objectId(paid.subscription);assert.ok(newId&&newId!==original.id);
+  const current=await read('/v1/subscriptions/'+newId);
+  const invoice=await read('/v1/invoices/'+objectId(current.latest_invoice));
+  assert.equal(invoice.billing_reason,'subscription_create');assert.equal(invoice.status,'paid');
+  assert.equal(invoice.amount_paid,1000);assert.equal(invoice.amount_remaining,0);assert.equal(invoice.currency,'usd');
+  assert.equal(invoice.lines.data.length,1);assert.equal(invoice.lines.data[0].quantity,2);
+  assert.ok(invoice.lines.data[0].period.start>=checkout.created);
+  for(let attempt=0;attempt<2;attempt++){
+    const result=await service.refresh(tenantId);assert.equal(result.entitlement.state,'active');assert.equal(result.billedQuantity,2);
+    assert.deepEqual(await store.inventory(tenantId),initialInventory);
+    assert.equal((await store.account(tenantId)).stripe_subscription_id,newId);
+  }
+  assert.equal((await provider()).status,'canceled');
+  assert.equal((await read('/v1/invoices/'+proof.initialInvoice)).status,'paid');
+  assert.equal((await read('/v1/invoices/'+due.id)).status,'paid');
+  const ledger=await store.read("SELECT id FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action='sandbox.reactivation.paid'",{tenantId});
+  assert.equal(ledger.length,1);
+  proof.restartPaid=true;proof.historyRetained=true;proof.newPeriodMinor=invoice.amount_paid;
+  check('new_period_paid_once_without_gap_charge_and_original_history_retained');
+}
+
+async function cleanupEndedRestart() {
+  if(!customer){return;}
+  const owner=await read('/v1/customers/'+customer.id);
+  assert.equal(owner.livemode,false);assert.equal(owner.metadata.acceptance_fixture,tenantId);
+  const listing=await read('/v1/checkout/sessions',{customer:owner.id,limit:100});
+  assert.equal(listing.has_more,false);assert.ok(listing.data.length<=1);
+  for(let session of listing.data){
+    assert.equal(session.livemode,false);assert.equal(objectId(session.customer),owner.id);
+    assert.equal(String(session.metadata.quixo_operation).toLowerCase(),checkoutCommandId);
+    assert.equal(String(session.metadata.quixo_tenant).toLowerCase(),tenantId);
+    if(session.status==='open'){
+      await write('/v1/checkout/sessions/'+session.id+'/expire',{},'expire-restart');
+      session=await read('/v1/checkout/sessions/'+session.id);
+    }
+    assert.ok(['expired','complete'].includes(session.status));
+    if(objectId(session.subscription)){
+      const sub=await read('/v1/subscriptions/'+objectId(session.subscription));
+      assert.equal(sub.livemode,false);assert.equal(objectId(sub.customer),owner.id);assert.notEqual(sub.id,subscription.id);
+      if(sub.status!=='canceled'){await stripe.request('DELETE','/v1/subscriptions/'+sub.id,{prorate:false,invoice_now:false},'paid-stock:'+tenantId+':cleanup-new-period');}
+      assert.equal((await read('/v1/subscriptions/'+sub.id)).status,'canceled');
+    }
+  }
+  if(restartDuesId){
+    const inv=await read('/v1/invoices/'+restartDuesId);
+    assert.equal(inv.livemode,false);assert.equal(objectId(inv.customer),owner.id);assert.equal(inv.metadata.acceptance_fixture,tenantId);
+    if(inv.status==='open'){assert.equal((await write('/v1/invoices/'+inv.id+'/void',{},'void-fixture-dues')).status,'void');}
+    if(inv.status==='draft'){assert.equal(inv.auto_advance,false);}
+  }
+}
 
 async function verifyCessationResponseLoss() {
   stage = 'cessation_response_loss';
@@ -1253,7 +1354,7 @@ const verifyHostedCheckout=async()=>{
 try{
   assert.match(tenantId||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   assert.ok(!protectedIds.includes(tenantId));
-  assert.ok(['cessation-approved-settlement','cessation-response-loss','cessation-verified-payment','cessation-zero-draft','cessation-open-tenancy','invoice-preview-recovery','transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cessation-reservation-conflict','cleanup-cessation-renewal'].includes(scenario));
+  assert.ok(['ended-subscription-restart','cessation-approved-settlement','cessation-response-loss','cessation-verified-payment','cessation-zero-draft','cessation-open-tenancy','invoice-preview-recovery','transitions','promotion','http-permissions','http-promotion','http-transitions','http-hosted-checkout','cleanup-hosted-checkout','cessation-renewal','restoration-renewal','split-renewal','zero-stock-cancellation','cessation-maintenance-conflict','cessation-financial-conflict','cessation-settlement-deposit-conflict','cessation-reservation-conflict','cleanup-cessation-renewal'].includes(scenario));
   for(const flag of ['MANAGEMENT_BILLING_SANDBOX_ENABLED','MANAGEMENT_BILLING_SCHEMA_READY','MANAGEMENT_RECOVERY_SCHEMA_READY']){assert.equal(process.env[flag],'true');}
   if(scenario==='http-promotion'||httpTransitions||hostedCheckout){
     for(const flag of ['MANAGEMENT_INVENTORY_SCHEMA_READY','MANAGEMENT_CESSATION_SCHEMA_READY','MANAGEMENT_RESTORATION_SCHEMA_READY','MANAGEMENT_SPLIT_SCHEMA_READY','MANAGEMENT_BILLING_WRITE_ENFORCEMENT_ENABLED']){assert.equal(process.env[flag],'true',flag);}
@@ -1308,7 +1409,7 @@ try{
   });
   const initial=await service.refresh(tenantId);assert.equal(initial.entitlement.state,'active');assert.equal(await count(),2);
   check('genuine_paid_capacity_reconciled');
-  if(scenario==='cessation-response-loss'){await verifyCessationResponseLoss();}else if(scenario==='cessation-open-tenancy'){await verifyOpenTenancyCessation();}else if(scenario==='invoice-preview-recovery'){await verifyInvoicePreviewRecovery();}else if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-verified-payment'||scenario==='cessation-financial-conflict'||scenario==='cessation-zero-draft'){await verifyCessationFinancialObligation();}else if(settlementInventoryChange||scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(scenario==='cessation-reservation-conflict'){await verifyCessationReservation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
+  if(endedRestart){await verifyEndedRestart();}else if(scenario==='cessation-response-loss'){await verifyCessationResponseLoss();}else if(scenario==='cessation-open-tenancy'){await verifyOpenTenancyCessation();}else if(scenario==='invoice-preview-recovery'){await verifyInvoicePreviewRecovery();}else if(scenario==='cessation-maintenance-conflict'){await verifyCessationObligation();}else if(scenario==='cessation-verified-payment'||scenario==='cessation-financial-conflict'||scenario==='cessation-zero-draft'){await verifyCessationFinancialObligation();}else if(settlementInventoryChange||scenario==='cessation-settlement-deposit-conflict'){await verifyCessationSettlementDeposit();}else if(scenario==='cessation-reservation-conflict'){await verifyCessationReservation();}else if(zeroStockCancellation){await verifyZeroStockCancellation();}else if(cessationRenewal){await verifyCessationRenewal();}else if(scenario==='http-permissions'){
     proof.scope='genuine paid sandbox fixture + deployed public HTTP permission and command isolation';
     proof.credentialLoginAccepted=false;proof.httpStockMutationAccepted=false;
     stage='http_sessions';
