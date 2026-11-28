@@ -1,0 +1,39 @@
+{
+  "checklist_row": "25",
+  "ledger": "OP08.1",
+  "result": "pass",
+  "date": "2026-11-28",
+  "environment": "Deployed Quixo.Homes public seeker signup",
+  "serving_build": {
+    "source": "https://app.quixo.homes/build-info.json",
+    "read_after_submission": "6651c860760040f67247fe528736961b01797be4"
+  },
+  "original_attempt": {
+    "record": "https://github.com/WasanthaK/khrental/pull/800",
+    "result": "Existing identity. Zero challenges, zero provider acceptances and no receipt for the original attempt."
+  },
+  "matched_attempt": {
+    "recipient": "Owner-authorized QA alias redacted",
+    "authorized_requests": 1,
+    "submitted_utc": "2026-11-28T15:13:58.102Z",
+    "ui_result": "The public site displayed the check-inbox reminder.",
+    "send_record": {
+      "source": "Operator read-only query of dbo.public_signup_challenges, filtered by the exact designated email_normalized and issued_at window.",
+      "issued_at_from_utc_inclusive": "2026-11-28T15:13:00Z",
+      "issued_at_to_utc_exclusive": "2026-11-28T15:16:00Z",
+      "requests": 1,
+      "accepted": 1,
+      "accepted_utc": "2026-11-28T15:13:59.1210000Z",
+      "accepted_asia_colombo": "2026-11-28T20:43:59.121+05:30"
+    },
+    "receipt": {
+      "source": "Mailbox holder supplied a Gmail inbox screenshot in the acceptance conversation.",
+      "sender_display_name": "Quixo.Homes",
+      "subject": "Verify your Quixo.Homes email address",
+      "displayed_arrival_asia_colombo": "2026-11-28 20:44",
+      "display_precision": "minute",
+      "screenshot_sha256": "dc35b844f823acf3dd4a21c9f8ffe7e08d135387382b5ccc2f32a4c1a279111d",
+      "correlation": "The holder returned the receipt in response to the check for the designated alias. The inbox list shows the sender, subject and time. The recipient filter comes from the SQL readback."
+    }
+  }
+}
