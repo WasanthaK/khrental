@@ -1,5 +1,6 @@
 // R5 row 32: read-only production SQL reconciliation from the isolated executor identity.
 import assert from 'node:assert/strict';
+import {fixtureFailure, readIssuerCleanupFixture} from './lk-issuer-cleanup-fixture.mjs';
 import {createBillingStore} from '/app/src/api/managementBilling/store.js';
 import {closeMssqlPool} from '/app/src/api/mssql/pool.js';
 
@@ -30,6 +31,14 @@ try{
   const result={operation,readOnly:true,tenants,assignments,issuers,accounts,users,memberships,
     properties,agreements,events,audits,authUsers,authSessions};
   result.safeToRetry=Object.entries(result).filter(([,value])=>typeof value==='number').every(([,value])=>value===0);
+  if (!result.safeToRetry) {
+    try {
+      const fixture=await readIssuerCleanupFixture(store.read,operation);
+      result.cleanupPreflight={matched:true,subscriptionStatus:fixture.subscriptionStatus};
+    } catch (error) {
+      result.cleanupPreflight={matched:false,check:fixtureFailure(error)};
+    }
+  }
   console.log('LK_ISSUER_SQL_RECONCILIATION='+JSON.stringify(result));
   assert.equal(result.safeToRetry,true,'SQL residue requires cleanup; do not dispatch');
 }catch(error){
