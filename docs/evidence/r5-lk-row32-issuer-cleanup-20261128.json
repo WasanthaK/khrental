@@ -3,7 +3,7 @@
   "asOf": "2026-11-28",
   "environment": "Deployed application, isolated synthetic XZ issuer schedule and Stripe sandbox",
   "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
-  "status": "Plan 77 confirmed the initial apply had made no change. GitHub acknowledged the subsequent apply request, with its run ID and outcome still unresolved. Independent inspection was submitted once.",
+  "status": "Blocked on Azure SQL data-owner access. Manual apply 78 reached the reviewed cleanup and failed at its first DELETE. Independent read-only plan 79 verified rollback and all 21 mutable records remain.",
   "acceptedBusinessBehavior": {
     "mountedRenewal": "https://github.com/WasanthaK/khrental/actions/runs/46001525355/job/140514099650",
     "deployedBuild": "769ab32c603f21073fb7c42dcef92902254326e4",
@@ -31,9 +31,10 @@
     "https://github.com/WasanthaK/khrental/actions/runs/46094227493/job/140822557925",
     "https://github.com/WasanthaK/khrental/actions/runs/46095812502/job/140827295126",
     "https://github.com/WasanthaK/khrental/actions/runs/46102765414/job/140849060824",
-    "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111"
+    "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111",
+    "https://github.com/WasanthaK/khrental/actions/runs/46136523185/job/140953239240"
   ],
-  "lastTestedBuild": "af320236102b614a4a659c4481d58870014e9316",
+  "lastTestedBuild": "6651c860760040f67247fe528736961b01797be4",
   "runs": [
     {
       "task": "Deployed historical receipt",
@@ -132,6 +133,24 @@
       "url": "https://github.com/WasanthaK/khrental/actions/runs/46105163526/job/140856519111",
       "conclusion": "success",
       "observation": "The evidence-only merge moved main after plan 76. The protected deployment verified serving SHA 7124ea4ff1496b4938436521ec2df7042f530064 on ready revision ending in 0000555 and live SQL connectivity. The public build-info receipt independently returned the same SHA."
+    },
+    {
+      "task": "Protected deployment 1990",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46136523185/job/140953239240",
+      "conclusion": "success",
+      "observation": "Public build, Ready revision khrental-app--0000556, dedicated apply and read-only plan matched 6651c860760040f67247fe528736961b01797be4. Independent SQL health reported ready."
+    },
+    {
+      "task": "Owner manual apply 78",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46136236863/job/140952069312",
+      "conclusion": "failure",
+      "observation": "Input through=all skipped 25 recorded migrations. The sole pending migration 20261128_01_cleanup_r5_lk_issuer_fixture reached its first DELETE. The dedicated identity was denied on dbo.auth_sessions."
+    },
+    {
+      "task": "Independent post-failure plan 79",
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46137203094/job/140955043616",
+      "conclusion": "success",
+      "observation": "The exact cleanup remained PENDING. The read-only SQL check found mutable=21, unexpected=2, initial=2, retained=1, matching plan 77 before the failed apply."
     }
   ],
   "ownerDisposition": {
@@ -257,12 +276,12 @@
     }
   },
   "nextAcceptance": {
-    "owner": "Authorized Azure SQL release operator",
-    "action": "Trace the acknowledged apply request submitted after plan 77 to a registered run or a definitive rejection. Preserve the request while registration is unresolved. After a confirmed apply, index the independent SQL and Stripe readback for the exact fixture.",
+    "owner": "Authorized Azure SQL database administrator or delegated data owner",
+    "action": "Use the existing database-owner change process to execute the reviewed operation-specific cleanup on the verified serving source. Reconcile the SQL state and migration ledger, then run the independent retained-issuer SQL and Stripe inspection for this operation.",
     "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
-    "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous.",
-    "applyBuild": "7124ea4ff1496b4938436521ec2df7042f530064",
-    "confirmationScope": "Permanently remove the 21 mutable synthetic records, including the later issuer and its assignment. Retain the exact original issuer and assignment. The latest registered migration was read-only plan 76 at preparation."
+    "unchangedOperation": "Preserve the previously acknowledged request as uncorrelated. Keep the serving identity and executor grants intact. Do not repeat apply 78 with the denied identity.",
+    "applyBuild": "6651c860760040f67247fe528736961b01797be4",
+    "confirmationScope": "Owner approved 19 synthetic workspace records plus the later XZ issuer and assignment. Retain the original issuer and assignment per the recorded cost decision. Run 79 verified the full starting state again."
   },
   "dispatchReconciliation": {
     "checkedAtUtc": "2026-11-28T04:14:48+00:00",
@@ -307,6 +326,34 @@
       "github": "Before plan 77, deployment 1977 was the only registered Actions run at the serving SHA. The latest registered migration was plan 76 and the latest issuer inspection was 9.",
       "scope": "These observations cover job registration and starts. The resource activity log does not report the fixture's database contents."
     },
+    "ownerManualApply": {
+      "run": 46136236863,
+      "job": 140952069312,
+      "workflowNumber": 78,
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46136236863/job/140952069312",
+      "createdAtUtc": "2026-11-28T10:39:57Z",
+      "actor": "WasanthaK",
+      "branch": "main",
+      "headSha": "6651c860760040f67247fe528736961b01797be4",
+      "mode": "apply",
+      "registration": "The owner reported this manual dispatch. GitHub registered it on the later main commit. The earlier acknowledgment on 7124ea4f has no corresponding run ID in the register.",
+      "precedingServingSha": "7124ea4ff1496b4938436521ec2df7042f530064",
+      "matchingDeployment": "https://github.com/WasanthaK/khrental/actions/runs/46136523185/job/140953239240",
+      "servingRevision": "khrental-app--0000556",
+      "servingCheckPassedAtUtc": "2026-11-28T10:50:03Z",
+      "publicHealth": {
+        "ok": true,
+        "connection": "ready"
+      },
+      "through": "all",
+      "previouslyAppliedMigrations": 25,
+      "onlyPendingMigration": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "checksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "execution": "khrental-db-migrator-v2nocag",
+      "conclusion": "failure",
+      "failedAtUtc": "2026-11-28T10:50:56Z",
+      "reason": "Azure SQL denied DELETE on dbo.auth_sessions to the dedicated migration executor. This was the first DELETE in the guarded transaction."
+    },
     "subsequentReadOnlyPlan": {
       "run": 46134302555,
       "job": 140946067848,
@@ -324,6 +371,25 @@
       "initial": 2,
       "retained": 1,
       "result": "The protected plan verified the Ready revision against the workflow SHA and independently found the original 21 records still present. No cleanup had taken place. Plan 77 directly followed plan 76. GitHub had no queued, waiting or running main job at the subsequent check."
+    },
+    "postFailureReadOnlyPlan": {
+      "run": 46137203094,
+      "job": 140955043616,
+      "workflowNumber": 79,
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46137203094/job/140955043616",
+      "mode": "plan",
+      "through": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "sqlReadUtc": "2026-11-28T10:53:48Z",
+      "expectedAndServingSha": "6651c860760040f67247fe528736961b01797be4",
+      "revision": "khrental-app--0000556",
+      "appliedMigrations": 25,
+      "pendingMigrations": 1,
+      "pendingChecksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "mutable": 21,
+      "unexpected": 2,
+      "initial": 2,
+      "retained": 1,
+      "conclusion": "success"
     }
   }
 }
