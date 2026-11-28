@@ -33,6 +33,18 @@ export async function readIssuerCleanupFixture(query, operation) {
   const [property] = properties;
   requireMatch(property.name === 'R5 synthetic LKR 100000 dwelling', 'fixture.property.name');
   requireMatch(property.status === 'rented' && property.propertytype === 'house' && property.country_code === 'LK', 'fixture.property.state');
+  const preferences = await query(`SELECT p.public_id,p.tenant_id,p.property_id,p.country_code,p.updated_by,p.location_label,p.public_headline,
+    p.opted_out,p.opted_out_at,
+    (SELECT COUNT_BIG(*) FROM dbo.public_listing_media m WHERE m.listing_public_id=p.public_id) AS media_count,
+    (SELECT COUNT_BIG(*) FROM dbo.property_enquiries e WHERE e.listing_public_id=p.public_id) AS enquiry_count
+    FROM dbo.public_listing_preferences p WHERE p.tenant_id=@id OR p.property_id=@property`, {id:operation,property:property.id});
+  requireMatch(preferences.length === 1, 'fixture.preference.count');
+  const [preference] = preferences;
+  requireMatch(lower(preference.property_id) === lower(property.id) && lower(preference.tenant_id) === operation &&
+    preference.country_code === 'LK', 'fixture.preference.binding');
+  requireMatch(preference.updated_by === null && preference.location_label === null && preference.public_headline === null &&
+    !preference.opted_out && preference.opted_out_at === null, 'fixture.preference.modified');
+  requireMatch(Number(preference.media_count) === 0 && Number(preference.enquiry_count) === 0, 'fixture.preference.children');
   const agreements = await query('SELECT propertyid,status,rentamount FROM dbo.agreements WHERE tenant_id=@id', {id:operation});
   requireMatch(agreements.length === 1, 'fixture.agreement.count');
   const [agreement] = agreements;
@@ -56,7 +68,9 @@ export async function readIssuerCleanupFixture(query, operation) {
     requireMatch(account.subscription_status === 'active', 'fixture.account.status');
   }
 
-  const assignments = await query(`SELECT a.issuer_id,a.approval_reference,i.legal_name,i.country_code
+  const assignments = await query(`SELECT a.id,a.issuer_id,a.approval_reference,i.legal_name,i.country_code,
+    CONVERT(VARCHAR(33),a.effective_at_utc,126) AS effective_utc,
+    CASE WHEN a.effective_at_utc<=SYSUTCDATETIME() THEN 1 ELSE 0 END AS effective
     FROM dbo.management_market_issuer_assignments a JOIN dbo.management_invoice_issuers i ON i.id=a.issuer_id
     WHERE a.market='XZ' ORDER BY a.effective_at_utc,a.id`);
   requireMatch(assignments.length === 2, 'fixture.assignment.count');
@@ -65,6 +79,7 @@ export async function readIssuerCleanupFixture(query, operation) {
     initial.legal_name === 'R5 Synthetic Initial Issuer' && initial.country_code === 'US', 'fixture.assignment.initial');
   requireMatch(later.approval_reference === 'R5 row 32 isolated later synthetic assignment' &&
     later.legal_name === 'R5 Synthetic Later Issuer' && later.country_code === 'LK', 'fixture.assignment.later');
+  requireMatch(assignments.every(row => row.id && row.effective_utc && [0,1].includes(row.effective)), 'fixture.assignment.dates');
   const issuerIds = assignments.map(row => lower(row.issuer_id));
   requireMatch(new Set(issuerIds).size === 2, 'fixture.issuer.ids');
   const foreign = await query(`SELECT id FROM dbo.management_market_issuer_assignments
@@ -72,7 +87,13 @@ export async function readIssuerCleanupFixture(query, operation) {
   requireMatch(foreign.length === 0, 'fixture.issuer.foreign');
   const authUsers = await query('SELECT app_user_id,email FROM dbo.auth_users WHERE app_user_id=@actor OR email=@email', {actor:actor.id,email});
   requireMatch(authUsers.length === 1 && lower(authUsers[0].app_user_id) === lower(actor.id) && authUsers[0].email === email, 'fixture.auth.binding');
-  return {actor, issuerIds, email, slug, subscriptionStatus:account.subscription_status};
+  // Only these two validated synthetic assignments can appear in diagnostics.
+  const issuerHistory = assignments.map(row => ({
+    assignmentId:lower(row.id), issuerId:lower(row.issuer_id), effectiveUtc:row.effective_utc,
+    historical:row.effective === 1,
+  }));
+  return {actor, issuerIds, email, slug, propertyId:property.id, preferenceId:preference.public_id,
+    issuerHistory, subscriptionStatus:account.subscription_status};
 }
 
 // Export only a named assertion. Driver diagnostics and row values stay private.

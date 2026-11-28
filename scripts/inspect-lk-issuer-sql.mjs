@@ -12,7 +12,7 @@ const count=async(sql,params)=>Number((await store.read(sql,params))[0]?.count||
 try{
   assert.match(operation||'',/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
   const [tenants,assignments,issuers,accounts,users,memberships,properties,agreements,
-    events,audits,authUsers,authSessions]=await Promise.all([
+    events,audits,authUsers,authSessions,listingPreferences]=await Promise.all([
     count('SELECT COUNT_BIG(*) AS count FROM dbo.tenants WHERE id=@id',{id:operation}),
     count("SELECT COUNT_BIG(*) AS count FROM dbo.management_market_issuer_assignments WHERE market='XZ'"),
     count(`SELECT COUNT_BIG(*) AS count FROM dbo.management_invoice_issuers
@@ -27,14 +27,17 @@ try{
     count('SELECT COUNT_BIG(*) AS count FROM dbo.auth_users WHERE email=@email',{email}),
     count(`SELECT COUNT_BIG(*) AS count FROM dbo.auth_sessions s
       JOIN dbo.auth_users u ON u.id=s.auth_user_id WHERE u.email=@email`,{email}),
+    count('SELECT COUNT_BIG(*) AS count FROM dbo.public_listing_preferences WHERE tenant_id=@id',{id:operation}),
   ]);
   const result={operation,readOnly:true,tenants,assignments,issuers,accounts,users,memberships,
-    properties,agreements,events,audits,authUsers,authSessions};
+    properties,agreements,events,audits,authUsers,authSessions,listingPreferences};
   result.safeToRetry=Object.entries(result).filter(([,value])=>typeof value==='number').every(([,value])=>value===0);
   if (!result.safeToRetry) {
     try {
       const fixture=await readIssuerCleanupFixture(store.read,operation);
-      result.cleanupPreflight={matched:true,subscriptionStatus:fixture.subscriptionStatus};
+      result.cleanupPreflight={matched:true,subscriptionStatus:fixture.subscriptionStatus,
+        issuerHistory:fixture.issuerHistory, fullCleanupAllowed:fixture.issuerHistory.every(row=>!row.historical),
+        unmodifiedListingPreference:true, listingMedia:0, listingEnquiries:0};
     } catch (error) {
       result.cleanupPreflight={matched:false,check:fixtureFailure(error)};
     }
