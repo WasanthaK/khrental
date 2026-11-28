@@ -148,7 +148,7 @@ try{
     }else if(scenario.startsWith('reactivation-')){
      const section=await page.$eval('section[aria-labelledby="reactivation-title"]',el=>el.innerText);
      assert.match(section,/no restart fee or charge for the inactive gap/);assert.match(section,/Authorized property history remains available|support/);
-     assert.match(section,/LKR\s*1,500\.00/);
+     assert.match(section,/LKR\s*1,500\.00/);assert.match(section,/At renewal, the monthly fee also depends on the agreed rent/);
      const disabled=await page.evaluate(()=>[...document.querySelectorAll('button')].find(b=>b.textContent==='Continue to sandbox payment').disabled);
      assert.equal(disabled,scenario==='reactivation-dues');
      if(scenario==='reactivation-dues'){assert.match(section,/LKR\s*3,000\.00 outstanding/);assert.match(section,/Paying arrears alone does not restore paid access/);}
