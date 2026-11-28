@@ -5,6 +5,12 @@ import {useAuth} from '../hooks/useAuth';
 import {requestMssqlApi} from '../services/mssqlApiClient';
 
 const button='rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold disabled:opacity-40';
+const formatMinor=(amount,currency)=>{
+  const formatter=new Intl.NumberFormat('en',{style:'currency',currency});
+  // Stripe represents ISK and UGX in hundredths for API compatibility.
+  const digits=['isk','ugx'].includes(currency.toLowerCase())?2:formatter.resolvedOptions().maximumFractionDigits;
+  return formatter.format(amount/10**digits);
+};
 const PreparedStockForm=({busy,onAction,draft,onChange})=>{
   const {id,name,country,type}=draft;
   return <form className="space-y-3" onSubmit={async event=>{
@@ -39,7 +45,7 @@ const SplitForm=({item,busy,onAction})=>{
     </>}
   </form>;
 };
-export const ManagementSubscriptionView=({tenantId,data,loading,error,busy,notice,preview,onReload,onAction,stockDraft,onStockDraftChange,cessation,cessationReason='',onCessationReason,restoration,restorationReason='',onRestorationReason})=>{
+export const ManagementSubscriptionView=({tenantId,data,loading,error,busy,notice,preview,onReload,onAction,stockDraft,onStockDraftChange,cessation,cessationReason='',onCessationReason,restoration,restorationReason='',onRestorationReason,reactivation})=>{
   const reductionScheduled=Number.isSafeInteger(data?.pendingQuantity)&&data.pendingQuantity>0
     &&data.pendingQuantity<data.billedQuantity&&!data.cancelAtPeriodEnd;
   const renewalTime=data?.paidThrough?Date.parse(data.paidThrough):NaN;
@@ -74,6 +80,7 @@ export const ManagementSubscriptionView=({tenantId,data,loading,error,busy,notic
         <p className="text-sm text-slate-600">{data.status==='trialing'?'This existing trial does not grant management access. You can end management without a new charge or credit.':'Monthly, no trial. Additions are prorated onto the next regular invoice. Reductions apply at renewal. A failed renewal has a seven-day grace period.'}</p>
         <div className="flex flex-wrap gap-3">
           {data.status==='pending'&&<button className={button} disabled={busy} onClick={()=>onAction('checkout',{inventoryHash:data.inventoryHash})}>Open sandbox checkout</button>}
+          {data.reactivationAvailable&&data.proposedInventoryQuantity>0&&<button className={button} disabled={busy} onClick={()=>onAction('reactivation-review',{controlId:null})}>Review new paid period</button>}
           <button className={button} disabled={busy} onClick={()=>onAction('refresh',{})}>Refresh Stripe status</button>
           {data.status!=='pending'&&<><button className={button} disabled={busy} onClick={()=>onAction('portal',{})}>Payment method & invoices</button><button className={button} disabled={busy||data.entitlement.state!=='active'} onClick={()=>onAction('quantity-preview',{})}>Review quantity change</button></>}
         </div>
@@ -99,6 +106,13 @@ export const ManagementSubscriptionView=({tenantId,data,loading,error,busy,notic
         </div>}
       </>}
     </section>
+    {data.reactivationAvailable&&reactivation&&<section aria-labelledby="reactivation-title" className="space-y-3 rounded-2xl border border-teal-200 bg-teal-50 p-5 text-teal-950">
+      <h2 id="reactivation-title" className="text-xl font-semibold">Start a new paid period</h2>
+      <p>{reactivation.label?`${reactivation.label} will return to management. `:''}The reviewed period covers {reactivation.quantity} managed {reactivation.quantity===1?'dwelling':'dwellings'} for <strong>{formatMinor(reactivation.amountMinor,reactivation.currency)}</strong>. This amount renews monthly. There is no restart fee or charge for the inactive gap.</p>
+      {reactivation.dues.length?<><p role="alert">Settle all outstanding management subscription dues before starting the new period.</p><ul className="list-disc pl-5">{reactivation.dues.map(item=><li key={item.currency}>{formatMinor(item.amountMinor,item.currency)} outstanding</li>)}</ul><p>You can review or dispute an invoice through support. Paying arrears alone does not restore paid access.</p></>:<p>Previous dues are settled. Paid management resumes only after the new checkout payment is confirmed. Authorized property history remains available.</p>}
+      {reactivation.awaitingPaymentConfirmation&&<p role="status">Checkout has finished. Refresh Stripe status to check payment.</p>}
+      <div className="flex flex-wrap gap-2"><button className={button} disabled={busy||!reactivation.quantity||reactivation.awaitingPaymentConfirmation||reactivation.dues.length>0} onClick={()=>onAction('reactivation',{controlId:reactivation.controlId,reviewHash:reactivation.reviewHash})}>Continue to sandbox payment</button><button className={button} disabled={busy} onClick={()=>onAction('reactivation-review',{controlId:reactivation.controlId})}>Recheck dues</button><button className={button} disabled={busy} onClick={()=>onAction('portal',{})}>Payment method & invoices</button></div>
+    </section>}
     {cessation&&<section aria-labelledby="cessation-title" className="space-y-3 rounded-2xl border border-amber-200 bg-amber-50 p-5">
       <h2 id="cessation-title" className="text-xl font-semibold">End management: {cessation.label}</h2>
       <p className="text-sm">Management ends only after tenancy, financial, maintenance and reservation obligations are closed. Existing records and documents are retained.</p>
@@ -116,7 +130,7 @@ export const ManagementSubscriptionView=({tenantId,data,loading,error,busy,notic
     </section>}
     {data.restorationEnabled&&data.ceasedStock?.length>0&&<section className="rounded-2xl border border-slate-200 bg-white p-5">
       <h2 className="text-xl font-semibold">Management ended</h2><p className="mt-1 text-sm text-slate-500">Review available capacity before restoring a retained dwelling. Cancelled subscriptions require explicit reactivation.</p>
-      <ul className="mt-4 divide-y divide-slate-100">{data.ceasedStock.map(item=><li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span><button className={button} disabled={busy} onClick={()=>onAction('stock/restoration-preview',{propertyId:item.propertyId,unitId:item.unitId})}>Review restoration</button></li>)}</ul>
+      <ul className="mt-4 divide-y divide-slate-100">{data.ceasedStock.map(item=><li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span><button className={button} disabled={busy} onClick={()=>data.reactivationAvailable?onAction('reactivation-review',{controlId:item.id}):onAction('stock/restoration-preview',{propertyId:item.propertyId,unitId:item.unitId})}>{data.reactivationAvailable?'Review new paid period':'Review restoration'}</button></li>)}</ul>
     </section>}
     <section className="rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-xl font-semibold">Dwelling inventory</h2><p className="mt-1 text-sm text-slate-500">Vacant and unlisted dwellings count. A building and its separately rentable units are never counted twice.</p><ul className="mt-4 divide-y divide-slate-100">{data.inventory.map(item=><li key={item.key} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span>{item.label}</span>{data.splitEnabled&&!item.unitId&&<SplitForm item={item} busy={busy} onAction={onAction}/>} {data.cessationEnabled&&<button className={button} disabled={busy} onClick={()=>onAction('stock/cessation-preview',{propertyId:item.propertyId,unitId:item.unitId})}>Review ending management</button>}</li>)}</ul></section>
   </>}
@@ -129,11 +143,12 @@ export default function ManagementSubscription(){
   const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false),[preview,setPreview]=useState(null);
   const [stockDraft,setStockDraft]=useState(()=>({id:crypto.randomUUID(),name:'',country:'LK',type:'house'}));
   const [restoration,setRestoration]=useState(null),[restorationReason,setRestorationReason]=useState('');
+  const [reactivation,setReactivation]=useState(null);
   const [cessation,setCessation]=useState(null),[cessationReason,setCessationReason]=useState('');
   const context=useRef('');context.current=`${user?.id}:${tenantId}`;
   const requests=useRef(new Map());
   const load=async()=>{const scope=context.current;setLoading(true);setError('');try{const result=await requestMssqlApi('/api/management-billing/status');if(context.current===scope){setData(result);}}catch(e){if(context.current===scope){setError(e.message);}}finally{if(context.current===scope){setLoading(false);}}};
-  useEffect(()=>{setData(null);setPreview(null);setCessation(null);setRestoration(null);setRestorationReason('');setCessationReason('');setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});setNotice('');requests.current.clear();load();},[user?.id,tenantId]);
+  useEffect(()=>{setData(null);setPreview(null);setCessation(null);setRestoration(null);setReactivation(null);setRestorationReason('');setCessationReason('');setStockDraft({id:crypto.randomUUID(),name:'',country:'LK',type:'house'});setNotice('');requests.current.clear();load();},[user?.id,tenantId]);
   const action=async(kind,payload,resumeId)=>{
     const scope=context.current;setBusy(true);setNotice('');
     const key=`${scope}:${kind}:${JSON.stringify(payload)}`;
@@ -149,15 +164,16 @@ export default function ManagementSubscription(){
         }
         headers['x-tenant-id']=tenantId;
       }
-      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',headers,body:kind==='refresh'?{}:kind.startsWith('stock/')&&!['stock/cessation','stock/restore','stock/split'].includes(kind)?payload:{...payload,requestId}});
+      const result=await requestMssqlApi(`/api/management-billing/${kind}`,{method:'POST',headers,body:kind==='refresh'?{}:kind==='reactivation-review'?payload:kind.startsWith('stock/')&&!['stock/cessation','stock/restore','stock/split'].includes(kind)?payload:{...payload,requestId}});
       if(context.current!==scope){return;}
       requests.current.delete(key);
       if(result.url){window.location.assign(result.url);return;}
       if(kind==='stock/split-preview'){return result;}
-      if(kind==='stock/restoration-preview'){setRestoration(result);setRestorationReason('');setCessation(null);setPreview(null);}
-      else if(kind==='stock/cessation-preview'){setRestoration(null);setCessation(result);setCessationReason('');setPreview(null);}
-      else if(kind==='quantity-preview'){setRestoration(null);setPreview(result);setCessation(null);}
-      else{setRestoration(null);setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?`Inventory prepared for billing confirmation (${payload.records.length} ${payload.records.length===1?'record':'records'}).`:kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
+      if(kind==='reactivation-review'){setReactivation(result);setRestoration(null);setCessation(null);setPreview(null);}
+      else if(kind==='stock/restoration-preview'){setReactivation(null);setRestoration(result);setRestorationReason('');setCessation(null);setPreview(null);}
+      else if(kind==='stock/cessation-preview'){setReactivation(null);setRestoration(null);setCessation(result);setCessationReason('');setPreview(null);}
+      else if(kind==='quantity-preview'){setReactivation(null);setRestoration(null);setPreview(result);setCessation(null);}
+      else{setReactivation(null);setRestoration(null);setCessation(null);setPreview(null);setNotice(kind==='stock/prepare'?`Inventory prepared for billing confirmation (${payload.records.length} ${payload.records.length===1?'record':'records'}).`:kind==='stock/withdraw'?'Prepared additions withdrawn. Managed stock and historical records are unchanged.':'Stripe status updated.');}
       if(kind==='stock/split'){setNotice('Units are now managed. The original property and rental history remain available.');}
       if(kind==='stock/restore'){setNotice('Management restored from now. Previous records remain available; no billing was backdated.');}
       if(kind==='stock/cessation'){setNotice(result.cleanupMode?'Management ended. Existing invoices remain payable; no new charge or credit was created. Historical records remain available.':result.billingUnchanged?'Management ended. Subscription and existing invoices are unchanged; historical records remain available.':'Management ended. Billing changes apply at renewal; historical records remain available.');}
@@ -165,5 +181,5 @@ export default function ManagementSubscription(){
       return context.current===scope?result:undefined;
     }catch(e){if(context.current===scope){setNotice(e.message);if(e.status>=400&&e.status<500){requests.current.delete(key);}await load();}}finally{if(context.current===scope){setBusy(false);}}
   };
-  return <ManagementSubscriptionView key={context.current} {...{tenantId,data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason,restoration,restorationReason}} onRestorationReason={setRestorationReason} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;
+  return <ManagementSubscriptionView key={context.current} {...{tenantId,data,loading,error,busy,notice,preview,stockDraft,cessation,cessationReason,restoration,restorationReason,reactivation}} onRestorationReason={setRestorationReason} onStockDraftChange={setStockDraft} onCessationReason={setCessationReason} onReload={load} onAction={action}/>;
 }

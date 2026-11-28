@@ -213,7 +213,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     if(!refs?.length){return;}
     if(!stagingEnabled()){throw problem(503,'BILLING_STOCK_UNAVAILABLE','Prepared stock confirmation is not available yet.');}
     const command=(await q(`SELECT id FROM dbo.management_billing_commands WHERE id=@commandId AND tenant_id=@tenantId
-      AND kind IN('checkout','quantity_apply') AND status IN('pending','completed')`,{commandId,tenantId}))[0];
+      AND kind IN('checkout','reactivation','quantity_apply') AND status IN('pending','completed')`,{commandId,tenantId}))[0];
     if(!command){throw problem(409,'BILLING_STOCK_CONFIRMATION','A matching billing confirmation is required.');}
     const current=(await q(`SELECT *,SYSUTCDATETIME() AS checked_at FROM dbo.management_billing_accounts WITH(UPDLOCK,HOLDLOCK)
       WHERE tenant_id=@tenantId`,{tenantId}))[0];
@@ -470,7 +470,7 @@ export const createBillingStore = ({getPool = getMssqlPool,env=process.env,clock
     return account(tenantId,q);
   });
   const beginCommand = ({tenantId,id,kind,payload,actorId,recovery=false,prepareRecovery=null}) => locked(tenantId,async q => {
-    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','portal','quantity_preview','cessation','restore','split'].includes(kind))){
+    if(recovery && (env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'||!['cancellation','quantity_apply','checkout','reactivation','portal','quantity_preview','cessation','restore','split'].includes(kind))){
       throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');
     }
     await assertActor(q,tenantId,actorId);

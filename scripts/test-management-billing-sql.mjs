@@ -464,6 +464,100 @@ const verifyBillingTransactions=async(pool,store,actorId)=>{
   console.log('PASS: real SQL two-organization billing isolation, ambiguous checkout recovery, first payment, duplicate/out-of-order binding, quantity proration, deferred decrease and schedule cancellation; synthetic Stripe transport');
   await verifyStagedStock(pool,actorId,stripe,remote,price,invoice,calls);
   await verifyManagementRecovery(pool,{tenantId:tenantA,otherTenant:tenantB,actorId,stripe,remote,calls});
+  await verifyEndedSubscriptionReactivation(pool,actorId);
+};
+
+const verifyEndedSubscriptionReactivation=async(pool,actorId)=>{
+  const tenantId=crypto.randomUUID(),propertyId=crypto.randomUUID(),customerId='cus_reactivation_fixture';
+  const oldSubscriptionId='sub_reactivation_old',newSubscriptionId='sub_reactivation_new';
+  const oldInvoiceId='in_reactivation_old',dueInvoiceId='in_reactivation_due',newInvoiceId='in_reactivation_new';
+  const now=Math.floor(Date.now()/1000),sessions=[],writes=[];
+  const price={id:BILLING_PRICE,product:BILLING_PRODUCT,active:true,livemode:false,type:'recurring',billing_scheme:'per_unit',currency:'usd',unit_amount:500,
+    recurring:{interval:'month',interval_count:1,usage_type:'licensed'}};
+  const customer={id:customerId,object:'customer',livemode:false,deleted:false,balance:0,currency:'usd',invoice_credit_balance:{}};
+  const oldSubscription={id:oldSubscriptionId,object:'subscription',customer:customerId,livemode:false,status:'canceled',latest_invoice:oldInvoiceId,
+    cancel_at_period_end:false,items:{data:[{id:'si_reactivation_old',price,quantity:1,current_period_start:now-2592000,current_period_end:now}]}};
+  const paidLine=(id,item,start,end,amount=500)=>({id,parent:{subscription_item_details:{subscription_item:item,proration:false}},price,quantity:1,amount,period:{start,end}});
+  const invoices=new Map([
+    [oldInvoiceId,{id:oldInvoiceId,object:'invoice',livemode:false,customer:customerId,parent:{subscription_details:{subscription:oldSubscriptionId}},currency:'usd',status:'paid',billing_reason:'subscription_create',total:500,subtotal:500,amount_due:500,amount_paid:500,amount_remaining:0,lines:{data:[paidLine('il_reactivation_old','si_reactivation_old',now-2592000,now)],has_more:false}}],
+    [dueInvoiceId,{id:dueInvoiceId,object:'invoice',livemode:false,customer:customerId,parent:{subscription_details:{subscription:oldSubscriptionId}},currency:'usd',status:'open',billing_reason:'manual',amount_due:200,amount_paid:0,amount_remaining:200,lines:{data:[],has_more:false}}]
+  ]);
+  const subscriptions=new Map([[oldSubscriptionId,oldSubscription]]),lineItems=new Map();
+  const stripe={configured:()=>true,assertAccount:async()=>{},request:async(method,path,body={},key)=>{
+    if(method==='GET'){
+      if(path===`/v1/prices/${BILLING_PRICE}`){return structuredClone(price);}
+      if(path===`/v1/customers/${customerId}`){return structuredClone(customer);}
+      if(path==='/v1/invoices'){
+        const data=[...invoices.values()].filter(invoice=>invoice.status===body.status);
+        return {object:'list',data:structuredClone(data),has_more:false};
+      }
+      if(path==='/v1/subscriptions'){
+        return {object:'list',data:structuredClone([...subscriptions.values()]),has_more:false};
+      }
+      if(path==='/v1/checkout/sessions'){
+        return {object:'list',data:structuredClone(sessions.filter(session=>session.customer===body.customer)),has_more:false};
+      }
+      if(path.startsWith('/v1/checkout/sessions/')&&path.endsWith('/line_items')){
+        const id=path.split('/').at(-2);return {object:'list',data:structuredClone(lineItems.get(id)||[]),has_more:false};
+      }
+      if(path.startsWith('/v1/checkout/sessions/')){
+        const id=path.split('/').at(-1),session=sessions.find(value=>value.id===id);assert.ok(session,`Unhandled reactivation session ${id}`);return structuredClone(session);
+      }
+      if(path.startsWith('/v1/subscriptions/')){
+        const value=subscriptions.get(path.split('/').at(-1));assert.ok(value,`Unhandled reactivation subscription ${path}`);return structuredClone(value);
+      }
+      if(path.startsWith('/v1/invoices/')){
+        const value=invoices.get(path.split('/').at(-1));assert.ok(value,`Unhandled reactivation invoice ${path}`);return structuredClone(value);
+      }
+      throw new Error(`Unhandled reactivation GET ${path}`);
+    }
+    assert.equal(method,'POST');assert.ok(key);writes.push({path,key,body:structuredClone(body)});
+    if(path==='/v1/checkout/sessions'){
+      const session={id:'cs_test_reactivation',object:'checkout.session',livemode:false,mode:'subscription',customer:customerId,status:'open',payment_status:'unpaid',
+        url:'https://checkout.stripe.com/c/pay/cs_test_reactivation',expires_at:now+1800,created:now,currency:'usd',amount_subtotal:500,metadata:body.metadata};
+      sessions.push(session);lineItems.set(session.id,[{id:'li_reactivation',price,quantity:1}]);return structuredClone(session);
+    }
+    throw new Error(`Unhandled reactivation POST ${path}`);
+  }};
+  const store=createBillingStore({getPool:async()=>pool,env:{MANAGEMENT_RECOVERY_SCHEMA_READY:'true'}});
+  await store.locked(tenantId,async q=>{
+    await q("INSERT dbo.tenants(id,slug,status,[plan]) VALUES(@tenantId,@slug,'active','development-testing')",{tenantId,slug:'reactivation-'+tenantId});
+    await q("INSERT dbo.tenant_memberships(id,tenant_id,app_user_id,status,role) VALUES(@id,@tenantId,@actorId,'active','admin')",{id:crypto.randomUUID(),tenantId,actorId});
+    await q("INSERT dbo.properties(id,tenant_id,name,propertytype,country_code,status) VALUES(@propertyId,@tenantId,'Retained reactivation fixture','house','LK','inactive')",{propertyId,tenantId});
+  });
+  await store.enroll({tenantId,actorId,market:'LK',useApprovedSandboxBaseline:true,reason:'Labeled synthetic reactivation proof only.'});
+  await store.locked(tenantId,q=>q(`UPDATE dbo.management_billing_accounts SET stripe_customer_id=@customer,stripe_subscription_id=@subscription,
+    stripe_item_id='si_reactivation_old',subscription_status='canceled',quantity=1,initial_payment_verified=1,paid_through=DATEADD(day,-1,SYSUTCDATETIME())
+    WHERE tenant_id=@tenantId`,{tenantId,customer:customerId,subscription:oldSubscriptionId}));
+  const service=createBillingService({store,stripe,env:{PUBLIC_APP_URL:'https://app.quixo.homes',MANAGEMENT_RECOVERY_SCHEMA_READY:'true'}});
+  const blocked=await service.reviewReactivation({tenantId,actorId});
+  assert.deepEqual(blocked.dues,[{currency:'usd',amountMinor:200}]);assert.equal(blocked.quantity,1);assert.equal(blocked.amountMinor,500);
+  await assert.rejects(service.reactivate({tenantId,actorId,id:crypto.randomUUID(),controlId:null,reviewHash:blocked.reviewHash}),{code:'BILLING_REACTIVATION_DUES'});
+  assert.equal(writes.length,0);assert.equal((await store.read("SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND kind='reactivation'",{tenantId})).length,0);
+  Object.assign(invoices.get(dueInvoiceId),{status:'paid',amount_paid:200,amount_remaining:0});
+  const review=await service.reviewReactivation({tenantId,actorId});assert.deepEqual(review.dues,[]);assert.equal(review.reviewHash,blocked.reviewHash);
+  const operation=crypto.randomUUID(),started=await service.reactivate({tenantId,actorId,id:operation,controlId:null,reviewHash:review.reviewHash});
+  assert.equal(new URL(started.url).origin,'https://checkout.stripe.com');assert.equal(writes.length,1);assert.equal(writes[0].path,'/v1/checkout/sessions');
+  const beforePayment=await service.refresh(tenantId);
+  assert.equal(beforePayment.entitlement.management,false);
+  assert.equal(beforePayment.entitlement.historicalAccess,true);
+  assert.equal((await store.account(tenantId)).stripe_subscription_id,oldSubscriptionId);
+  assert.deepEqual(await service.reactivate({tenantId,actorId,id:crypto.randomUUID(),controlId:null,reviewHash:review.reviewHash}),started);
+  assert.equal(writes.length,1,'Reopening the review reuses the same checkout.');
+  const session=sessions[0],newItem='si_reactivation_new';
+  Object.assign(session,{status:'complete',payment_status:'paid',subscription:newSubscriptionId,invoice:newInvoiceId});
+  const newSubscription={id:newSubscriptionId,object:'subscription',customer:customerId,livemode:false,status:'active',latest_invoice:newInvoiceId,
+    cancel_at_period_end:false,items:{data:[{id:newItem,price,quantity:1,current_period_start:now,current_period_end:now+2592000}]}};
+  subscriptions.set(newSubscriptionId,newSubscription);
+  invoices.set(newInvoiceId,{id:newInvoiceId,object:'invoice',livemode:false,customer:customerId,parent:{subscription_details:{subscription:newSubscriptionId}},currency:'usd',status:'paid',billing_reason:'subscription_create',total:500,subtotal:500,amount_due:500,amount_paid:500,amount_remaining:0,
+    lines:{data:[paidLine('il_reactivation_new',newItem,now,now+2592000)],has_more:false}});
+  const refreshed=await service.refresh(tenantId);assert.equal(refreshed.entitlement.state,'active');assert.equal(refreshed.entitlement.management,true);
+  const account=await store.account(tenantId);assert.equal(account.stripe_subscription_id,newSubscriptionId);assert.equal(account.subscription_status,'active');assert.equal(account.quantity,1);
+  assert.equal((await store.inventory(tenantId)).length,1);assert.equal((await store.read("SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND kind='reactivation' AND status='completed'",{tenantId})).length,1);
+  assert.equal((await store.read("SELECT id FROM dbo.management_billing_audit WHERE tenant_id=@tenantId AND action='sandbox.reactivation.paid'",{tenantId})).length,1);
+  assert.equal(invoices.get(oldInvoiceId).status,'paid');assert.equal(subscriptions.get(oldSubscriptionId).status,'canceled');
+  await service.refresh(tenantId);assert.equal(writes.length,1,'Refresh after paid restart creates no provider write.');
+  console.log('R5_37_REACTIVATION_SQL=PASS all_dues_gate new_paid_period same_workspace retained_history exact_checkout one_provider_write synthetic_provider');
 };
 
 const verifyStagedStock=async(pool,actorId,stripe,remote,price,invoice,calls)=>{

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import {requireEndedAccount,restartInventory} from './reactivation.js';
 import {hash,problem,cessationCleanupMode} from './contract.js';
 
 // Reuses the account lock: independent property operations share one subscription.
@@ -42,6 +43,11 @@ export const createRecoveryJournal=({store,complete})=>{
     }
     if(['quantity_apply','quantity_preview'].includes(row.kind)&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.preview.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed inventory changed before this provider write.');
+    }
+    if(row.kind==='reactivation'){
+      requireEndedAccount(account,new Date(row.checked_at).getTime());
+      const {items}=await restartInventory(store,q,args.tenantId,intent.controlId);
+      if(hash(items)!==intent.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed dwellings have changed.');}
     }
     if(row.kind==='checkout'&&hash(await store.inventory(args.tenantId,q,{includePending:true}))!==intent.inventoryHash){
       throw problem(409,'BILLING_INVENTORY_CHANGED','The checkout inventory changed before this provider write.');
