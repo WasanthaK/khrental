@@ -96,13 +96,28 @@ export const verifyRestoration=async(pool,actorId)=>{
     if(mode==='complimentary'){assert.equal(writes.length,0);assert.equal(entitlement(after).state,'complimentary');}
     assert.equal((await createBillingInvariantInspector({store,stripe:readOnlyStripe(stripe)}).inspect(tenantId)).status,'consistent');
     await cease(propertyId);
-    const episodes=await store.read('SELECT id,restored_at FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND property_id=@propertyId',{tenantId,propertyId});
+    const readEpisodes=()=>store.read(`SELECT id,ceased_at,restored_at,restoration_command_id
+      FROM dbo.management_inventory_controls WHERE tenant_id=@tenantId AND property_id=@propertyId ORDER BY id`,{tenantId,propertyId});
+    const episodes=await readEpisodes();
     assert.equal(episodes.length,2);assert.equal(episodes.filter(r=>!r.restored_at).length,1);
     assert.equal((await createBillingInvariantInspector({store,stripe:readOnlyStripe(stripe)}).inspect(tenantId)).status,'consistent');
     if(mode==='active'){
+      const reviewed=await service.restorationPreview({tenantId,actorId,propertyId});
+      const restoreRequest={tenantId,actorId,propertyId,id:crypto.randomUUID(),inventoryHash:reviewed.inventoryHash,
+        reason:'Synthetic fixture reviewed before the provider cancelled the subscription.'};
+      const providerWrites=writes.length;
+      const inventoryBefore=await store.inventory(tenantId);
       sub.status='canceled';sub.cancel_at_period_end=false;sub.schedule=null;
+      await assert.rejects(service.restoreStock(restoreRequest),{code:'BILLING_REACTIVATION_REQUIRED'});
+      await assert.rejects(service.restoreStock(restoreRequest),{code:'BILLING_REACTIVATION_REQUIRED'});
       await assert.rejects(service.restorationPreview({tenantId,actorId,propertyId}),{code:'BILLING_REACTIVATION_REQUIRED'});
-      assert.equal((await store.inventory(tenantId)).length,1);
+      assert.equal(writes.length,providerWrites,'A stale restoration review and its retry make no provider writes');
+      const commands=await store.read('SELECT id FROM dbo.management_billing_commands WHERE tenant_id=@tenantId AND id=@id',
+        {tenantId,id:restoreRequest.id});
+      assert.equal(commands.length,0,'A denied restore leaves no command to recover');
+      assert.deepEqual(await store.inventory(tenantId),inventoryBefore);
+      assert.deepEqual(await readEpisodes(),episodes,'Both cessation episodes retain their original restoration history');
+      console.log('PASS: row 37 synthetic SQL restore confirmation and retry after provider cancellation preserve inventory and history with zero provider writes');
     }
   }
   console.log('PASS: restoration SQL history/guard preservation, response-loss, rollback/retry, paid/ending/complimentary/grace capacity, cancelled reactivation denial and cease-restore-cease invariants; synthetic provider');
