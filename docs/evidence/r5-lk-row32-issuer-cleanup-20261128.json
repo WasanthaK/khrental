@@ -3,7 +3,7 @@
   "asOf": "2026-11-28",
   "environment": "Deployed application, isolated synthetic XZ issuer schedule and Stripe sandbox",
   "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
-  "status": "Governed cleanup plan passed; one-shot apply pending",
+  "status": "Owner-approved apply submitted once. Independent readback submitted once. Registration and outcomes under reconciliation.",
   "acceptedBusinessBehavior": {
     "mountedRenewal": "https://github.com/WasanthaK/khrental/actions/runs/46001525355/job/140514099650",
     "deployedBuild": "769ab32c603f21073fb7c42dcef92902254326e4",
@@ -144,6 +144,11 @@
       "workspaceRecords": 19,
       "laterIssuer": 1,
       "laterAssignment": 1
+    },
+    "mutableCleanupApproval": {
+      "date": "2026-11-28",
+      "scope": "One permanent deletion of 21 synthetic records in total, including the later issuer and assignment, retaining the initial historical pair.",
+      "source": "Owner's affirmative response to the explicit 21-record cleanup question."
     }
   },
   "costEvidence": {
@@ -253,10 +258,35 @@
   },
   "nextAcceptance": {
     "owner": "Authorized Azure SQL release operator",
-    "action": "Apply only migration 20261128_01_cleanup_r5_lk_issuer_fixture through the governed production migration workflow with mode apply, target through this migration and exact confirmation APPLY-PRODUCTION. Dispatch once, then independently read back every count. The protected serving-source check and read-only plan already passed on af320236102b614a4a659c4481d58870014e9316.",
+    "action": "Reconcile the existing submissions using the GitHub Actions and Azure migration-executor histories. Record the governed apply result and independent SQL and Stripe readback for the exact fixture before closing row 32.",
     "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
     "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous.",
     "applyBuild": "7124ea4ff1496b4938436521ec2df7042f530064",
     "confirmationScope": "Permanently remove the 21 mutable synthetic records, including the later issuer and its assignment. Retain the exact original issuer and assignment. The latest registered migration was read-only plan 76 at preparation."
+  },
+  "dispatchReconciliation": {
+    "checkedAtUtc": "2026-11-28T04:14:48+00:00",
+    "branch": "main",
+    "servingSha": "7124ea4ff1496b4938436521ec2df7042f530064",
+    "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+    "apply": {
+      "workflow": "run-production-db-migrations.yml",
+      "mode": "apply",
+      "through": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "confirmation": "APPLY-PRODUCTION",
+      "submissionCount": 1,
+      "runId": null,
+      "priorRegisteredRun": 46103427618
+    },
+    "readback": {
+      "workflow": "inspect-deployed-lk-issuer-attempt.yml",
+      "expected_build": "7124ea4ff1496b4938436521ec2df7042f530064",
+      "operation_id": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
+      "confirmation": "INSPECT-DEPLOYED-LK-ISSUER-MUTABLE-ONLY",
+      "submissionCount": 1,
+      "runId": null,
+      "priorRegisteredRun": 46097193078
+    },
+    "observed": "Both dispatch forms were submitted. The workflow lists and repository manual-run API contained no corresponding run ID when checked. The production database result remains unverified."
   }
 }
