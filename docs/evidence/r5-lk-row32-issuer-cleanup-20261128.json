@@ -3,7 +3,7 @@
   "asOf": "2026-11-28",
   "environment": "Deployed application, isolated synthetic XZ issuer schedule and Stripe sandbox",
   "operation": "92019876-cdeb-47d3-ae8b-9a0fdd4cb22d",
-  "status": "Owner-approved apply submitted once. Independent readback submitted once. Registration and outcomes under reconciliation.",
+  "status": "Plan 77 confirmed the initial apply had made no change. GitHub acknowledged the subsequent apply request, with its run ID and outcome still unresolved. Independent inspection was submitted once.",
   "acceptedBusinessBehavior": {
     "mountedRenewal": "https://github.com/WasanthaK/khrental/actions/runs/46001525355/job/140514099650",
     "deployedBuild": "769ab32c603f21073fb7c42dcef92902254326e4",
@@ -258,7 +258,7 @@
   },
   "nextAcceptance": {
     "owner": "Authorized Azure SQL release operator",
-    "action": "Reconcile the existing submissions using the GitHub Actions and Azure migration-executor histories. Record the governed apply result and independent SQL and Stripe readback for the exact fixture before closing row 32.",
+    "action": "Trace the acknowledged apply request submitted after plan 77 to a registered run or a definitive rejection. Preserve the request while registration is unresolved. After a confirmed apply, index the independent SQL and Stripe readback for the exact fixture.",
     "requiredResult": "All mutable counts zero, only the exact initial assignment and issuer present, zero provider clocks/customers/live objects, and live charging off.",
     "unchangedOperation": "Do not replay the invoice acceptance, reuse the denied cleanup identity or redispatch if the apply result is ambiguous.",
     "applyBuild": "7124ea4ff1496b4938436521ec2df7042f530064",
@@ -274,9 +274,19 @@
       "mode": "apply",
       "through": "20261128_01_cleanup_r5_lk_issuer_fixture",
       "confirmation": "APPLY-PRODUCTION",
-      "submissionCount": 1,
+      "submissionCount": 2,
       "runId": null,
-      "priorRegisteredRun": 46103427618
+      "priorRegisteredRun": 46103427618,
+      "firstSubmissionResult": "No matching GitHub run or Azure job start. Protected plan 77 verified that the migration and all 21 records were still pending.",
+      "secondSubmission": {
+        "precedingPlanRun": 46134302555,
+        "windowUtc": "2026-11-28T10:17:24Z/2026-11-28T10:19:16Z",
+        "githubResponse": "Workflow run was successfully requested.",
+        "checkedAtUtc": "2026-11-28T10:20:26Z",
+        "registeredRunId": null,
+        "azureExecution": null,
+        "observed": "After refresh the workflow register still ended at plan 77. There was no later registered main dispatch and no new execution in the Azure migration job history. SQL counts from plan 77 predate this request."
+      }
     },
     "readback": {
       "workflow": "inspect-deployed-lk-issuer-attempt.yml",
@@ -287,6 +297,33 @@
       "runId": null,
       "priorRegisteredRun": 46097193078
     },
-    "observed": "Both dispatch forms were submitted. The workflow lists and repository manual-run API contained no corresponding run ID when checked. The production database result remains unverified."
+    "observed": "Both dispatch forms were submitted. The workflow lists and repository manual-run API contained no corresponding run ID when checked. The production database result remains unverified.",
+    "azureControlPlane": {
+      "checkedThroughUtc": "2026-11-28T10:13:00Z",
+      "resourceGroup": "khrental-prod-rg",
+      "job": "khrental-db-migrator",
+      "executionHistory": "The newest listed execution was khrental-db-migrator-v86yjkz, started at 02:16:23 UTC, before the two form submissions. Its execution status was Failed.",
+      "activityLog": "The 24-hour resource activity log contained 36 entries. Its newest Start a Container Apps Job entry was at 02:16:23 UTC on 28 November. Neither submitted operation had a corresponding later job start.",
+      "github": "Before plan 77, deployment 1977 was the only registered Actions run at the serving SHA. The latest registered migration was plan 76 and the latest issuer inspection was 9.",
+      "scope": "These observations cover job registration and starts. The resource activity log does not report the fixture's database contents."
+    },
+    "subsequentReadOnlyPlan": {
+      "run": 46134302555,
+      "job": 140946067848,
+      "url": "https://github.com/WasanthaK/khrental/actions/runs/46134302555/job/140946067848",
+      "workflowNumber": 77,
+      "servingSha": "7124ea4ff1496b4938436521ec2df7042f530064",
+      "sqlReadUtc": "2026-11-28T10:16:59Z",
+      "conclusion": "success",
+      "appliedMigrations": 25,
+      "pendingMigrations": 1,
+      "pendingId": "20261128_01_cleanup_r5_lk_issuer_fixture",
+      "pendingChecksum": "3d247de7007c9fd975d7d1302af2370eff0741035f66018f88582e6c452a667c",
+      "mutable": 21,
+      "unexpected": 2,
+      "initial": 2,
+      "retained": 1,
+      "result": "The protected plan verified the Ready revision against the workflow SHA and independently found the original 21 records still present. No cleanup had taken place. Plan 77 directly followed plan 76. GitHub had no queued, waiting or running main job at the subsequent check."
+    }
   }
 }
