@@ -43,6 +43,7 @@ on:
           - 20261112_03_management_splits
           - 20261124_01_market_invoice_issuers
           - 20261127_01_market_sandbox_collectors
+          - 20261128_01_cleanup_r5_lk_issuer_fixture
       confirmation:
         description: For apply mode, type APPLY-PRODUCTION exactly
         required: false

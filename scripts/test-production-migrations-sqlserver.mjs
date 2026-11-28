@@ -64,7 +64,8 @@ const INTEGRATION_TESTED_MIGRATION_IDS = new Set([
   '20261112_02_management_restoration',
   '20261112_03_management_splits',
   '20261124_01_market_invoice_issuers',
-  '20261127_01_market_sandbox_collectors'
+  '20261127_01_market_sandbox_collectors',
+  '20261128_01_cleanup_r5_lk_issuer_fixture'
 ]);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1057,12 +1058,15 @@ const main = async () => {
     // Complete the production-typed empty prerequisites for the new guards.
     // Earlier migration fixtures intentionally exercised only smaller schemas.
     await testPool.request().batch(`
-      ALTER TABLE dbo.properties ADD status NVARCHAR(50) NULL;
-      ALTER TABLE dbo.app_users ADD auth_id UNIQUEIDENTIFIER NULL,email NVARCHAR(320) NULL,status NVARCHAR(50) NULL;
+      ALTER TABLE dbo.tenants ADD name NVARCHAR(200) NULL,status NVARCHAR(50) NULL,[plan] NVARCHAR(50) NULL;
+      ALTER TABLE dbo.properties ADD name NVARCHAR(255) NULL,status NVARCHAR(50) NULL,propertytype NVARCHAR(100) NULL;
+      ALTER TABLE dbo.app_users ADD tenant_id UNIQUEIDENTIFIER NULL,auth_id UNIQUEIDENTIFIER NULL,email NVARCHAR(320) NULL,
+        name NVARCHAR(255) NULL,role NVARCHAR(64) NULL,user_type NVARCHAR(64) NULL,status NVARCHAR(50) NULL;
       CREATE TABLE dbo.agreements(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,propertyid UNIQUEIDENTIFIER,unitid UNIQUEIDENTIFIER,renteeid UNIQUEIDENTIFIER,
         templateid UNIQUEIDENTIFIER,status NVARCHAR(50),rentamount DECIMAL(18,2),depositamount DECIMAL(18,2),startdate DATETIMEOFFSET,enddate DATETIMEOFFSET,
         terms NVARCHAR(MAX),content NVARCHAR(MAX),signeddate DATETIMEOFFSET,signature_status NVARCHAR(100),signature_completed_at DATETIMEOFFSET);
-      CREATE TABLE dbo.tenant_memberships(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,app_user_id UNIQUEIDENTIFIER,status NVARCHAR(50),role NVARCHAR(100));
+      CREATE TABLE dbo.tenant_memberships(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,app_user_id UNIQUEIDENTIFIER,
+        status NVARCHAR(50),role NVARCHAR(100),is_default BIT NOT NULL DEFAULT 0);
       CREATE TABLE dbo.tenancy_deposit_transactions(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,transaction_type NVARCHAR(50),status NVARCHAR(50),amount DECIMAL(18,2));
       CREATE TABLE dbo.tenancy_move_in_checklists(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,agreement_id UNIQUEIDENTIFIER,status NVARCHAR(50));
       CREATE TABLE dbo.tenancy_move_in_checklist_items(id UNIQUEIDENTIFIER PRIMARY KEY,tenant_id UNIQUEIDENTIFIER,checklist_id UNIQUEIDENTIFIER,is_required BIT,status NVARCHAR(50));
@@ -1106,6 +1110,86 @@ const main = async () => {
     await testPool.request().batch(collectorMigration);
     await testPool.request().batch(collectorMigration);
     await verifyCollectorAdministration(testPool);
+    const cleanupMigration = fs.readFileSync('migrations/20261128_01_cleanup_r5_lk_issuer_fixture.sql','utf8');
+    const cleanupWindowOpen=Date.now()<Date.parse('2026-12-27T18:01:54Z');
+    if(cleanupWindowOpen) {
+      await testPool.request().batch(`
+      DECLARE @tenant UNIQUEIDENTIFIER='92019876-cdeb-47d3-ae8b-9a0fdd4cb22d';
+      DECLARE @actor UNIQUEIDENTIFIER='11111111-2222-4333-8444-555555555555';
+      DECLARE @property UNIQUEIDENTIFIER='22222222-3333-4444-8555-666666666666';
+      DECLARE @auth UNIQUEIDENTIFIER='33333333-4444-4555-8666-777777777777';
+      INSERT dbo.tenants(id,slug,name,status,[plan]) VALUES(@tenant,
+        N'r5-issuer-92019876-cdeb-47d3-ae8b-9a0fdd4cb22d',
+        N'R5 synthetic deployed issuer cutover 92019876-cdeb-47d3-ae8b-9a0fdd4cb22d',N'active',N'development-testing');
+      INSERT dbo.app_users(id,tenant_id,auth_id,email,name,role,user_type,status)
+        VALUES(@actor,@tenant,@auth,N'r5-issuer-92019876-cdeb-47d3-ae8b-9a0fdd4cb22d@example.invalid',
+          N'R5 synthetic deployed issuer cutover 92019876-cdeb-47d3-ae8b-9a0fdd4cb22d',N'admin',N'admin',N'active');
+      INSERT dbo.tenant_memberships(id,tenant_id,app_user_id,status,role,is_default)
+        VALUES(NEWID(),@tenant,@actor,N'active',N'viewer',1);
+      INSERT dbo.properties(id,tenant_id,name,status,propertytype,country_code)
+        VALUES(@property,@tenant,N'R5 synthetic LKR 100000 dwelling',N'rented',N'house','LK');
+      DISABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements;
+      INSERT dbo.agreements(id,tenant_id,propertyid,status,rentamount)
+        VALUES(NEWID(),@tenant,@property,N'active',100000);
+      ENABLE TRIGGER dbo.TR_agreements_rental_occupancy ON dbo.agreements;
+      INSERT dbo.management_billing_accounts(tenant_id,stripe_account_id,stripe_price_id,market,
+        subscription_status,initial_payment_verified,quantity,inventory_json)
+        VALUES(@tenant,'acct_1UTgcdQ4sARuLNQa','price_r5_synthetic','LK','canceled',1,1,N'{"dwellingCount":1}');
+      INSERT dbo.management_billing_events(stripe_event_id,tenant_id,event_type) VALUES
+        ('evt-r5-cleanup-1',@tenant,'invoice.created'),
+        ('evt-r5-cleanup-2',@tenant,'invoice.finalized'),
+        ('evt-r5-cleanup-3',@tenant,'invoice.paid'),
+        ('evt-r5-cleanup-4',@tenant,'customer.subscription.updated'),
+        ('evt-r5-cleanup-cancel',@tenant,'customer.subscription.deleted');
+      INSERT dbo.management_billing_audit(id,tenant_id,actor_id,action,resource_id,current_hash,reason) VALUES
+        (NEWID(),@tenant,@actor,'stripe.event_reconciled','evt-r5-cleanup-1',REPLICATE('1',64),N'invoice.created'),
+        (NEWID(),@tenant,@actor,'stripe.event_reconciled','evt-r5-cleanup-2',REPLICATE('2',64),N'invoice.finalized'),
+        (NEWID(),@tenant,@actor,'stripe.event_reconciled','evt-r5-cleanup-3',REPLICATE('3',64),N'invoice.paid'),
+        (NEWID(),@tenant,@actor,'stripe.event_reconciled','evt-r5-cleanup-4',REPLICATE('4',64),N'customer.subscription.updated'),
+        (NEWID(),@tenant,@actor,'stripe.event_reconciled','evt-r5-cleanup-cancel',REPLICATE('5',64),N'customer.subscription.deleted');
+      INSERT dbo.auth_users(id,auth_id,app_user_id,email,password_hash,updatedat)
+        VALUES(NEWID(),@auth,@actor,N'r5-issuer-92019876-cdeb-47d3-ae8b-9a0fdd4cb22d@example.invalid',N'synthetic',SYSUTCDATETIME());
+      DECLARE @auth_user UNIQUEIDENTIFIER=(SELECT id FROM dbo.auth_users WHERE app_user_id=@actor);
+      INSERT dbo.auth_sessions(auth_user_id,token_hash,expires_at)
+        VALUES(@auth_user,REPLICATE('9',64),DATEADD(day,1,SYSUTCDATETIME()));
+      INSERT dbo.management_invoice_issuers(id,legal_name,country_code) VALUES
+        ('30f19aad-923c-44c5-993b-6980dbfec67a',N'R5 Synthetic Initial Issuer','US'),
+        ('7744c522-545e-4373-9ba5-305c338fb227',N'R5 Synthetic Later Issuer','LK');
+      INSERT dbo.management_market_issuer_assignments(id,market,issuer_id,effective_at_utc,approval_reference) VALUES
+        ('4a1aa809-e3ea-4c74-9c63-c18c7494d994','XZ','30f19aad-923c-44c5-993b-6980dbfec67a',
+          '2026-11-28T00:01:57.7000000',N'R5 row 32 isolated synthetic schedule'),
+        ('abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88','XZ','7744c522-545e-4373-9ba5-305c338fb227',
+          '2026-12-27T18:01:54',N'R5 row 32 isolated later synthetic assignment');
+    `);
+    await testPool.request().query(`UPDATE dbo.management_market_issuer_assignments
+      SET approval_reference=N'intentional test drift'
+      WHERE id='abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88'`);
+    await assert.rejects(testPool.request().batch(cleanupMigration),/removable issuer schedule drift/);
+    assert.equal((await testPool.request().query(`SELECT COUNT(*) AS n FROM dbo.tenants
+      WHERE id='92019876-cdeb-47d3-ae8b-9a0fdd4cb22d'`)).recordset[0].n,1);
+    await testPool.request().query(`UPDATE dbo.management_market_issuer_assignments
+      SET approval_reference=N'R5 row 32 isolated later synthetic assignment'
+      WHERE id='abdc3aa1-ef6f-4fa9-bb9c-6e487bc6bc88'`);
+      await testPool.request().batch(cleanupMigration);
+      await testPool.request().batch(cleanupMigration);
+      const cleanupState=await testPool.request().query(`
+      SELECT
+        (SELECT COUNT(*) FROM dbo.tenants WHERE id='92019876-cdeb-47d3-ae8b-9a0fdd4cb22d') AS tenants,
+        (SELECT COUNT(*) FROM dbo.management_market_issuer_assignments WHERE market='XZ') AS assignments,
+        (SELECT COUNT(*) FROM dbo.management_invoice_issuers
+          WHERE legal_name IN(N'R5 Synthetic Initial Issuer',N'R5 Synthetic Later Issuer')) AS issuers,
+        (SELECT COUNT(*) FROM dbo.management_market_issuer_assignments a
+          JOIN dbo.management_invoice_issuers i ON i.id=a.issuer_id
+          WHERE a.id='4a1aa809-e3ea-4c74-9c63-c18c7494d994'
+            AND a.issuer_id='30f19aad-923c-44c5-993b-6980dbfec67a'
+            AND i.legal_name=N'R5 Synthetic Initial Issuer') AS retained;
+    `);
+      assert.deepEqual(cleanupState.recordset[0],{tenants:0,assignments:1,issuers:1,retained:1});
+      console.log('PASS: exact R5 row 32 mutable fixture cleanup, retained history, rollback guards and idempotent replay');
+    } else {
+      await testPool.request().batch(cleanupMigration);
+      console.log('PASS: expired one-time R5 row 32 cleanup adopted safely on an empty fixture');
+    }
     console.log('PASS: market issuer migration replay, draft exclusion, country isolation, cutover and conflicting date');
 
 
