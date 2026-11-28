@@ -1,3 +1,4 @@
+import {createReactivation, endedSubscription, requireNoOtherSubscription, requireSettledDues, restartInventory} from './reactivation.js';
 import {applyLocalRenewal,issuedLocalReceipt} from './localRenewal.js';
 import {BILLING_PORTAL, BILLING_PRODUCT, entitlement, localCessationAllowed, cessationCleanupMode, restorationPolicy, splitPolicy, splitUnits, hash, parsePricing, problem} from './contract.js';
 import {firstRenewalFailure, invoiceSubscription, objectId, subscriptionProjection} from './stripe.js';
@@ -40,7 +41,8 @@ export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=
     return session;
   };
   const recoverCheckout=async({job,step})=>{
-    const {intent,tenant_id:tenantId,id}=job;await recoveryBinding(job);
+    const {intent,tenant_id:tenantId,id}=job;const account=await recoveryBinding(job);
+    const restart=job.kind==='reactivation';
     const key=`quixo:${tenantId}:${id}`;
     let customerId=intent.customerId;
     if(intent.existingSessionId){await checkoutSession(intent,intent.existingSessionId,customerId);return {sessionId:intent.existingSessionId,customerId};}
@@ -68,7 +70,7 @@ export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=
       let otherSession=false;
       const found=await uniqueProviderObject({stripe,path:'/v1/checkout/sessions',params:{customer:customerId},
         matches:session=>{
-          if(session.metadata?.quixo_operation!==id&&['open','complete'].includes(session.status)){otherSession=true;}
+          if(session.metadata?.quixo_operation!==id&&(session.status==='open'||(!restart&&session.status==='complete'))){otherSession=true;}
           return session.metadata?.quixo_operation===id;
         }});
       if(otherSession){throw problem(409,'BILLING_CHECKOUT_PENDING','Another checkout needs review before continuing.');}
@@ -78,7 +80,10 @@ export const createProviderRecoveryHandlers=({store,stripe,requireAccount,clock=
       }
       await checkoutSession(intent,found.id,customerId);
       return {confirmed:true,result:{sessionId:found.id,customerId}};
-    },write:(input,stepKey)=>stripe.request('POST','/v1/checkout/sessions',input,stepKey)});
+    },write:async(input,stepKey)=>{
+      if(restart){await requireSettledDues(stripe,account);await requireNoOtherSubscription(stripe,account,null,clock.now());}
+      return stripe.request('POST','/v1/checkout/sessions',input,stepKey);
+    }});
     return {sessionId:saved.sessionId,customerId};
   };
   const recoverPortal=async({job,step})=>{
@@ -213,7 +218,12 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       });
       if(known){
         const projection=subscriptionProjection({subscription,invoice:null,account,now:clock.now(),cessationCleanup:true});
-        await saveProjection(q,account.tenant_id,projection);return {...account,...projection};
+        await saveProjection(q,account.tenant_id,projection);
+        const ended={...account,...projection};
+        if(promoteCheckout && ended.market==='LK' && store.recoveryEnabled?.() && endedSubscription(ended.subscription_status)){
+          return await reactivation.reconcile(q,ended) || ended;
+        }
+        return ended;
       }
     }
     const invoiceId=objectId(subscription.latest_invoice);
@@ -222,6 +232,10 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       ? await firstRenewalFailure({stripe,invoice,account,now:clock.now()}) : null;
     const projection=subscriptionProjection({subscription,invoice,account,firstFailureAt,now:clock.now()});
     await saveProjection(q,account.tenant_id,projection);
+    if(promoteCheckout && account.market==='LK' && store.recoveryEnabled?.() && endedSubscription(projection.subscription_status)){
+      const restarted=await reactivation.reconcile(q,{...account,...projection});
+      if(restarted){return restarted;}
+    }
     const snapshot=JSON.parse(account.inventory_json||'[]');
     if(promoteCheckout&&snapshot[0]?.stagedRecords?.length&&projection.initial_payment_verified&&
       entitlement({...account,...projection},clock.now()).management){
@@ -259,6 +273,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       status:account?.subscription_status || 'not_enrolled',entitlement:entitlement(account,clock.now()),
       cancelAtPeriodEnd:Boolean(account?.cancel_at_period_end),paidThrough:account?.paid_through || null,
       pendingOperation:pending?{id:pending.id,kind:pending.kind,createdAt:pending.created_at,payload:pendingPayload}:null,
+      reactivationAvailable:Boolean(account?.market==='LK' && store.recoveryEnabled?.() && endedSubscription(account.subscription_status) && !account.risk_hold && entitlement(account,clock.now()).state!=='complimentary'),
       liveChargingEnabled:false,applicationEnforcementEnabled:false};
   };
   const runCommand=async({tenantId,id,kind,payload,actorId,action})=>{
@@ -487,6 +502,14 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
   const recovery=createRecoveryRunner({clock,journal:createRecoveryJournal({store,complete:async(q,row,result)=>{
     const intent=JSON.parse(row.intent_json);
     const account=await requireAccount(row.tenant_id,q);
+    if(row.kind==='reactivation'){
+      if(account.stripe_subscription_id!==intent._subscriptionId || account.stripe_customer_id!==intent.customerId ||
+          account.stripe_price_id!==intent.priceId){throw problem(409,'BILLING_REACTIVATION_REVIEW','The subscription binding has changed.');}
+      const {items}=await restartInventory(store,q,row.tenant_id,intent.controlId);
+      if(hash(items)!==intent.inventoryHash){throw problem(409,'BILLING_INVENTORY_CHANGED','The reviewed dwellings have changed.');}
+      await checkoutSession(intent,result.sessionId,intent.customerId);
+      return {sessionId:result.sessionId};
+    }
     if(['checkout','portal','quantity_preview'].includes(row.kind)){
       if(account.stripe_subscription_id!==intent._subscriptionId||account.stripe_customer_id!==intent.customerId||account.stripe_price_id!==intent.priceId){
         throw problem(409,'BILLING_RECONCILIATION_REQUIRED','The saved billing binding changed before completion.');
@@ -640,7 +663,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       if(args.job.intent.restoreMode==='complimentary'||args.job.intent.ending){return {currentQuantity:args.job.intent.preview.from};}
       return quantityRecovery({store,stripe,clock})(args);
     },
-    checkout:providerRecovery.checkout,portal:providerRecovery.portal,quantity_preview:providerRecovery.quantity_preview,cessation:async args=>{
+    reactivation:providerRecovery.checkout,checkout:providerRecovery.checkout,portal:providerRecovery.portal,quantity_preview:providerRecovery.quantity_preview,cessation:async args=>{
       if(args.job.intent.localOnly){return {localOnly:true};}
       if(args.job.intent.cleanupMode){return cessationCleanupRecovery({store,stripe,clock})(args);}
       if(args.job.intent.ending){return {currentQuantity:args.job.intent.preview.from,nextRenewalQuantity:0,cancelAtPeriodEnd:true};}
@@ -650,6 +673,8 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){throw problem(503,'BILLING_RECOVERY_UNAVAILABLE','Billing recovery is not available.');}
     return recovery.run({tenantId,id});
   };
+  const reactivation=createReactivation({store,stripe,clock,priceForAccount:checkoutPrice,origin:configuredOrigin,
+    checkoutSession,loadInvoice,saveProjection,runRecovery:recoverOperation,checkoutUrl:url=>safeUrl(url,'checkout.stripe.com')});
   const cancel=async args=>{
     if(env.MANAGEMENT_RECOVERY_SCHEMA_READY!=='true'){return legacyCancel(args);}
     await stripe.assertAccount();
@@ -910,6 +935,15 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
         scheduleFingerprint:schedule?scheduleFingerprint(schedule):null,preconfirmedSchedule:Boolean(body&&quantityScheduleMatches(schedule,body)),preview};
     },()=>{throw problem(409,'BILLING_SPLIT_REVIEW','This split requires its saved recovery intent.');});
   };
+  const previousBinding=async(q,account,previous)=>{
+    if(!store.recoveryEnabled?.() || !previous || previous===account.stripe_subscription_id){return null;}
+    const rows=await q(`SELECT TOP 1 r.intent_json FROM dbo.management_billing_commands c
+        JOIN dbo.management_billing_recovery r ON r.command_id=c.id
+        WHERE c.tenant_id=@tenantId AND c.kind='reactivation' AND c.status='completed'
+          AND JSON_VALUE(r.intent_json,'$._subscriptionId')=@previous
+          AND JSON_VALUE(r.intent_json,'$.customerId')=@customer`,{tenantId:account.tenant_id,previous,customer:account.stripe_customer_id});
+    return rows.length?JSON.parse(rows[0].intent_json):null;
+  };
   const webhook=async event=>{
     await stripe.assertAccount();
     const supported=/^(checkout\.session\.(completed|async_payment_succeeded|async_payment_failed)|customer\.subscription\.(created|updated|deleted)|invoice\.(paid|payment_failed)|charge\.(refunded|dispute\.created)|radar\.early_fraud_warning\.created)$/;
@@ -933,6 +967,11 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
       if((await q('SELECT stripe_event_id FROM dbo.management_billing_events WHERE stripe_event_id=@id',{id:event.id})).length)
         {return {received:true,duplicate:true};}
       let account=await requireAccount(tenantId,q);
+      const targetSubscription=object.object==='subscription'?object.id:object.object==='invoice'?invoiceSubscription(object):object.object==='checkout.session'?objectId(object.subscription):null;
+      if(!risk && await previousBinding(q,account,targetSubscription)){
+        await q('INSERT INTO dbo.management_billing_events(stripe_event_id,tenant_id,event_type) VALUES(@id,@tenantId,@type)',{id:event.id,tenantId,type:event.type});
+        return {received:true,ignored:true};
+      }
       if(localCycle){
         if(object.object!=='invoice'||object.livemode!==false||invoiceSubscription(object)!==account.stripe_subscription_id){throw problem(409,'BILLING_EVENT_SUBSCRIPTION_MISMATCH','Renewal subscription binding changed.');}
         const receipt=await applyLocalRenewal({store,q,stripe,account,loadInvoice,invoiceId:object.id,
@@ -942,8 +981,7 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
         return {received:true};
       }
       account=await reconcileLocked(q,account,{promoteCheckout:!risk});
-      const targetSubscription=object.object==='subscription'?object.id:object.object==='invoice'?invoiceSubscription(object):object.object==='checkout.session'?objectId(object.subscription):null;
-      if(!risk && (!account.stripe_subscription_id || targetSubscription!==account.stripe_subscription_id))
+      if(!risk && (!account.stripe_subscription_id || (targetSubscription!==account.stripe_subscription_id && !await previousBinding(q,account,targetSubscription))))
         {throw problem(409,'BILLING_EVENT_SUBSCRIPTION_MISMATCH','The event subscription is not bound to this organization.');}
       if(risk) {await q('UPDATE dbo.management_billing_accounts SET risk_hold=1,version=version+1 WHERE tenant_id=@tenantId',{tenantId});}
       await q('INSERT INTO dbo.management_billing_events(stripe_event_id,tenant_id,event_type) VALUES(@id,@tenantId,@type)',{id:event.id,tenantId,type:event.type});
@@ -962,8 +1000,11 @@ export const createBillingService = ({store,stripe,env=process.env,clock=billing
     if(invoice.id!==invoiceId||objectId(invoice.customer)!==account.stripe_customer_id){
       throw problem(404,'BILLING_INVOICE_MISSING','Sandbox invoice not found.');
     }
+    const saved=await previousBinding(store.read,account,invoiceSubscription(invoice));
+    if(saved){return issuedLocalReceipt(invoice,{...account,stripe_subscription_id:saved._subscriptionId,
+      stripe_item_id:saved.previousItemId,stripe_price_id:saved.priceId,pricing_version_id:saved.previousPricingVersionId});}
     return issuedLocalReceipt(invoice,account);
   };
-  return {localInvoiceReceipt,summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,restorationPreview,restoreStock,splitPreview,splitStock,webhook,price};
+  return {localInvoiceReceipt,reviewReactivation:reactivation.reviewRestart,reactivate:reactivation.start,summary,checkout,refresh,reconcileCancellation,portal,cancel,recoverOperation,quantityPreview,quantityApply,cessationPreview,ceaseStock,restorationPreview,restoreStock,splitPreview,splitStock,webhook,price};
 };
 
