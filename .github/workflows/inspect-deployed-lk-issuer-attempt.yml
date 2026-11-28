@@ -11,7 +11,7 @@ on:
         required: true
         type: string
       confirmation:
-        description: INSPECT-DEPLOYED-LK-ISSUER
+        description: INSPECT-DEPLOYED-LK-ISSUER or INSPECT-DEPLOYED-LK-ISSUER-MUTABLE-ONLY for the reconciled November fixture
         required: true
         type: string
 permissions:
@@ -42,7 +42,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$CONFIRMATION" = INSPECT-DEPLOYED-LK-ISSUER
+          case "$CONFIRMATION" in
+            INSPECT-DEPLOYED-LK-ISSUER) ;;
+            INSPECT-DEPLOYED-LK-ISSUER-MUTABLE-ONLY) test "$OPERATION_ID" = 92019876-cdeb-47d3-ae8b-9a0fdd4cb22d ;;
+            *) exit 1 ;;
+          esac
           [[ "$EXPECTED_BUILD" =~ ^[a-f0-9]{40}$ ]]
           [[ "$OPERATION_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$ ]]
           test "$EXPECTED_BUILD" = "$GITHUB_SHA"
@@ -97,11 +101,14 @@ jobs:
           app_database=$(jq -er '.properties.template.containers[0].env[] | select(.name=="MSSQL_DATABASE") | .value' <<<"$app")
           test "${server,,}" = "${app_server,,}"
           test "$database" = "$app_database"
+          if [[ "$CONFIRMATION" == INSPECT-DEPLOYED-LK-ISSUER-MUTABLE-ONLY ]]; then
+            python3 scripts/inspect-lk-issuer-retention-cost.py "$server" "$database" > lk-issuer-retention-cost.json
+          fi
           execution=$(az containerapp job start -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
             --container-name "$container_name" --image "$image" --cpu "$cpu" --memory "$memory" \
             --command node --args /app/scripts/inspect-lk-issuer-sql.mjs --env-vars \
               MSSQL_SERVER="$server" MSSQL_DATABASE="$database" MSSQL_AUTHENTICATION=managed-identity \
-              R5_LK_ISSUER_OPERATION="$OPERATION_ID" --query name -o tsv)
+              R5_LK_ISSUER_OPERATION="$OPERATION_ID" R5_LK_ISSUER_INSPECT_CONFIRMATION="$CONFIRMATION" --query name -o tsv)
           test -n "$execution"
           for attempt in $(seq 1 90); do
             status=$(az containerapp job execution show -g "$AZURE_RESOURCE_GROUP" -n "$AZURE_MIGRATION_JOB_NAME" \
@@ -124,7 +131,12 @@ jobs:
           grep -Eo 'LK_ISSUER_SQL_RECONCILIATION=\{.*\}' "$log_file" | tail -n 1 |
             sed 's/^LK_ISSUER_SQL_RECONCILIATION=//' > lk-issuer-sql-reconciliation-summary.json
           test "$status" = Succeeded
-          jq -e '.readOnly and .safeToRetry and ([to_entries[] | select(.value|type=="number") | .value] | all(.==0))' \
+          jq -e --arg operation "$OPERATION_ID" --arg confirmation "$CONFIRMATION" '
+            .readOnly and .operation==$operation and
+            (if ($confirmation|endswith("-MUTABLE-ONLY")) then
+              .safeToRetry==false and .workspaceRemoved and .retainedIssuer.historical and .assignments==1 and .issuers==1 and
+              ([del(.assignments,.issuers)|to_entries[]|select(.value|type=="number")|.value] | all(.==0))
+             else .safeToRetry and ([to_entries[]|select(.value|type=="number")|.value] | all(.==0)) end)' \
             lk-issuer-sql-reconciliation-summary.json
           sed 's/^/LK_ISSUER_SQL_RECONCILIATION=/' lk-issuer-sql-reconciliation-summary.json > lk-issuer-sql-reconciliation.txt
           curl -fsS --retry 3 --retry-delay 3 --max-time 30 https://app.quixo.homes/api/mssql/health |
@@ -139,5 +151,6 @@ jobs:
             lk-issuer-sql-reconciliation.txt
             lk-issuer-sql-reconciliation-summary.json
             lk-issuer-sql-reconciliation-raw.txt
+            lk-issuer-retention-cost.json
           if-no-files-found: ignore
           retention-days: 30
